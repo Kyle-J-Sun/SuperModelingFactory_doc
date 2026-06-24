@@ -1,6 +1,7 @@
 site_name: SuperModelingFactory
 site_description: 面向信用评分卡开发的端到端建模工具链 — 样本管理、WOE 编码、特征筛选、模型训练、性能评估、Excel 报告一键生成。
 site_author: Jingkai Sun
+site_url: https://kyle-j-sun.github.io/SuperModelingFactory_doc/
 
 docs_dir: docs
 site_dir: site
@@ -47,7 +48,7 @@ theme:
 # ----------------------------------------------------------------------------
 # 仓库 / 源码
 # ----------------------------------------------------------------------------
-repo_url: https://example.com/SuperModelingFactory
+repo_url: https://github.com/Kyle-J-Sun/SuperModelingFactory_doc
 edit_uri: edit/main/docs/
 
 # ----------------------------------------------------------------------------
@@ -98,17 +99,6 @@ plugins:
           paths: [../SuperModelingFactory]
           options:
             docstring_style: numpy
-            docstring_options:
-              show_source: true
-              show_symbol_type_heading: true
-              show_symbol_type_toc: true
-              members_order: source
-              separate_signature: true
-              show_signature_annotations: true
-              signature_crossrefs: true
-              merge_init_into_class: false
-              docstring_section_style: table
-              show_if_no_docstring: false
             show_if_no_docstring: false
             inherited_members: false
             show_root_heading: true
@@ -160,4 +150,4 @@ nav:
 # ----------------------------------------------------------------------------
 # 版权
 # ----------------------------------------------------------------------------
-copyright: Copyright &copy; 2026 Jingkai Sun · 内部项目，仅供团队使用
+copyright: Copyright &copy; 2026 Jingkai Sun
