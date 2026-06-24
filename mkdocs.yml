@@ -1,0 +1,163 @@
+site_name: SuperModelingFactory
+site_description: 面向信用评分卡开发的端到端建模工具链 — 样本管理、WOE 编码、特征筛选、模型训练、性能评估、Excel 报告一键生成。
+site_author: Jingkai Sun
+
+docs_dir: docs
+site_dir: site
+
+# ----------------------------------------------------------------------------
+# 主题 — Material Design
+# ----------------------------------------------------------------------------
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+    - palette.toggle
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换到深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换到浅色模式
+  icon:
+    repo: fontawesome/brands/git-alt
+
+# ----------------------------------------------------------------------------
+# 仓库 / 源码
+# ----------------------------------------------------------------------------
+repo_url: https://example.com/SuperModelingFactory
+edit_uri: edit/main/docs/
+
+# ----------------------------------------------------------------------------
+# Markdown 扩展
+# ----------------------------------------------------------------------------
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.caret
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+# ----------------------------------------------------------------------------
+# 插件
+# ----------------------------------------------------------------------------
+plugins:
+  - search
+  - autorefs
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [../SuperModelingFactory]
+          options:
+            docstring_style: numpy
+            docstring_options:
+              show_source: true
+              show_symbol_type_heading: true
+              show_symbol_type_toc: true
+              members_order: source
+              separate_signature: true
+              show_signature_annotations: true
+              signature_crossrefs: true
+              merge_init_into_class: false
+              docstring_section_style: table
+              show_if_no_docstring: false
+            show_if_no_docstring: false
+            inherited_members: false
+            show_root_heading: true
+            show_root_full_path: false
+            show_source: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            merge_init_into_class: false
+            docstring_section_style: table
+            filters: ["!^_"]
+          load_external_modules: false
+
+# ----------------------------------------------------------------------------
+# 导航
+# ----------------------------------------------------------------------------
+nav:
+  - 首页: index.md
+  - 安装: installation.md
+  - 快速上手: quickstart.md
+  - 架构: architecture.md
+  - 端到端建模流水线: pipeline.md
+  - 用户指南:
+      - guides/index.md
+      - 样本管理: guides/sample.md
+      - ODPS 数据抽取: guides/odps.md
+      - WOE 编码: guides/woe.md
+      - 特征筛选: guides/feature.md
+      - 模型训练: guides/model.md
+      - 模型评估: guides/eval.md
+      - 拒绝推断与分布适配: guides/reject_inference.md
+      - 线上线下一致性校验: guides/uat.md
+      - Excel 报告生成: guides/excel_report.md
+  - API 参考:
+      - api/index.md
+      - Modeling_Tool.Core: api/core.md
+      - Modeling_Tool.WOE: api/woe.md
+      - Modeling_Tool.Feature: api/feature.md
+      - Modeling_Tool.Model: api/model.md
+      - Modeling_Tool.Eval: api/eval.md
+      - Modeling_Tool.Sample: api/sample.md
+      - Modeling_Tool.UAT: api/uat.md
+      - ExcelMaster: api/excelmaster.md
+      - Report: api/report.md
+
+# ----------------------------------------------------------------------------
+# 版权
+# ----------------------------------------------------------------------------
+copyright: Copyright &copy; 2026 Jingkai Sun · 内部项目，仅供团队使用
