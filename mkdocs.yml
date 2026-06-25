@@ -146,6 +146,7 @@ nav:
       - Modeling_Tool.UAT: api/uat.md
       - ExcelMaster: api/excelmaster.md
       - Report: api/report.md
+  - 常见问题: faq.md
 
 # ----------------------------------------------------------------------------
 # 版权
