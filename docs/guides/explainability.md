@@ -140,4 +140,3 @@ print(exp.feature_importance(test_X).head())
     ```
 
     该路径基于 `predict_proba` 计算，速度比 TreeExplainer 慢，建议 `background_data` 取样不要过大。
-```
