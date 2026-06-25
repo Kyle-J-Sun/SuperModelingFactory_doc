@@ -175,7 +175,7 @@ from Modeling_Tool.Core import *
 1. 每个文件都要重复手写 `os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"] = "..."`，AccessKey 容易被误提交到 Git；
 2. 每个文件都要重复一长串 `from Modeling_Tool.XXX import *`，noisy 且容易漏掉子模块。
 
-推荐的做法是在项目根目录放一个 `config.py` + `.env`，所有 notebook 顶端只写一行 `from config import *`，即同时完成凭据加载和包导入。
+推荐的做法是在**系统级共享路径** `/opt/workspace/.env` 集中管理 AccessKey，项目根目录只放一个 `config.py` 显式加载它。这样多个项目可以共用一份 AK，不用每个仓库都重复配置。所有 notebook 顶端只写一行 `from config import *`，即同时完成凭据加载和包导入。
 
 ---
 
@@ -189,10 +189,22 @@ pip install python-dotenv
 
 ---
 
-**步骤 2：在项目根目录新建 `.env`**
+**步骤 2：创建系统级共享 `.env`**
 
 ```bash
-# .env —— 放在项目根目录
+# 创建目录并交给当前用户
+sudo mkdir -p /opt/workspace
+sudo chown $USER:$USER /opt/workspace
+
+# 创建文件并锁死权限（只有当前用户可读写）
+touch /opt/workspace/.env
+chmod 600 /opt/workspace/.env
+```
+
+然后用编辑器写入凭据：
+
+```bash
+# /opt/workspace/.env  —— 所有项目共享一份
 ALIBABA_CLOUD_ACCESS_KEY_ID=LTAI5tXXXXXXXXXXXXXXXXXX
 ALIBABA_CLOUD_ACCESS_KEY_SECRET=YYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
 ODPS_PROJECT=mex_anls
@@ -200,16 +212,18 @@ ODPS_ENDPOINT=http://service.cn-shanghai.maxcompute.aliyun.com/api
 ```
 
 !!! warning "安全提醒"
-    - **必须**把 `.env` 加入 `.gitignore`，杜绝 AccessKey 误提交；
-    - 在 Linux/macOS 上执行 `chmod 600 .env`，防止同机器其他用户读取；
-    - 不要把 `.env` 通过 Slack/邮件/截图分享 —— 改用密钥管理服务（Vault、阿里云 KMS 等）。
+    - `/opt/workspace/.env` 在仓库之外，不可能被 Git 跟踪 —— 但**必须** `chmod 600` 防止同机器其他用户读取；
+    - 不要把 `.env` 通过 Slack/邮件/截图分享 —— 改用密钥管理服务（Vault、阿里云 KMS 等）；
+    - 如果是多用户服务器，考虑改放 `~/.config/smf/.env`，避免跨用户泄露。
 
 ---
 
-**步骤 3：把以下内容写入项目根目录的 `.gitignore`**
+**步骤 3：项目根目录的 `.gitignore`（防范性措施）**
+
+虽然 `.env` 不在仓库里，但仍建议加上以下行，防止未来某天手滑把 `.env` 复制到项目根后误提交：
 
 ```gitignore
-# 凭据文件
+# 凭据文件（防范性）
 .env
 .env.local
 .env.*.local
@@ -228,25 +242,27 @@ ODPS_ENDPOINT=http://service.cn-shanghai.maxcompute.aliyun.com/api
 #     from config import *
 #
 # 即同时完成：
-#   1. 从项目根目录的 .env 加载 ODPS / Aliyun 凭据到 os.environ
+#   1. 从系统级共享路径 /opt/workspace/.env 加载 ODPS / Aliyun 凭据到 os.environ
 #   2. 导入 Modeling_Tool 全部子模块到当前命名空间
 #
 # 修改 .env 后需重启 Jupyter kernel 才能生效。
-# .env 必须在 .gitignore 中，且建议 chmod 600 .env。
+# /opt/workspace/.env 必须 chmod 600，防止同机器其他用户读取。
 # ═══════════════════════════════════════════════════════════════════════════
 
 import os
 import sys
+from pathlib import Path
 
-# ── 自动加载 .env ──
-from dotenv import load_dotenv, find_dotenv
+# ── 加载系统级共享 .env ──
+from dotenv import load_dotenv
 
-_env_path = find_dotenv(usecwd=True)
-if _env_path:
+ENV_PATH = Path("/opt/workspace/.env")
+
+if ENV_PATH.is_file():
     # override=False: 已在环境中的变量（如 K8s 注入）优先于 .env
-    load_dotenv(_env_path, override=False)
+    load_dotenv(ENV_PATH, override=False)
 else:
-    print("[config] WARNING: .env not found; ODPS credentials may be missing.",
+    print(f"[config] WARNING: {ENV_PATH} not found; ODPS credentials may be missing.",
           file=sys.stderr)
 
 # ── 导入 Modeling_Tool 全部子模块 ──
@@ -289,10 +305,13 @@ lr   = LRMaster(params={"C": 1.0})
 
 **关键设计说明**
 
-=== "为什么用 `find_dotenv(usecwd=True)`"
+=== "为什么放在 `/opt/workspace/.env`"
 
-    `python-dotenv` 的 `find_dotenv()` 默认从**调用文件所在目录**向上查找 `.env`。
-    Jupyter 启动时 `__file__` 不可靠，加上 `usecwd=True` 后改为从**当前工作目录**向上找，匹配大多数 Jupyter 工作流。
+    集中放在 `/opt/workspace/.env` 用**绝对路径**加载，一下子解决三个问题：
+
+    1. **多项目共用一份 AK** —— 不用每个仓库都贴一份 `.env`，轮转凭据时只需改一处；
+    2. **不可能随仓库 push 被误提交** —— 根本不在 Git 工作区下；
+    3. **调试友好** —— 路径是硬编码的，出问题时一眼能看出加载的是哪份凭据；Jupyter 启动时不依赖不可靠的 `__file__` 或 CWD。
 
 === "为什么用 `override=False`"
 
@@ -314,7 +333,8 @@ lr   = LRMaster(params={"C": 1.0})
 
 | 现象 | 原因 | 解决 |
 |---|---|---|
-| `from config import *` 后 `os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"]` 仍为空 | `.env` 不在 CWD 的祖先路径中 | 检查 `find_dotenv(usecwd=True)` 返回值；或显式传 `load_dotenv("/abs/path/.env")` |
+| `from config import *` 后 `os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"]` 仍为空 | `/opt/workspace/.env` 不存在或路径拼错 | `ls -la /opt/workspace/.env` 确认文件存在；检查 `config.py` 中 `ENV_PATH` 路径是否正确 |
+| `PermissionError: [Errno 13]` 读不了 `.env` | `chmod 600` 后当前用户不是 owner | `ls -la /opt/workspace/.env` 检查拥有者；`sudo chown $USER:$USER /opt/workspace/.env` |
 | 修改 `.env` 后凭据没更新 | Jupyter kernel 已缓存 `os.environ` | 重启 kernel（菜单 Kernel → Restart） |
 | `ImportError: No module named 'dotenv'` | 没装 `python-dotenv` | `pip install python-dotenv` |
 | 部署到 K8s 后被 `.env` 覆盖了正确的凭据 | 使用了 `override=True` | 改回 `override=False`（推荐默认值） |
