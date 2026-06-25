@@ -175,7 +175,7 @@ print(result[["round", "n_features", "auc", "ks"]])
 ```python
 from Modeling_Tool import save_model, load_model
 
-save_model(gbm.model_instance.model, "./models/gbm_v1.pkl")
+save_model(gbm._model.model, "./models/gbm_v1.pkl")
 
 # 加载
 loaded = load_model("./models/gbm_v1.pkl")
@@ -188,7 +188,7 @@ from Modeling_Tool import scoring
 
 scores = scoring(
     data=new_df,
-    model=gbm.model_instance.model,
+    model=gbm._model.model,
     varlist=woe_features,
     scr_name="prob",
 )
@@ -217,7 +217,7 @@ for name, model in models.items():
 
     evaluator = PerformanceEvaluator(
         tgt_name="bad_flag",
-        model=model.model_instance.model,
+        model=model._model.model,
         feature_cols=woe_features,
     )
     perf = evaluator.add_dataset("train", train_woe) \
@@ -252,5 +252,5 @@ for name, perf in results.items():
 
     ```python
     from sklearn.model_selection import cross_val_score
-    scores = cross_val_score(model.model_instance.model, X, y, cv=5, scoring="roc_auc")
+    scores = cross_val_score(model._model.model, X, y, cv=5, scoring="roc_auc")
     ```
