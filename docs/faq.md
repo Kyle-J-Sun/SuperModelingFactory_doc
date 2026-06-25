@@ -164,4 +164,162 @@ from Modeling_Tool.Core import *
 
 ---
 
+## ODPS 访问密钥配置
+
+### Q3: 如何用 `config.py` 统一管理 ODPS 凭据和包导入
+
+**痛点**
+
+在 Jupyter notebook 或脚本里使用 `ODPSRunner` 时，常见两个问题：
+
+1. 每个文件都要重复手写 `os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"] = "..."`，AccessKey 容易被误提交到 Git；
+2. 每个文件都要重复一长串 `from Modeling_Tool.XXX import *`，noisy 且容易漏掉子模块。
+
+推荐的做法是在项目根目录放一个 `config.py` + `.env`，所有 notebook 顶端只写一行 `from config import *`，即同时完成凭据加载和包导入。
+
+---
+
+**步骤 1：安装 python-dotenv**
+
+`Modeling_Tool` 主包不依赖 `python-dotenv`，需要单独装一次：
+
+```bash
+pip install python-dotenv
+```
+
+---
+
+**步骤 2：在项目根目录新建 `.env`**
+
+```bash
+# .env —— 放在项目根目录
+ALIBABA_CLOUD_ACCESS_KEY_ID=LTAI5tXXXXXXXXXXXXXXXXXX
+ALIBABA_CLOUD_ACCESS_KEY_SECRET=YYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+ODPS_PROJECT=mex_anls
+ODPS_ENDPOINT=http://service.cn-shanghai.maxcompute.aliyun.com/api
+```
+
+!!! warning "安全提醒"
+    - **必须**把 `.env` 加入 `.gitignore`，杜绝 AccessKey 误提交；
+    - 在 Linux/macOS 上执行 `chmod 600 .env`，防止同机器其他用户读取；
+    - 不要把 `.env` 通过 Slack/邮件/截图分享 —— 改用密钥管理服务（Vault、阿里云 KMS 等）。
+
+---
+
+**步骤 3：把以下内容写入项目根目录的 `.gitignore`**
+
+```gitignore
+# 凭据文件
+.env
+.env.local
+.env.*.local
+```
+
+---
+
+**步骤 4：在项目根目录新建 `config.py`**
+
+```python
+# ═══════════════════════════════════════════════════════════════════════════
+# config.py — 项目通用导入 + 环境变量加载
+# ═══════════════════════════════════════════════════════════════════════════
+# 用法：在任意 notebook / 脚本顶端写一行：
+#
+#     from config import *
+#
+# 即同时完成：
+#   1. 从项目根目录的 .env 加载 ODPS / Aliyun 凭据到 os.environ
+#   2. 导入 Modeling_Tool 全部子模块到当前命名空间
+#
+# 修改 .env 后需重启 Jupyter kernel 才能生效。
+# .env 必须在 .gitignore 中，且建议 chmod 600 .env。
+# ═══════════════════════════════════════════════════════════════════════════
+
+import os
+import sys
+
+# ── 自动加载 .env ──
+from dotenv import load_dotenv, find_dotenv
+
+_env_path = find_dotenv(usecwd=True)
+if _env_path:
+    # override=False: 已在环境中的变量（如 K8s 注入）优先于 .env
+    load_dotenv(_env_path, override=False)
+else:
+    print("[config] WARNING: .env not found; ODPS credentials may be missing.",
+          file=sys.stderr)
+
+# ── 导入 Modeling_Tool 全部子模块 ──
+#   Core    — 基础工具: DateTimeUtils, load_model, save_model, calc_iv, calc_woe ...
+#   Sample  — 样本拆分: SampleSplitter, StratifiedSampler, SampleBalancer
+#   Eval    — 模型评估: PerformanceEvaluator, GainsTableCalculator
+#   Feature — 特征分析: proc_means_by_grp, PSICalculator, CorrelationFilter
+#   WOE     — WOE 分箱: WOE_Master, MonotoneWOEBinner, woe_transform
+#   Model   — 模型训练: LRMaster, GradientBoostingModel, BackwardVariableEliminator
+import Modeling_Tool as smf  # 命名空间备份，避免 import * 冲突时仍可用 smf.Model.LRMaster
+
+from Modeling_Tool.Core import *      # noqa: F401,F403
+from Modeling_Tool.Sample import *    # noqa: F401,F403
+from Modeling_Tool.Eval import *      # noqa: F401,F403
+from Modeling_Tool.Feature import *   # noqa: F401,F403
+from Modeling_Tool.WOE import *       # noqa: F401,F403
+from Modeling_Tool.Model import *     # noqa: F401,F403
+```
+
+---
+
+**步骤 5：在 notebook 里使用**
+
+```python
+# notebook 第一个 cell
+from config import *
+
+# 此时已经完成：
+#   1. os.environ 中已加载 ALIBABA_CLOUD_ACCESS_KEY_ID / _SECRET / ODPS_PROJECT / ODPS_ENDPOINT
+#   2. LRMaster / WOE_Master / PerformanceEvaluator 等全部 SMF 类可直接使用
+
+odps = ODPSRunner()                            # 无需再传 access_key，自动从 os.environ 读
+df   = odps.read_sql("SELECT * FROM ... LIMIT 100")
+
+woe  = WOE_Master(...)                          # 直接使用，无需 from Modeling_Tool.WOE import *
+lr   = LRMaster(params={"C": 1.0})
+```
+
+---
+
+**关键设计说明**
+
+=== "为什么用 `find_dotenv(usecwd=True)`"
+
+    `python-dotenv` 的 `find_dotenv()` 默认从**调用文件所在目录**向上查找 `.env`。
+    Jupyter 启动时 `__file__` 不可靠，加上 `usecwd=True` 后改为从**当前工作目录**向上找，匹配大多数 Jupyter 工作流。
+
+=== "为什么用 `override=False`"
+
+    `override=False`（默认值）表示：已经存在于 `os.environ` 的变量**不会被 .env 覆盖**。
+    这是为了在容器化部署（K8s、Docker、CI/CD）时，运维注入的环境变量始终优先于本地 `.env` —— 否则上线时容易被本地凭据意外覆盖。
+
+=== "为什么保留 `import Modeling_Tool as smf`"
+
+    六次 `from ... import *` 存在命名冲突风险（后导入的子模块会静默覆盖前面的同名符号）。
+    保留一份显式命名空间 `smf` 作为 fallback：当遇到命名冲突时，可直接写 `smf.Model.LRMaster` 来精确指定来源。
+
+=== "为什么不在 SMF 主包里集成 dotenv"
+
+    `python-dotenv` 是项目级工程约定，不是建模工具职责。SMF 主包只负责"如果 `os.environ` 里有这些 key 就用它们"，至于这些 key 怎么进入 `os.environ`（dotenv / K8s Secret / 启动脚本 / 手动 export）完全由项目自己决定。
+
+---
+
+**常见踩坑**
+
+| 现象 | 原因 | 解决 |
+|---|---|---|
+| `from config import *` 后 `os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"]` 仍为空 | `.env` 不在 CWD 的祖先路径中 | 检查 `find_dotenv(usecwd=True)` 返回值；或显式传 `load_dotenv("/abs/path/.env")` |
+| 修改 `.env` 后凭据没更新 | Jupyter kernel 已缓存 `os.environ` | 重启 kernel（菜单 Kernel → Restart） |
+| `ImportError: No module named 'dotenv'` | 没装 `python-dotenv` | `pip install python-dotenv` |
+| 部署到 K8s 后被 `.env` 覆盖了正确的凭据 | 使用了 `override=True` | 改回 `override=False`（推荐默认值） |
+| 一个 notebook 同时调多个数据源，AK 用错了 | `os.environ` 是进程级全局状态 | 同进程内多账号场景请直接用 `ODPS(access_id=..., secret_access_key=...)` 显式参数 |
+
+---
+
 *如有其他问题，欢迎在 [GitHub Issues](https://github.com/Kyle-J-Sun/SuperModelingFactory/issues) 中提交。*
