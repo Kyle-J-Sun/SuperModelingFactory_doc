@@ -101,11 +101,11 @@ gbm.fit(
 varimp = gbm.get_feature_importance()
 print(varimp.head(15))
 
-# 预测概率
-proba = gbm.predict_proba(test_X)
+# 预测（返回正类概率，一维）
+proba = gbm.predict(test_X)
 
 # 校准（可选）
-gbm.fit_calibrated_model(val_X, val_y, method="isotonic")
+gbm.calibrate(val_X, val_y, method="isotonic")
 ```
 
 ### 关键参数
