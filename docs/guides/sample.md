@@ -67,15 +67,17 @@ balanced_df = sampler.balance(train_df, target="bad_flag", method="smote")
 
 ## 4. 最优种子搜索 —— `select_sample_seed`
 
-固定训练/验证/OOT 划分后，搜索使 **OOT AUC 最大化** 的随机种子。
+固定训练/验证/OOT 划分后，搜索使 **OOT AUC 最大化** 的随机种子。注意 `model` 传入的是 **GradientBoostingModel 包装类**（而非底层估计器）：
 
 ```python
-from Modeling_Tool import select_sample_seed
+from Modeling_Tool import select_sample_seed, GradientBoostingModel
+
+gbm = GradientBoostingModel("lgb", {"n_estimators": 100, "learning_rate": 0.1})
 
 best_seed = select_sample_seed(
     master_df=df,
     oot_split_col="sample_ind",   # 1=INS, 2=OOT
-    model=gbm.model_instance.model,
+    model=gbm,                    # 传包装类
     tgt_name="bad_flag",
     seed_range=(3000, 3050),      # 搜索范围
     ins_prop=0.7,
@@ -95,7 +97,7 @@ print(f"最优种子: {best_seed}")
 ```python
 from Modeling_Tool import RejectInferenceFactory
 
-inferrer = RejectInferenceFactory.create("parceling", target_col="bad_flag")
+inferrer = RejectInferenceFactory.create("parceling", target_col="bad_flag", score_col="prob")
 df_combined = inferrer.infer(approved_df, rejected_df, score_col="prob")
 ```
 

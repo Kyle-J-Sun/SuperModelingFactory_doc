@@ -69,9 +69,10 @@ from Modeling_Tool import LRMaster
 woe_features = [f"{f}_woe" for f in features]
 
 lr = LRMaster(params={"C": 1.0, "max_iter": 1000, "solver": "lbfgs"})
-lr.fit(train_woe[woe_features], train_woe["bad_flag"])
+# fit 接收 (data, varlist, tgt_name)
+lr.fit(train_woe, woe_features, "bad_flag")
 
-coef = lr.get_model_summary()
+coef = lr.get_statsmodel_summary()
 print(coef)
 ```
 

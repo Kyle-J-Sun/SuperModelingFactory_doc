@@ -63,10 +63,11 @@ from Modeling_Tool import PSICalculator
 
 psi = PSICalculator(buckets=10, equal_freq=True)
 psi_table = psi.calculate(expected_df=train_df, current_data=oot_df, varlist=features)
-print(psi_table.sort_values("PSI", ascending=False).head(10))
+# calculate() 结果列为 var / psi
+print(psi_table.sort_values("psi", ascending=False).head(10))
 
 # PSI < 0.1 视为稳定
-stable_features = psi_table.loc[psi_table["PSI"] < 0.1, "variable"].tolist()
+stable_features = psi_table.loc[psi_table["psi"] < 0.1, "var"].tolist()
 ```
 
 ### 2.2 IV 信息量排序
@@ -81,9 +82,10 @@ insights = VarExtractionInsights(
     nbins=10,
 )
 report = insights.get_var_analysis_report(train_df, features)
+# 结果列（小写）：var / iv / ks_in_gains / lift_in_gains ...
 
 # IV 阈值：<0.02 剔除，>0.5 警惕过拟合
-keep_by_iv = report.loc[report["IV"].between(0.02, 0.5), "variable"].tolist()
+keep_by_iv = report.loc[report["iv"].between(0.02, 0.5), "var"].tolist()
 ```
 
 ### 2.3 高相关剔除
@@ -108,7 +110,7 @@ features = corr_filter.remove_highly_correlated(features)       # 相关性过�
 **目标**：把原始特征映射为单调 WOE 值，便于 LR 训练与解释。
 
 ```python
-from Modeling_Tool import WOE_Master, save_mapping_table
+from Modeling_Tool import WOE_Master
 
 woe = WOE_Master(
     train_data=train_df,
@@ -122,8 +124,8 @@ train_woe = woe.transform(train_df)
 test_woe  = woe.transform(test_df)
 oot_woe   = woe.transform(oot_df)
 
-# 持久化映射表（部署时直接加载）
-save_mapping_table(woe, "./output/woe_mapping.pkl")
+# 持久化映射表（实例方法；部署时再加载）
+woe.save_mapping_table("./output/woe_mapping.csv")
 ```
 
 ### 单调性检查
@@ -167,10 +169,10 @@ from Modeling_Tool import LRMaster
 woe_features = [f"{f}_woe" for f in features]
 
 lr = LRMaster(params={"C": 1.0, "max_iter": 1000, "solver": "lbfgs"})
-lr.fit(train_woe[woe_features], train_woe["bad_flag"])
+lr.fit(train_woe, woe_features, "bad_flag")
 
-# 系数 + VIF + p-value 完整摘要
-summary = lr.get_model_summary()
+# 系数 + 标准误 + p-value 统计摘要
+summary = lr.get_statsmodel_summary()
 print(summary)
 ```
 
@@ -218,7 +220,8 @@ eliminator = BackwardVariableEliminator(
     results_output_dir="./output/",   # 构造器参数，非 fit 参数
     modelsave_dir="./models/",
 )
-eliminator.fit(x=woe_features).analyze()
+eliminator.fit(x=woe_features)
+eliminator.analyze()
 ```
 
 ## Step 5：模型评估
@@ -390,7 +393,7 @@ features = ["age", "income", "score_b", "city_grade", "n_overdue"]
 
 # ============ 2) 特征筛选 ============
 psi = PSICalculator(buckets=10).calculate(train_df, test_df, features)
-features = psi.loc[psi["PSI"] < 0.1, "variable"].tolist()
+features = psi.loc[psi["psi"] < 0.1, "var"].tolist()
 
 # ============ 3) WOE 编码 ============
 woe = WOE_Master(train_data=train_df, varlist=features, dep="bad_flag")
