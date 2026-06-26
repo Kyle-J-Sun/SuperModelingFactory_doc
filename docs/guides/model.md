@@ -49,6 +49,58 @@ selected = lr.stepwise_selection(
 print(f"逐步选择保留 {len(selected)} 个变量: {selected}")
 ```
 
+### 标准化（可选）
+
+默认情况下 `LRMaster` **不做**特征标准化（与历史行为一致）。如需在入模前对特征做标准化，
+构造时打开 `standardize=True` 即可，默认使用 `StandardScaler`：
+
+```python
+from Modeling_Tool import LRMaster
+
+# 开启标准化（默认 StandardScaler）
+lr = LRMaster(params={"C": 1.0, "max_iter": 1000}, standardize=True)
+lr.fit(train_woe, woe_features, "bad_flag")
+
+# 预测时自动用 fit 阶段拟合好的 scaler 变换入参，无需手动标准化
+proba = lr.predict_proba(test_woe)
+```
+
+也可以传入自定义 scaler（**需同时** `standardize=True`），例如 `MinMaxScaler`：
+
+```python
+from sklearn.preprocessing import MinMaxScaler
+from Modeling_Tool import LRMaster
+
+lr = LRMaster(
+    params={"C": 1.0},
+    standardize=True,
+    scaler=MinMaxScaler(),   # 传入的实例会被克隆，原对象不会被修改
+)
+lr.fit(train_woe, woe_features, "bad_flag")
+```
+
+#### 行为说明
+
+| 方面 | 说明 |
+|------|------|
+| 默认值 | `standardize=False`，完全不标准化（向后兼容） |
+| 默认 scaler | `StandardScaler`；可通过 `scaler=` 传自定义（如 `MinMaxScaler()`） |
+| 拟合时机 | scaler 在 `fit` / `stepwise_selection` 时**只在训练特征上拟合一次**，存于 `lr.standardizer` |
+| 推理一致性 | `predict` / `predict_proba` / `calibrate_model` / `get_statsmodel_summary` / `get_aic` / `get_bic` 都用同一个 scaler 变换入参，避免训练 / 推理空间不一致 |
+| `stepwise_selection` | 在标准化空间进行选择；结束后按**最终入选变量**重新拟合 scaler |
+| `clone()` | 只复制 `standardize` 开关与 scaler 原型，**不**复制已拟合的 scaler / model |
+
+!!! note "系数解读"
+
+    开启标准化后，`get_variable_importance()` 与 `get_statsmodel_summary()` 返回的系数是
+    **标准化空间**下的系数——好处是不同量纲特征的系数大小可直接横向比较；但不再等同于
+    原始单位下「自变量变动 1 个单位」的对数几率变化。
+
+!!! warning "自定义 scaler 需显式开启标准化"
+
+    仅传 `scaler=...` 而不设 `standardize=True` 不会启用标准化；自定义 scaler 必须与
+    `standardize=True` 一起使用。
+
 ## 2. 梯度提升模型 —— `GradientBoostingModel`
 
 LightGBM / XGBoost 的统一接口。
@@ -269,6 +321,12 @@ for name, perf in results.items():
 
     `get_feature_importance(importance_type='gain')` 返回归一化的相对值，
     `sum` 应为 1.0；若返回 `split`，则按分裂次数加权。
+
+??? question "开启标准化后系数变了很多 / 解读不一样"
+
+    这是预期行为。`standardize=True` 后模型在标准化空间训练，`get_variable_importance()`
+    与 `get_statsmodel_summary()` 给出的是标准化系数；如需原始单位下的系数，请关闭标准化
+    （`standardize=False`，默认）后重新训练。
 
 ??? question "如何做超参搜索 / 交叉验证"
 
