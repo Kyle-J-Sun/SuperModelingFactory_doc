@@ -37,7 +37,7 @@ df_combined = inferrer.infer(
     ```python
     from Modeling_Tool import ParcelingInferrer
 
-    inferrer = ParcelingInferrer(target_col="bad_flag", score_col="prob")
+    inferrer = ParcelingInferrer(target_col="bad_flag", score_col="prob", n_parcels=10)
     df_combined = inferrer.infer(approved_df, rejected_df, score_col="prob")
     ```
 
@@ -47,9 +47,9 @@ df_combined = inferrer.infer(
     from Modeling_Tool import HardCutoffInferrer
 
     inferrer = HardCutoffInferrer(
-        cutoff=600,
-        high_is_bad=True,
         target_col="bad_flag",
+        score_col="prob",
+        cutoff=0.5,
     )
     df_combined = inferrer.infer(approved_df, rejected_df, score_col="prob")
     ```
@@ -60,8 +60,9 @@ df_combined = inferrer.infer(
     from Modeling_Tool import FuzzyAugmentInferrer
 
     inferrer = FuzzyAugmentInferrer(
-        low=400, high=800,
         target_col="bad_flag",
+        score_col="prob",
+        weight_factor=0.8,
     )
     df_combined = inferrer.infer(approved_df, rejected_df, score_col="prob")
     ```
@@ -71,23 +72,25 @@ df_combined = inferrer.infer(
     ```python
     from Modeling_Tool import SimpleAugmentInferrer
 
-    inferrer = SimpleAugmentInferrer(target_col="bad_flag")
+    inferrer = SimpleAugmentInferrer(target_col="bad_flag", score_col="prob")
     df_combined = inferrer.infer(approved_df, rejected_df, score_col="prob")
     ```
 
 ### 自定义推断器
 
-继承 `RejectInferrer` 抽象类：
+继承 `RejectInferrer` 抽象类（`infer(self, df_approved, df_rejected, score_col=None)`）：
 
 ```python
+import pandas as pd
 from Modeling_Tool import RejectInferrer
 
 class MyInferrer(RejectInferrer):
-    def infer(self, df_approved, df_rejected, score_col):
+    def infer(self, df_approved, df_rejected, score_col=None):
         # 自定义逻辑
+        score_col = score_col or self.score_col
         df_rejected = df_rejected.copy()
-        df_rejected["bad_flag"] = 0   # 默认全部好
-        df_rejected.loc[df_rejected[score_col] > 0.3, "bad_flag"] = 1
+        df_rejected[self.target_col] = 0   # 默认全部好
+        df_rejected.loc[df_rejected[score_col] > 0.3, self.target_col] = 1
         return pd.concat([df_approved, df_rejected], ignore_index=True)
 ```
 
@@ -118,21 +121,29 @@ adapter = DistributionAdaptation(method="covariate_shift")
 weights = adapter.covariate_shift_weighting(train_X, oot_X)
 ```
 
+!!! tip "fit / get_weights 接口"
+
+    也可用统一的 `fit(X_train, X_oot)` + `get_weights()`：
+
+    ```python
+    adapter = DistributionAdaptation(method="density_ratio")
+    adapter.fit(X_train=train_df[features], X_oot=oot_df[features])
+    sample_weights = adapter.get_weights()
+    ```
+
 ## 3. 完整流水线
 
 ```python
 from Modeling_Tool import RejectInferenceFactory, DistributionAdaptation
 
 # 1) 拒绝推断（先扩样本）
-inferrer = RejectInferenceFactory.create("parceling", target_col="bad_flag")
+inferrer = RejectInferenceFactory.create("parceling", target_col="bad_flag", score_col="prob")
 df_combined = inferrer.infer(approved_df, rejected_df, score_col="prob")
 
 # 2) 分布适配（再加权）
 adapter = DistributionAdaptation(method="density_ratio")
-sample_weights = adapter.estimate_density_ratio(
-    df_combined[features],
-    oot_df[features],
-)
+adapter.fit(X_train=df_combined[features], X_oot=oot_df[features])
+sample_weights = adapter.get_weights()
 
 # sample_weights 可作为下游训练器的样本权重（当前 SMF 无内置加权训练接口）。
 ```

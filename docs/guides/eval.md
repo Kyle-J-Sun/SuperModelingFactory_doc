@@ -9,7 +9,7 @@ from Modeling_Tool import PerformanceEvaluator
 
 evaluator = PerformanceEvaluator(
     tgt_name="bad_flag",
-    model=gbm.model_instance.model,
+    model=gbm._model.model,
     feature_cols=woe_features,
 )
 
@@ -45,7 +45,7 @@ print(perf[["index", "KS", "AUC", "Top10%_TargetRate"]])
 perf = (
     PerformanceEvaluator(
         tgt_name=["bad_dpd7", "bad_dpd30"],   # 多个 y 标签
-        model=gbm.model_instance.model,
+        model=gbm._model.model,
         feature_cols=woe_features,
     )
     .add_dataset("train", train_woe)
@@ -75,10 +75,6 @@ gains = GainsTableCalculator(
 gains_table = gains.calculate()
 print(gains_table)
 ```
-
-### 输出列
-
-`bin_range`, `count`, `bad_count`, `bad_rate`, `cum_count`, `cum_bad_count`, `cum_bad_rate`, `lift`, `WOE`, `IV`
 
 ## 3. 自定义指标 —— `get_gains_table_by_cust_metrics`
 
@@ -154,12 +150,17 @@ evaluate_performance(
     save_path="./output/perf/",
 )
 
-# 多模型对比：每个数据集一组 y_true / y_score
+# 多模型对比：每个数据集用 y_score_dict 放多个模型的分
 comparison_performance(
     datasets={
-        "train": {"y_true": train_woe["bad_flag"], "y_score": train_woe["prob"]},
-        "test":  {"y_true": test_woe["bad_flag"],  "y_score": test_woe["prob"]},
-        "oot":   {"y_true": oot_woe["bad_flag"],   "y_score": oot_woe["prob"]},
+        "test": {
+            "y_true": test_woe["bad_flag"],
+            "y_score_dict": {"lgb": test_woe["prob_lgb"], "lr": test_woe["prob_lr"]},
+        },
+        "oot": {
+            "y_true": oot_woe["bad_flag"],
+            "y_score_dict": {"lgb": oot_woe["prob_lgb"], "lr": oot_woe["prob_lr"]},
+        },
     },
     to_show=False,
     save_path="./output/perf_compare/",
@@ -183,7 +184,7 @@ from Modeling_Tool import calc_lift_apt
 lift_table = calc_lift_apt(
     y_true=test_woe["bad_flag"],
     y_score=test_woe["prob"],
-    start=0.0, stop=1.0, step=0.1,   # 分数取值范围与步长
+    start=1.5, stop=3.0, step=0.5,   # lift 阈值区间与步长
 )
 print(lift_table)
 ```
@@ -199,7 +200,7 @@ from Modeling_Tool import (
 # 1) 多数据集汇总
 perf = PerformanceEvaluator(
     tgt_name="bad_flag",
-    model=gbm.model_instance.model,
+    model=gbm._model.model,
     feature_cols=woe_features,
 ).add_dataset("train", train_woe) \
  .add_dataset("test",  test_woe).evaluate()
