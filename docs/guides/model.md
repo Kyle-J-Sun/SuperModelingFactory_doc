@@ -118,6 +118,54 @@ model = lgbm_quick_train(train_X, train_y, val_X, val_y,
                          params={"n_estimators": 200})
 ```
 
+### 增量学习（Warm-start）
+
+在已有模型基础上、用新数据继续训练，而非从头开始。`GradientBoostingModel`
+提供一套**同时兼容 lgb 和 xgb** 的接口：用旧模型的 log-odds 输出作为 `init_score`
+在新数据上继续学习，打分时再把「旧模型 margin + 新模型贡献」融合成最终概率。
+
+#### lgb / xgb 的差异
+
+| 环节 | XGBoost | LightGBM |
+|------|---------|----------|
+| 取原始 margin（log-odds） | `predict(X, output_margin=True)` | `predict(X, raw_score=True)` |
+| 训练时传偏移 | `fit(X, y, base_margin=...)` | `fit(X, y, init_score=...)` |
+| 预测时直接加偏移 | 原生支持 | **不支持** |
+
+`GradientBoostingModel` 把这些差异封装在内部：对外统一用 `init_score`，预测融合统一走
+`sigmoid(base_margin + 新模型 raw score)`——这是唯一对两种框架行为一致的做法（LightGBM
+在预测期并不支持注入 init_score）。
+
+#### 三步用法
+
+```python
+from Modeling_Tool import GradientBoostingModel
+
+# 1) 用旧模型取 base margin（log-odds），作为增量训练的起点
+base_margin_train = init_model.get_base_margin(train_X)
+
+# 2) 增量训练：把 base margin 当作 init_score 传入（lgb / xgb 统一用 init_score）
+new_model = GradientBoostingModel("xgb", params)   # "lgb" 同理
+new_model.fit(train_X, train_y, val_X, val_y, init_score=base_margin_train)
+
+# 3) 融合预测：sigmoid(base_margin + 新模型 raw score)
+base_margin_score = init_model.get_base_margin(score_X)
+proba = new_model.predict_with_base_margin(score_X, base_margin_score, return_prob=True)
+# return_prob=False 则返回融合后的原始 log-odds
+```
+
+!!! note "偏移只作用于训练集"
+
+    与常见生产实现一致，`init_score` 偏移只注入训练集；验证集未加偏移，因此早停的
+    eval 指标是在「未加偏移」的空间上评估的。如需严格一致，可后续透传 lgb 的
+    `eval_init_score` / xgb 的 `base_margin_eval_set`。
+
+!!! tip "init_model 应是 GradientBoostingModel"
+
+    `get_base_margin` / `predict_with_base_margin` 是 `GradientBoostingModel` 的实例
+    方法，因此基准模型 `init_model` 也应是 `GradientBoostingModel`（而非裸
+    `LGBMClassifier` / `XGBClassifier`）。
+
 ## 3. 后向变量消元 —— `BackwardVariableEliminator`
 
 基于**累计重要性阈值**逐步剔除变量，常用于**轻量级变量筛选**。
