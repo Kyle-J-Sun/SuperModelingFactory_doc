@@ -103,7 +103,7 @@ from Modeling_Tool import PerformanceEvaluator
 
 evaluator = PerformanceEvaluator(
     tgt_name="bad_flag",
-    model=gbm.model_instance.model,
+    model=gbm._model.model,
     feature_cols=woe_features,
 )
 evaluator.add_dataset("train", train_woe).add_dataset("test", test_woe)
@@ -180,7 +180,7 @@ gbm.fit(train_woe[woe_features], train_woe["bad_flag"],
 # 5) 评估
 perf = PerformanceEvaluator(
     tgt_name="bad_flag",
-    model=gbm.model_instance.model,
+    model=gbm._model.model,
     feature_cols=woe_features,
 ).add_dataset("train", train_woe).add_dataset("test", test_woe).evaluate()
 

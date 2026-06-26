@@ -132,6 +132,7 @@ nav:
       - 特征筛选: guides/feature.md
       - 模型训练: guides/model.md
       - 模型评估: guides/eval.md
+      - 模型解释: guides/explainability.md
       - 拒绝推断与分布适配: guides/reject_inference.md
       - 线上线下一致性校验: guides/uat.md
       - Excel 报告生成: guides/excel_report.md
@@ -143,6 +144,7 @@ nav:
       - Modeling_Tool.Model: api/model.md
       - Modeling_Tool.Eval: api/eval.md
       - Modeling_Tool.Sample: api/sample.md
+      - Modeling_Tool.Explainability: api/explainability.md
       - Modeling_Tool.UAT: api/uat.md
       - ExcelMaster: api/excelmaster.md
       - Report: api/report.md
