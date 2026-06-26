@@ -42,12 +42,17 @@ oot_woe   = woe.transform(oot_df)
 ### 持久化映射表
 
 ```python
-from Modeling_Tool import save_mapping_table, load_mapping_table
+from Modeling_Tool import WOE_Master, load_mapping_table
 
-save_mapping_table(woe, "./output/woe_mapping.pkl")
+# 导出 WOE 映射表（实例方法）
+woe.save_mapping_table("./output/woe_mapping.csv")
 
-# 部署时直接加载
-woe2 = load_mapping_table("./output/woe_mapping.pkl")
+# 模块函数加载，返回 (varlist, woe_dict)
+varlist, woe_dict = load_mapping_table("./output/woe_mapping.csv")
+
+# 部署：载入新的 WOE_Master 实例后 transform 新数据
+woe2 = WOE_Master(train_data=new_data, varlist=varlist, dep="bad_flag")
+woe2.load_mapping_table("./output/woe_mapping.csv")
 new_woe = woe2.transform(new_data)
 ```
 
@@ -97,7 +102,7 @@ binner2.load_woe_bins(binner.get_final_bins())
 # 一键导出 Excel 报告
 binner.export_woe_report("./output/woe_report.xlsx")
 
-# 绑图输出
+# 绘图输出
 binner.plot_woe_graph("./output/woe_charts/")
 ```
 
@@ -105,7 +110,7 @@ binner.plot_woe_graph("./output/woe_charts/")
 
 | 方法 | 说明 |
 |------|------|
-| `fit(df, chi2_binning, chi2_p)` | 训练拟合（贪心单调合并） |
+| `fit(df, chi2_binning, chi2_p, n_jobs)` | 训练拟合（贪心单调合并） |
 | `refine_cate(max_bins)` | 类别特征按坏率聚类合并 |
 | `apply_woe(df)` | WOE 转换 |
 | `get_final_bins()` | 导出分箱结果（含 WOE） |
@@ -113,6 +118,7 @@ binner.plot_woe_graph("./output/woe_charts/")
 | `get_bin_edges()` | 仅取分箱边界列表（含 ±inf） |
 | `export_woe_report(path)` | 导出 Excel 报告（含图表 Sheet） |
 | `plot_woe_graph(dir, group_name=, _df_for_group=)` | 输出 WOE 图 PNG |
+| `iv_summary` | 属性：逐特征 IV 汇总表 |
 
 ## 4. 单独 WOE 转换 —— `woe_transform`
 
@@ -142,10 +148,9 @@ result = woe_transformation(
     dep="bad_flag",
     nbins=10,
 )
-# 返回 dict: {var: WOE_table}
 ```
 
-## 6. WOE 绑图 —— `plot_woe`
+## 6. WOE 绘图 —— `plot_woe`
 
 ```python
 from Modeling_Tool import plot_woe
@@ -171,7 +176,7 @@ plot_woe(
 
     两种方式：
 
-    1. `MonotoneWOEBinner(refine_cate=True, max_bins=5)` 按坏率聚类合并
+    1. `MonotoneWOEBinner(..., cate_feats=["city_grade"])` 后调用 `.refine_cate(max_bins=5)` 按坏率聚类合并
     2. 直接使用 `WOE_Master`（会按目标编码自动分箱）
 
 ??? question "`MonotoneWOEBinner.export_woe_report` 报 `ExcelMaster` 找不到"

@@ -29,7 +29,8 @@ psi_table = psi.calculate(
     current_data=latest_df,
     varlist=features,
 )
-print(psi_table.sort_values("PSI", ascending=False).head(10))
+# calculate() 结果列为 var / psi
+print(psi_table.sort_values("psi", ascending=False).head(10))
 
 # 数据集内分组 PSI（各分组 vs 基准组）
 from Modeling_Tool import calculate_psi_within_dataset
@@ -63,7 +64,7 @@ from Modeling_Tool import VarExtractionInsights
 insights = VarExtractionInsights(
     data=train_df,
     dep="bad_flag",
-    plot_path="./iv_plots/",   # 绑图输出目录
+    plot_path="./iv_plots/",   # 绘图输出目录
     nbins=10,
     equal_freq=True,
     tree_binning=True,
@@ -71,7 +72,8 @@ insights = VarExtractionInsights(
 )
 
 report = insights.get_var_analysis_report(train_df, features)
-print(report[["variable", "IV", "KS", "monotonic"]])
+# 结果列（均为小写）：var / iv / ks_in_gains / lift_in_gains / n_bins ...
+print(report[["var", "iv", "ks_in_gains", "lift_in_gains"]])
 ```
 
 ### IV 阈值经验
@@ -84,9 +86,9 @@ print(report[["variable", "IV", "KS", "monotonic"]])
 | `0.3 – 0.5` | 强 |
 | `>= 0.5` | 异常强，警惕过拟合 / 信息泄露 |
 
-### 自动绑图
+### 自动绘图
 
-`VarExtractionInsights` 会在 `plot_path` 目录下输出每个特征的 IV 绑图（柱状图 + WOE 折线）。
+`VarExtractionInsights` 会在 `plot_path` 目录下输出每个特征的 IV 绘图（柱状图 + WOE 折线）。
 
 ## 3. 相关性去冗余 —— `CorrelationFilter`
 
@@ -107,7 +109,7 @@ keep_vars = corr_filter.remove_highly_correlated(features)
 
 | 参数 | 默认值 | 说明 |
 |------|-------|------|
-| `corr_cutpoint` | `0.7` | 相关系数阈值（绝对值） |
+| `corr_cutpoint` | `0.8` | 相关系数阈值（绝对值） |
 | `dep` | - | 目标列，保留 IV 较高者 |
 
 ## 4. 分布偏移分析 —— `DistributionShiftAnalyzer`
@@ -140,14 +142,14 @@ plotter.plot_displot(title="Age 直方图", nbins=20)     # 带 KDE 的直方图
 ```python
 from Modeling_Tool import PSICalculator, VarExtractionInsights, CorrelationFilter
 
-# 1) PSI 筛选
+# 1) PSI 筛选（结果列 var / psi）
 psi = PSICalculator(buckets=10).calculate(train_df, test_df, features)
-features = psi.loc[psi["PSI"] < 0.1, "variable"].tolist()
+features = psi.loc[psi["psi"] < 0.1, "var"].tolist()
 
-# 2) IV 筛选
+# 2) IV 筛选（结果列 var / iv ...）
 insights = VarExtractionInsights(train_df, "bad_flag", "./iv_plots/")
 iv_report = insights.get_var_analysis_report(train_df, features)
-features = iv_report.loc[iv_report["IV"].between(0.02, 0.5), "variable"].tolist()
+features = iv_report.loc[iv_report["iv"].between(0.02, 0.5), "var"].tolist()
 
 # 3) 相关性去冗余
 features = CorrelationFilter(train_woe, "bad_flag", corr_cutpoint=0.7) \
