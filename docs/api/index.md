@@ -12,7 +12,7 @@
 | **Modeling_Tool.Model** | [`api/model.md`](model.md) | LR、LightGBM、XGBoost、后向消元 |
 | **Modeling_Tool.Eval** | [`api/eval.md`](eval.md) | Gains 表、ROC/KS、链式评估 |
 | **Modeling_Tool.Sample** | [`api/sample.md`](sample.md) | 切分、分层、均衡、拒绝推断 |
-| **Modeling_Tool.explainability** | [`api/explainability.md`](explainability.md) | SHAP 模型解释（`ModelExplainer`） |
+| **Modeling_Tool.Explainability** | [`api/explainability.md`](explainability.md) | SHAP 模型解释（`ModelExplainer`） |
 | **Modeling_Tool.UAT** | [`api/uat.md`](uat.md) | 线上线下一致性校验 |
 | **ExcelMaster** | [`api/excelmaster.md`](excelmaster.md) | 通用 Excel 报告引擎 |
 | **Report** | [`api/report.md`](report.md) | 风控报告模板函数 |

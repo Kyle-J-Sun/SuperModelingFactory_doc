@@ -144,7 +144,7 @@ nav:
       - Modeling_Tool.Model: api/model.md
       - Modeling_Tool.Eval: api/eval.md
       - Modeling_Tool.Sample: api/sample.md
-      - Modeling_Tool.explainability: api/explainability.md
+      - Modeling_Tool.Explainability: api/explainability.md
       - Modeling_Tool.UAT: api/uat.md
       - ExcelMaster: api/excelmaster.md
       - Report: api/report.md
