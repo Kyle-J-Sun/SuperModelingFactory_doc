@@ -101,6 +101,56 @@ lr.fit(train_woe, woe_features, "bad_flag")
     仅传 `scaler=...` 而不设 `standardize=True` 不会启用标准化；自定义 scaler 必须与
     `standardize=True` 一起使用。
 
+### 超参网格搜索（holdout）
+
+`grid_search_params(...)` 在 **INS / OOS / OOT holdout** 上做超参网格搜索（而非 k-fold 交叉验证），
+专为评分卡常见的「样本内 / 样本外 / 跨时间」场景设计：对 `param_grid` 的笛卡尔积逐个训练候选模型，
+在每个 eval set 上算 AUC，再按 `objective` 选出最优组合。
+
+```python
+import numpy as np
+from Modeling_Tool import LRMaster
+
+tuner = LRMaster(params={"solver": "lbfgs", "max_iter": 1000})
+results = tuner.grid_search_params(
+    data=ins_fit,                  # 训练候选模型的数据（通常是 INS）
+    varlist=woe_features,
+    tgt_name="bad_flag",
+    eval_sets={"ins": ins_woe, "oos": oos_woe, "oot": oot_woe},  # 有序，按 AUC 评分
+    param_grid={"C": np.logspace(-3, 2, 31)},   # 多个键按笛卡尔积组合
+    objective="oot_gap_penalized",  # 默认：最大化主集 AUC 同时惩罚过拟合 gap
+    primary_set="oot",              # 缺省为 eval_sets 的最后一个键
+    gap_ref_sets=["ins", "oos"],    # 缺省为除 primary_set 外的所有集
+    refit=True,                     # 搜完用最优参数在 data 上重训 self
+)
+
+print(tuner.best_params_)     # 最优参数 dict
+print(tuner.search_results_)  # 完整结果表（= 返回值）
+```
+
+#### 三种 objective
+
+| objective | 选择标准 |
+|---|---|
+| `'oot_gap_penalized'`（默认） | `AUC[primary] - |mean(AUC[gap_refs]) - AUC[primary]|`，即在拉高主集 AUC 的同时惩罚训练/holdout 的 AUC 差（过拟合） |
+| `'max_primary'` | 直接最大化 `AUC[primary]` |
+| callable | 自定义 `f(auc_dict) -> float`，`auc_dict` 为 `{集名: AUC}` |
+
+#### 返回值与副作用
+
+- **返回**：按 `score` 降序的结果表，列为参数列 + 每个 eval set 的 `AUC_<名>` +（gap objective 下的）`gap` + `score`。
+- **副作用**：写入 `self.best_params_`、`self.search_results_`，并把最优组合合并进 `self.params`；`refit=True` 时还会用最优参数在 `data` 上重训 `self.model`。
+
+!!! note "holdout 而非 CV；目前仅支持 AUC"
+
+    这是基于你显式提供的 `eval_sets` 的 holdout 搜索（不是 k-fold 交叉验证），更贴合风控
+    INS/OOS/OOT 实践。`metric` 目前仅支持 `'auc'`。
+
+!!! tip "标准化配置自动继承"
+
+    若该 `LRMaster` 开了 `standardize=True`，每个候选会继承相同配置（各自在 `data` 上拟合 scaler），
+    保证搜索与最终模型处于同一特征空间。
+
 ## 2. 梯度提升模型 —— `GradientBoostingModel`
 
 LightGBM / XGBoost 的统一接口。
@@ -330,9 +380,9 @@ for name, perf in results.items():
 
 ??? question "如何做超参搜索 / 交叉验证"
 
-    `LRMaster` / `GradientBoostingModel` 未内置超参搜索 / 交叉验证接口，
-    请用 sklearn 的 `cross_val_score` 自行包装（注意 GBM 取底层估计器用
-    `model._model.model`，LR 用 `model.model`）：
+    `LRMaster` 内置了基于 holdout 的网格搜索 `grid_search_params(...)`（见上文「超参网格搜索」）。
+    若想用 k-fold 交叉验证，或为 `GradientBoostingModel` 做超参搜索，可用 sklearn 的
+    `cross_val_score` 自行包装（注意 GBM 取底层估计器用 `model._model.model`，LR 用 `model.model`）：
 
     ```python
     from sklearn.model_selection import cross_val_score
