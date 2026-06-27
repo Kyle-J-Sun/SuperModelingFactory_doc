@@ -26,6 +26,10 @@
 
     `LRMaster` / `GradientBoostingModel` / `BackwardVariableEliminator`
 
+- :material-tune: **[GBM 超参搜索](gbm_param_search.md)**
+
+    `GradientBoostingModel.param_search` / grid search / Optuna / INS-OOS-OOT holdout
+
 - :material-chart-line: **[模型评估](eval.md)**
 
     `PerformanceEvaluator` / `GainsTableCalculator` / `EvaluationPipeline`
