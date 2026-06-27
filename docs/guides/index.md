@@ -16,7 +16,11 @@
 
 - :material-chart-bell-curve: **[WOE 编码](woe.md)**
 
-    `WOE_Master` / `WOE_Monotone_Binner` / `is_monotonic`
+    `WOE_Master` / `MonotoneWOEBinner` / `is_monotonic`
+
+- :material-vector-link: **[WOE 分箱引擎](woe_binning_engine.md)**
+
+    `as_woe_engine` / `binning_engine` / `woe_binner` / Master-Monotone 统一协议
 
 - :material-filter-variant: **[特征筛选](feature.md)**
 
@@ -62,7 +66,8 @@
 
     1. 先读 [快速上手](../quickstart.md) 跑通一遍
     2. 再读 [端到端流水线](../pipeline.md) 理解整体流程
-    3. 然后按需查阅各分册
+    3. 如果使用单调分箱，优先读 [WOE 分箱引擎](woe_binning_engine.md)
+    4. 然后按需查阅各分册
 
 !!! info "API 速查"
 
