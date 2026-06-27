@@ -30,6 +30,10 @@
 
     `GradientBoostingModel.param_search` / grid search / Optuna / INS-OOS-OOT holdout
 
+- :material-archive-cog: **[模型注册与版本管理](model_registry.md)**
+
+    `save_model` / `load_model` / `load_model_metadata` / 模型 metadata artifact
+
 - :material-chart-line: **[模型评估](eval.md)**
 
     `PerformanceEvaluator` / `GainsTableCalculator` / `EvaluationPipeline`

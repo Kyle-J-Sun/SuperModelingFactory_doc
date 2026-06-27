@@ -132,6 +132,7 @@ nav:
       - 特征筛选: guides/feature.md
       - 模型训练: guides/model.md
       - GBM 超参搜索: guides/gbm_param_search.md
+      - 模型注册与版本管理: guides/model_registry.md
       - 模型评估: guides/eval.md
       - 模型解释: guides/explainability.md
       - 拒绝推断与分布适配: guides/reject_inference.md
