@@ -145,7 +145,44 @@ gbm.param_search(
 )
 ```
 
-## 5. 返回值与副作用
+## 5. 样本权重
+
+`param_search` 支持 `weight_col`（训练集）和 `eval_weight_col`（各 eval set DataFrame 中的权重列）。
+候选模型在训练与 holdout 评分时均使用对应权重计算加权 AUC：
+
+```python
+results = gbm.param_search(
+    data=ins_woe,
+    varlist=woe_features,
+    tgt_name="bad_flag",
+    eval_sets={"ins": ins_woe, "oos": oos_woe, "oot": oot_woe},
+    search_space={
+        "num_leaves": [15, 31, 63],
+        "learning_rate": [0.03, 0.05, 0.1],
+        "max_depth": [3, 4, 5],
+    },
+    engine="grid",
+    objective="oot_gap_penalized",
+    primary_set="oot",
+    gap_ref_sets=["ins", "oos"],
+    weight_col="sample_wgt",        # 训练集权重列（须在 data 中）
+    eval_weight_col="sample_wgt",   # 各 eval set 的权重列
+    refit=True,
+)
+
+print(gbm.best_params_)
+print(gbm.search_results_[["max_depth", "learning_rate", "AUC_oot", "score"]].head())
+```
+
+与 `LRMaster.grid_search_params` 对称：`weight_col` 控制候选拟合，`eval_weight_col` 控制
+各 holdout 上的评分。也可通过 `fit_kwargs` 额外透传 `sample_weight` / `eval_sample_weight` 数组。
+
+!!! note "权重列须存在于所有相关 DataFrame"
+
+    `weight_col` 必须在 `data` 中存在；`eval_weight_col` 必须在 `eval_sets` 的每个
+    DataFrame 中存在，否则搜索启动时会报 `KeyError`。
+
+## 6. 返回值与副作用
 
 - **返回**：按 `score` 降序的 `pandas.DataFrame`
 - **写入**：`gbm.best_params_` 和 `gbm.search_results_`
