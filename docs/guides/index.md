@@ -44,7 +44,7 @@
 
 - :material-lightbulb-on: **[模型解释](explainability.md)**
 
-    `ModelExplainer`（SHAP 特征重要性 / summary / dependence / 单样本归因）
+    `ModelExplainer`（SHAP / PDP / ICE / ALE / LIME）
 
 - :material-account-cancel: **[拒绝推断与分布适配](reject_inference.md)**
 
