@@ -12,7 +12,7 @@ flowchart LR
     D --> E[WOE 编码]
     E --> F[模型训练<br/>LR / LGB / XGB]
     F --> G[模型评估<br/>Gains / ROC / KS]
-    G --> H[模型解释<br/>SHAP / PDP / ICE / ALE / LIME]
+    G --> H[模型解释<br/>SHAP / Owen / PDP / ICE / ALE / LIME]
     H --> I[Excel 报告]
     H --> J[线上线下 UAT]
     H --> K[监控 PSI]
@@ -167,18 +167,18 @@ print(perf[["index", "KS", "AUC", "Top10%_TargetRate"]])
 
 ## Step 7：模型解释
 
-训练好的 GBM 可以直接交给 `ModelExplainer`，同一批 WOE 特征一次跑完 SHAP、PDP、ICE、ALE 和 LIME。
+训练好的 GBM 可以直接交给 `ModelExplainer`。如果存在高度相关或同业务来源的变量，先构建 coalition structure，再计算 Owen Value，能得到更稳定的模块级 reason code。
 
 !!! note "安装解释依赖"
 
-    SHAP 和 LIME 是可选依赖。如果需要运行下面完整示例，请先安装：
+    SHAP、Owen Value 和 LIME 是可选依赖。如果需要运行下面完整示例，请先安装：
 
     ```bash
     pip install 'supermodelingfactory[explain]'
     ```
 
 ```python
-from Modeling_Tool import ModelExplainer
+from Modeling_Tool import ModelExplainer, build_coalition_structure
 
 explain_x = test_woe[woe_features]
 background_x = train_woe[woe_features].sample(
@@ -187,10 +187,7 @@ background_x = train_woe[woe_features].sample(
 )
 focus_feature = woe_features[0]
 
-explainer = ModelExplainer(
-    gbm,
-    background_data=background_x,
-)
+explainer = ModelExplainer(gbm, background_data=background_x)
 
 # 1) SHAP：全局重要性、summary 图、单样本贡献
 explainer.explain(explain_x)
@@ -198,7 +195,32 @@ shap_importance = explainer.feature_importance(normalize=True)
 explainer.summary_plot(show=False, save_path="./output/explain/shap_summary.png")
 local_shap = explainer.explain_instance(explain_x.iloc[[0]])
 
-# 2) PDP：平均边际影响
+# 2) Owen Value：先验分组 + 自动聚类兜底，输出模块级 reason code
+prior_groups = {
+    "delinquency": ["max_dpd_12m_woe", "dpd_cnt_6m_woe", "ever_dpd30_woe"],
+    "multi_lending": ["inquiries_3m_woe", "inquiries_6m_woe", "active_loans_woe"],
+    "affordability": ["monthly_income_woe", "debt_to_income_woe", "monthly_obligation_woe"],
+}
+
+coalition = build_coalition_structure(
+    background_x,
+    prior_groups=prior_groups,
+    threshold=0.35,
+    method="complete",
+    corr_method="spearman",
+)
+print(coalition["summary"][["n_features", "mean_abs_corr", "max_abs_corr"]])
+
+explainer.explain_owen(
+    explain_x,
+    coalition_structure=coalition,
+    model_output="log_odds",
+    max_evals=500,
+)
+owen_group = explainer.owen_group_importance(normalize=True)
+owen_local = explainer.owen_explain_instance(explain_x.iloc[0])
+
+# 3) PDP：平均边际影响
 pdp_curve = explainer.partial_dependence(
     explain_x,
     feature=focus_feature,
@@ -206,14 +228,9 @@ pdp_curve = explainer.partial_dependence(
     sample_size=2000,
     random_state=42,
 )
-explainer.pdp_plot(
-    explain_x,
-    feature=focus_feature,
-    show=False,
-    save_path="./output/explain/pdp.png",
-)
+explainer.pdp_plot(explain_x, feature=focus_feature, show=False, save_path="./output/explain/pdp.png")
 
-# 3) ICE：个体响应曲线
+# 4) ICE：个体响应曲线
 ice_curve = explainer.ice(
     explain_x,
     feature=focus_feature,
@@ -222,28 +239,13 @@ ice_curve = explainer.ice(
     random_state=42,
     centered=True,
 )
-explainer.ice_plot(
-    explain_x,
-    feature=focus_feature,
-    centered=True,
-    show=False,
-    save_path="./output/explain/ice.png",
-)
+explainer.ice_plot(explain_x, feature=focus_feature, centered=True, show=False, save_path="./output/explain/ice.png")
 
-# 4) ALE：累计局部效应
-ale_curve = explainer.ale(
-    explain_x,
-    feature=focus_feature,
-    bins=20,
-)
-explainer.ale_plot(
-    explain_x,
-    feature=focus_feature,
-    show=False,
-    save_path="./output/explain/ale.png",
-)
+# 5) ALE：累计局部效应
+ale_curve = explainer.ale(explain_x, feature=focus_feature, bins=20)
+explainer.ale_plot(explain_x, feature=focus_feature, show=False, save_path="./output/explain/ale.png")
 
-# 5) LIME：单样本局部解释 + 采样聚合重要性
+# 6) LIME：单样本局部解释 + 采样聚合重要性
 lime_local = explainer.lime_explain_instance(
     x_row=explain_x.iloc[0],
     X_train=background_x,
@@ -261,6 +263,8 @@ lime_global = explainer.lime_global_importance(
 )
 
 print(shap_importance.head(10))
+print(owen_group[["group", "mean_abs_owen", "importance_pct"]].head(10))
+print(owen_local[["group", "owen_value", "features"]].head(10))
 print(pdp_curve.head())
 print(ice_curve.head())
 print(ale_curve.head())
@@ -270,7 +274,7 @@ print(lime_global.head(10))
 
 !!! tip "性能建议"
 
-    PDP、ICE、ALE、LIME 都会反复调用模型预测。生产样本较大时，建议通过 `sample_size` 或 `background_x.sample(...)` 控制解释成本。
+    PDP、ICE、ALE、LIME 和 Owen Value 都会反复调用模型预测。生产样本较大时，建议通过 `sample_size`、`background_x.sample(...)` 或 `max_evals` 控制解释成本。
 
 ## Step 8：模型监控 PSI
 
@@ -335,6 +339,7 @@ summary_df = UATConsistencyChecker(config, ODPSRunner()).run()
 from Modeling_Tool import (
     SampleSplitter, PSICalculator, VarExtractionInsights, CorrelationFilter,
     GradientBoostingModel, PerformanceEvaluator, ModelExplainer,
+    build_coalition_structure,
 )
 from Modeling_Tool.WOE.WOE_Monotone_Binner import MonotoneWOEBinner
 
@@ -381,6 +386,16 @@ explainer = ModelExplainer(gbm, background_data=background_x)
 
 explainer.explain(explain_x)
 shap_importance = explainer.feature_importance(normalize=True)
+
+prior_groups = {
+    "delinquency": ["max_dpd_12m_woe", "dpd_cnt_6m_woe", "ever_dpd30_woe"],
+    "multi_lending": ["inquiries_3m_woe", "inquiries_6m_woe", "active_loans_woe"],
+}
+coalition = build_coalition_structure(background_x, prior_groups=prior_groups, threshold=0.35)
+explainer.explain_owen(explain_x, coalition_structure=coalition, model_output="log_odds", max_evals=500)
+owen_group = explainer.owen_group_importance(normalize=True)
+owen_local = explainer.owen_explain_instance(explain_x.iloc[0])
+
 pdp_curve = explainer.partial_dependence(explain_x, focus_feature, sample_size=2000, random_state=42)
 ice_curve = explainer.ice(explain_x, focus_feature, sample_size=100, centered=True, random_state=42)
 ale_curve = explainer.ale(explain_x, focus_feature, bins=20)
