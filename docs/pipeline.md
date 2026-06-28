@@ -10,7 +10,7 @@ flowchart LR
     B --> C[选择 WOE 分箱引擎]
     C --> D[特征筛选<br/>PSI / IV / 相关性]
     D --> E[WOE 编码]
-    E --> F[模型训练<br/>LR / LGB / XGB]
+    E --> F[模型训练<br/>LR / LGB / XGB / CAT]
     F --> G[模型评估<br/>Gains / ROC / KS]
     G --> H[模型解释<br/>SHAP / Owen / PDP / ICE / ALE / LIME]
     H --> I[Excel 报告]

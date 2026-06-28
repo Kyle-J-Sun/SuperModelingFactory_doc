@@ -103,6 +103,11 @@ gbm.fit(
 )
 ```
 
+!!! tip "也可以一行切换到 XGBoost / CatBoost"
+
+    `GradientBoostingModel` 是统一接口，把 `"lgb"` 换成 `"xgb"` 或 `"cat"` 即可在不改其余代码的
+    情况下训练 XGBoost / CatBoost，例如 `GradientBoostingModel("cat", {"n_estimators": 200})`。
+
 ## 6. 模型评估
 
 ```python
