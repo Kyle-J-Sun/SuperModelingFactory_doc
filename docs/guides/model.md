@@ -1,6 +1,6 @@
 # 模型训练
 
-SuperModelingFactory 在 [`Model`](../api/model.md) 子包封装了**逻辑回归（评分卡首选）、LightGBM、XGBoost** 三大类模型，并提供**后向变量消元**辅助工具。
+SuperModelingFactory 在 [`Model`](../api/model.md) 子包封装了**逻辑回归（评分卡首选）、LightGBM、XGBoost、CatBoost** 四大类模型，并提供**后向变量消元**辅助工具。
 
 ## 1. 逻辑回归 —— `LRMaster`
 
@@ -153,13 +153,13 @@ print(tuner.search_results_)  # 完整结果表（= 返回值）
 
 ## 2. 梯度提升模型 —— `GradientBoostingModel`
 
-LightGBM / XGBoost 的统一接口。
+LightGBM / XGBoost / CatBoost 的统一接口。
 
 ```python
 from Modeling_Tool import GradientBoostingModel
 
 gbm = GradientBoostingModel(
-    model_type="lgb",       # 'lgb' 或 'xgb'
+    model_type="lgb",       # 'lgb' / 'xgb' / 'cat'
     params={
         "n_estimators": 500,
         "learning_rate": 0.05,
@@ -188,28 +188,91 @@ proba = gbm.predict(test_X)
 gbm.calibrate(val_X, val_y, method="isotonic")
 ```
 
+#### CatBoost 示例（`model_type="cat"`）
+
+CatBoost 走同一套接口，只需把 `model_type` 换成 `"cat"`。统一参数名（`n_estimators` /
+`max_depth`）会自动映射到 CatBoost 原生参数（`iterations` / `depth`），无需改动其余调用代码；
+若数据里有原始类别列，可直接用 `cat_features` 交给 CatBoost 原生处理（无需先做 WOE / one-hot）。
+
+```python
+from Modeling_Tool import GradientBoostingModel
+
+cat = GradientBoostingModel(
+    model_type="cat",       # CatBoost
+    params={
+        "n_estimators": 500,        # 等价于 CatBoost 的 iterations
+        "learning_rate": 0.05,
+        "max_depth": 6,             # 等价于 CatBoost 的 depth
+        "l2_leaf_reg": 3.0,
+        "subsample": 0.8,
+        "early_stopping_rounds": 30,
+        "eval_metric": "AUC",
+        "cat_features": ["city_grade"],   # 可选：直接传原始类别列
+    },
+)
+cat.fit(train_X, train_y, val_X, val_y)
+
+# 与 lgb / xgb 完全一致的下游用法
+varimp = cat.get_feature_importance()
+proba = cat.predict(test_X)
+```
+
 ### 关键参数
 
 | 参数 | 默认值 | 说明 |
 |------|-------|------|
-| `model_type` | `"lgb"` | `"lgb"` 或 `"xgb"` |
+| `model_type` | `"lgb"` | `"lgb"` / `"xgb"` / `"cat"` |
 | `n_estimators` | `100` | 树数量 |
 | `learning_rate` | `0.1` | 学习率 |
 | `max_depth` | `-1` | 最大深度（-1=不限） |
 | `early_stopping_rounds` | `None` | 早停轮数 |
 | `eval_metric` | `"auc"` | 评估指标 |
 
-### 单独使用 LightGBMModel / XGBoostModel
+### 单独使用 LightGBMModel / XGBoostModel / CatBoostModel
 
 ```python
-from Modeling_Tool import LightGBMModel, XGBoostModel
+from Modeling_Tool import LightGBMModel, XGBoostModel, CatBoostModel
 
 lgb = LightGBMModel(params={"n_estimators": 200, "learning_rate": 0.05})
 lgb.fit(train_X, train_y, val_X, val_y)
 
 xgb = XGBoostModel(params={"n_estimators": 200, "max_depth": 6})
 xgb.fit(train_X, train_y, val_X, val_y)
+
+cat = CatBoostModel(params={"n_estimators": 200, "max_depth": 6})
+cat.fit(train_X, train_y, val_X, val_y)
 ```
+
+### CatBoost 标准建模 —— `CatBoostModel`
+
+`CatBoostModel` 既可单独使用，也可通过 `GradientBoostingModel("cat", ...)` 以统一接口调用。
+它最大的特点是**原生处理类别特征**：通过 `cat_features` 指定原始类别列（列名或列索引），
+CatBoost 会用 ordered target statistics 内部编码，无需事先做 WOE / one-hot。
+
+```python
+from Modeling_Tool import CatBoostModel
+
+cat = CatBoostModel(
+    params={
+        "n_estimators": 500,        # -> iterations
+        "learning_rate": 0.05,
+        "max_depth": 6,             # -> depth
+        "l2_leaf_reg": 3.0,
+        "early_stopping_rounds": 30,
+        "eval_metric": "AUC",
+        "cat_features": ["city_grade"],   # 原始类别列，免编码
+    },
+)
+cat.fit(train_X, train_y, val_X, val_y)
+
+varimp = cat.get_feature_importance()
+proba = cat.predict(test_X)
+```
+
+!!! note "WOE 流水线里通常不需要 `cat_features`"
+
+    评分卡标准流程会先把所有特征 WOE 编码成数值列，此时入模特征已无原始类别列，
+    可不传 `cat_features`。仅当你直接把原始类别列喂给 CatBoost 时才需要它。
 
 ### 快速训练函数
 
@@ -332,6 +395,7 @@ models = {
     "LR":   LRMaster({"C": 1.0}),
     "LGB":  GradientBoostingModel("lgb", {"n_estimators": 200}),
     "XGB":  GradientBoostingModel("xgb", {"n_estimators": 200}),
+    "CAT":  GradientBoostingModel("cat", {"n_estimators": 200}),
 }
 
 results = {}
@@ -366,6 +430,30 @@ for name, perf in results.items():
     ```python
     params["categorical_feature"] = ["city_grade"]
     ```
+
+??? question "CatBoost 的参数别名：`n_estimators` / `max_depth` 还是 `iterations` / `depth`？"
+
+    `GradientBoostingModel("cat", ...)` 与 `CatBoostModel` 接受**统一参数名**，让三种 GBM
+    共用同一套配置：`n_estimators` 会映射到 CatBoost 原生的 `iterations`，`max_depth` 映射到
+    `depth`。你也可以直接写 CatBoost 原生名（`iterations` / `depth`），二者择一即可。
+    建议**不要同时**传别名与原生名，以免产生歧义；其余参数（`learning_rate`、`l2_leaf_reg`、
+    `early_stopping_rounds`、`eval_metric` 等）按 CatBoost 原生名透传。
+
+??? question "CatBoost 如何处理类别特征？"
+
+    CatBoost 原生支持类别特征：在 params 里用 `cat_features` 指定原始类别列（列名或列索引），
+    CatBoost 会用 ordered target statistics 内部编码，**无需** WOE / one-hot 预处理：
+
+    ```python
+    cat = GradientBoostingModel("cat", {
+        "n_estimators": 300,
+        "cat_features": ["city_grade", "channel"],   # 原始类别列
+    })
+    cat.fit(train_X, train_y, val_X, val_y)
+    ```
+
+    注意：训练集与验证 / 打分数据必须含有相同的列；若已走 WOE 流水线（特征均为数值），
+    则通常不需要 `cat_features`。
 
 ??? question "变量重要性总和不为 1"
 
