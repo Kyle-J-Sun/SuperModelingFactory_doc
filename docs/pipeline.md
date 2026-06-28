@@ -2,6 +2,8 @@
 
 本页用一条生产级信用评分卡开发流程，把 SuperModelingFactory 的主要模块串起来。重点原则：**训练期确定一套分箱引擎，筛选、编码、监控都复用它**。
 
+若样本带权重（如按余额加权、过采样校正），在训练与评估阶段**统一传入同一 `weight_col`**，保证指标口径一致。详见 [模型训练 — 样本权重](guides/model.md#样本权重) 与 [模型评估 — 样本权重评估](guides/eval.md#样本权重评估)。
+
 ## 流程总览
 
 ```mermaid
@@ -32,7 +34,15 @@ splitter = SampleSplitter(test_size=0.3, random_state=42, stratify=True)
 train_df, test_df = splitter.split_df(master_df, target="bad_flag")
 
 oot_df = master_df[master_df["apply_month"] >= "2025-07"].copy()
+
+# 权重列随 DataFrame 一起切分（示例：sample_wgt 已在 master_df 中）
+assert "sample_wgt" in train_df.columns
 ```
+
+!!! tip "权重列准备"
+
+    权重列应在切分**之前**写入 `master_df`，切分后 `train_df` / `test_df` / `oot_df`
+    均保留该列。典型来源：贷款余额、时间衰减系数、过采样逆概率等。
 
 ## Step 2：选择分箱引擎
 
@@ -128,6 +138,9 @@ else:
     oot_woe = woe_engine.transform(oot_df, keep_vars)
 
 woe_features = [f"{f}_woe" for f in keep_vars]
+
+# 权重列随 WOE 编码保留（未做变换）
+WEIGHT_COL = "sample_wgt"
 ```
 
 ## Step 5：模型训练
@@ -135,27 +148,48 @@ woe_features = [f"{f}_woe" for f in keep_vars]
 ```python
 from Modeling_Tool import LRMaster, GradientBoostingModel
 
+# 逻辑回归：weight_col
 lr = LRMaster(params={"C": 1.0, "max_iter": 1000, "solver": "lbfgs"})
-lr.fit(train_woe, woe_features, "bad_flag")
+lr.fit(train_woe, woe_features, "bad_flag", weight_col=WEIGHT_COL)
 
-# 或使用 GBM
+# 或使用 GBM：sample_weight / eval_sample_weight
 gbm = GradientBoostingModel("lgb", {"n_estimators": 300, "learning_rate": 0.05})
 gbm.fit(
     train_woe[woe_features], train_woe["bad_flag"],
-    test_woe[woe_features], test_woe["bad_flag"],
+    test_woe[woe_features],  test_woe["bad_flag"],
+    sample_weight=train_woe[WEIGHT_COL],
+    eval_sample_weight=test_woe[WEIGHT_COL],
+)
+```
+
+可选：对 GBM 做加权 holdout 超参搜索（见 [GBM 超参搜索](guides/gbm_param_search.md#5-样本权重)）：
+
+```python
+gbm.param_search(
+    data=train_woe,
+    varlist=woe_features,
+    tgt_name="bad_flag",
+    eval_sets={"train": train_woe, "test": test_woe, "oot": oot_woe},
+    search_space={"max_depth": [3, 4, 5], "num_leaves": [15, 31]},
+    weight_col=WEIGHT_COL,
+    eval_weight_col=WEIGHT_COL,
+    primary_set="oot",
+    refit=True,
 )
 ```
 
 ## Step 6：模型评估
 
 ```python
-from Modeling_Tool import PerformanceEvaluator
+from Modeling_Tool import PerformanceEvaluator, GainsTableCalculator
 
+# 多数据集性能汇总（加权 AUC / KS / Lift）
 perf = (
     PerformanceEvaluator(
         tgt_name="bad_flag",
         model=gbm._model.model,
         feature_cols=woe_features,
+        weight_col=WEIGHT_COL,
     )
     .add_dataset("train", train_woe)
     .add_dataset("test", test_woe)
@@ -163,6 +197,17 @@ perf = (
     .evaluate()
 )
 print(perf[["index", "KS", "AUC", "Top10%_TargetRate"]])
+
+# Gains 表（N=权重和, N_RAW=行数）
+gains = GainsTableCalculator(
+    data=test_woe,
+    score="prob",
+    dep="bad_flag",
+    weight_col=WEIGHT_COL,
+    weighted_binning=True,
+    nbins=10,
+).calculate()
+print(gains[["thresholds", "N", "N_RAW", "bad_rate", "lift"]])
 ```
 
 ## Step 7：模型解释
@@ -338,10 +383,12 @@ summary_df = UATConsistencyChecker(config, ODPSRunner()).run()
 ```python
 from Modeling_Tool import (
     SampleSplitter, PSICalculator, VarExtractionInsights, CorrelationFilter,
-    GradientBoostingModel, PerformanceEvaluator, ModelExplainer,
+    GradientBoostingModel, PerformanceEvaluator, GainsTableCalculator, ModelExplainer,
     build_coalition_structure,
 )
 from Modeling_Tool.WOE.WOE_Monotone_Binner import MonotoneWOEBinner
+
+WEIGHT_COL = "sample_wgt"
 
 train_df, test_df = SampleSplitter(test_size=0.3, random_state=42, stratify=True) \
     .split_df(data, target="bad_flag")
@@ -371,13 +418,24 @@ oot_woe = binner.apply_woe(oot_df)
 woe_features = [f"{f}_woe" for f in features]
 
 gbm = GradientBoostingModel("lgb", {"n_estimators": 200, "learning_rate": 0.05})
-gbm.fit(train_woe[woe_features], train_woe["bad_flag"], test_woe[woe_features], test_woe["bad_flag"])
+gbm.fit(
+    train_woe[woe_features], train_woe["bad_flag"],
+    test_woe[woe_features], test_woe["bad_flag"],
+    sample_weight=train_woe[WEIGHT_COL],
+    eval_sample_weight=test_woe[WEIGHT_COL],
+)
 
 perf = PerformanceEvaluator(
     tgt_name="bad_flag",
     model=gbm._model.model,
     feature_cols=woe_features,
+    weight_col=WEIGHT_COL,
 ).add_dataset("train", train_woe).add_dataset("test", test_woe).add_dataset("oot", oot_woe).evaluate()
+
+gains = GainsTableCalculator(
+    test_woe, score="prob", dep="bad_flag",
+    weight_col=WEIGHT_COL, weighted_binning=True, nbins=10,
+).calculate()
 
 explain_x = test_woe[woe_features]
 background_x = train_woe[woe_features].sample(n=min(1000, len(train_woe)), random_state=42)
@@ -409,3 +467,4 @@ lime_global = explainer.lime_global_importance(explain_x, X_train=background_x, 
 - 分箱引擎说明：[WOE 分箱引擎](guides/woe_binning_engine.md)
 - 特征筛选细节：[特征筛选](guides/feature.md)
 - WOE 编码细节：[WOE 编码](guides/woe.md)
+- 样本权重 API 细节：[模型训练](guides/model.md) / [模型评估](guides/eval.md)
