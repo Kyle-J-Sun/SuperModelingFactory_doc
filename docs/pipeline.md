@@ -12,14 +12,15 @@ flowchart LR
     D --> E[WOE 编码]
     E --> F[模型训练<br/>LR / LGB / XGB]
     F --> G[模型评估<br/>Gains / ROC / KS]
-    G --> H[Excel 报告]
-    G --> I[线上线下 UAT]
-    G --> J[监控 PSI]
+    G --> H[模型解释<br/>SHAP / PDP / ICE / ALE / LIME]
+    H --> I[Excel 报告]
+    H --> J[线上线下 UAT]
+    H --> K[监控 PSI]
 
     style A fill:#e3f2fd
     style C fill:#fff9c4
-    style H fill:#c8e6c9
-    style I fill:#fff9c4
+    style I fill:#c8e6c9
+    style J fill:#fff9c4
 ```
 
 ## Step 1：样本切分
@@ -164,7 +165,114 @@ perf = (
 print(perf[["index", "KS", "AUC", "Top10%_TargetRate"]])
 ```
 
-## Step 7：模型监控 PSI
+## Step 7：模型解释
+
+训练好的 GBM 可以直接交给 `ModelExplainer`，同一批 WOE 特征一次跑完 SHAP、PDP、ICE、ALE 和 LIME。
+
+!!! note "安装解释依赖"
+
+    SHAP 和 LIME 是可选依赖。如果需要运行下面完整示例，请先安装：
+
+    ```bash
+    pip install 'supermodelingfactory[explain]'
+    ```
+
+```python
+from Modeling_Tool import ModelExplainer
+
+explain_x = test_woe[woe_features]
+background_x = train_woe[woe_features].sample(
+    n=min(1000, len(train_woe)),
+    random_state=42,
+)
+focus_feature = woe_features[0]
+
+explainer = ModelExplainer(
+    gbm,
+    background_data=background_x,
+)
+
+# 1) SHAP：全局重要性、summary 图、单样本贡献
+explainer.explain(explain_x)
+shap_importance = explainer.feature_importance(normalize=True)
+explainer.summary_plot(show=False, save_path="./output/explain/shap_summary.png")
+local_shap = explainer.explain_instance(explain_x.iloc[[0]])
+
+# 2) PDP：平均边际影响
+pdp_curve = explainer.partial_dependence(
+    explain_x,
+    feature=focus_feature,
+    grid_resolution=30,
+    sample_size=2000,
+    random_state=42,
+)
+explainer.pdp_plot(
+    explain_x,
+    feature=focus_feature,
+    show=False,
+    save_path="./output/explain/pdp.png",
+)
+
+# 3) ICE：个体响应曲线
+ice_curve = explainer.ice(
+    explain_x,
+    feature=focus_feature,
+    grid_resolution=30,
+    sample_size=100,
+    random_state=42,
+    centered=True,
+)
+explainer.ice_plot(
+    explain_x,
+    feature=focus_feature,
+    centered=True,
+    show=False,
+    save_path="./output/explain/ice.png",
+)
+
+# 4) ALE：累计局部效应
+ale_curve = explainer.ale(
+    explain_x,
+    feature=focus_feature,
+    bins=20,
+)
+explainer.ale_plot(
+    explain_x,
+    feature=focus_feature,
+    show=False,
+    save_path="./output/explain/ale.png",
+)
+
+# 5) LIME：单样本局部解释 + 采样聚合重要性
+lime_local = explainer.lime_explain_instance(
+    x_row=explain_x.iloc[0],
+    X_train=background_x,
+    num_features=10,
+    num_samples=3000,
+    random_state=42,
+)
+lime_global = explainer.lime_global_importance(
+    X=explain_x,
+    X_train=background_x,
+    sample_size=50,
+    num_features=10,
+    num_samples=1000,
+    random_state=42,
+)
+
+print(shap_importance.head(10))
+print(pdp_curve.head())
+print(ice_curve.head())
+print(ale_curve.head())
+print(lime_local.head(10))
+print(lime_global.head(10))
+```
+
+!!! tip "性能建议"
+
+    PDP、ICE、ALE、LIME 都会反复调用模型预测。生产样本较大时，建议通过 `sample_size` 或 `background_x.sample(...)` 控制解释成本。
+
+## Step 8：模型监控 PSI
 
 监控期继续复用训练期分箱引擎：
 
@@ -177,7 +285,7 @@ psi_monitor = PSICalculator(binning_engine=woe_engine).calculate(
 print(psi_monitor)
 ```
 
-## Step 8：Excel 报告
+## Step 9：Excel 报告
 
 ```python
 from ExcelMaster.ExcelMaster import ExcelMaster
@@ -203,7 +311,7 @@ if hasattr(woe_engine, "plot_woe_graph"):
     woe_engine.export_woe_report("./output/woe_report.xlsx")
 ```
 
-## Step 9：UAT 一致性校验
+## Step 10：UAT 一致性校验
 
 ```python
 from Modeling_Tool.Core.ODPS_Tool import ODPSRunner
@@ -226,7 +334,7 @@ summary_df = UATConsistencyChecker(config, ODPSRunner()).run()
 ```python
 from Modeling_Tool import (
     SampleSplitter, PSICalculator, VarExtractionInsights, CorrelationFilter,
-    GradientBoostingModel, PerformanceEvaluator,
+    GradientBoostingModel, PerformanceEvaluator, ModelExplainer,
 )
 from Modeling_Tool.WOE.WOE_Monotone_Binner import MonotoneWOEBinner
 
@@ -265,10 +373,24 @@ perf = PerformanceEvaluator(
     model=gbm._model.model,
     feature_cols=woe_features,
 ).add_dataset("train", train_woe).add_dataset("test", test_woe).add_dataset("oot", oot_woe).evaluate()
+
+explain_x = test_woe[woe_features]
+background_x = train_woe[woe_features].sample(n=min(1000, len(train_woe)), random_state=42)
+focus_feature = woe_features[0]
+explainer = ModelExplainer(gbm, background_data=background_x)
+
+explainer.explain(explain_x)
+shap_importance = explainer.feature_importance(normalize=True)
+pdp_curve = explainer.partial_dependence(explain_x, focus_feature, sample_size=2000, random_state=42)
+ice_curve = explainer.ice(explain_x, focus_feature, sample_size=100, centered=True, random_state=42)
+ale_curve = explainer.ale(explain_x, focus_feature, bins=20)
+lime_local = explainer.lime_explain_instance(explain_x.iloc[0], X_train=background_x, num_features=10)
+lime_global = explainer.lime_global_importance(explain_x, X_train=background_x, sample_size=50)
 ```
 
 ## 下一步
 
+- 模型解释细节：[模型解释](guides/explainability.md)
 - 分箱引擎说明：[WOE 分箱引擎](guides/woe_binning_engine.md)
 - 特征筛选细节：[特征筛选](guides/feature.md)
 - WOE 编码细节：[WOE 编码](guides/woe.md)

@@ -9,6 +9,12 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 # 假设当前在 SuperModelingFactory 仓库根目录
 ```
 
+如果要运行模型解释示例，请安装可选解释依赖：
+
+```bash
+pip install 'supermodelingfactory[explain]'
+```
+
 ## 1. 造一份合成样本
 
 ```python
@@ -113,7 +119,53 @@ perf = evaluator.evaluate()
 print(perf[["index", "KS", "AUC", "Top10%_TargetRate"]])
 ```
 
-## 7. 生成 Excel 报告
+## 7. 模型解释
+
+```python
+from Modeling_Tool import ModelExplainer
+
+explain_x = test_woe[woe_features]
+background_x = train_woe[woe_features].sample(n=min(1000, len(train_woe)), random_state=42)
+focus_feature = woe_features[0]
+
+explainer = ModelExplainer(gbm, background_data=background_x)
+
+# SHAP
+explainer.explain(explain_x)
+shap_importance = explainer.feature_importance(normalize=True)
+local_shap = explainer.explain_instance(explain_x.iloc[[0]])
+
+# PDP / ICE / ALE
+pdp_curve = explainer.partial_dependence(explain_x, focus_feature, sample_size=1000, random_state=42)
+ice_curve = explainer.ice(explain_x, focus_feature, sample_size=100, centered=True, random_state=42)
+ale_curve = explainer.ale(explain_x, focus_feature, bins=20)
+
+# LIME
+lime_local = explainer.lime_explain_instance(
+    explain_x.iloc[0],
+    X_train=background_x,
+    num_features=10,
+    num_samples=3000,
+    random_state=42,
+)
+lime_global = explainer.lime_global_importance(
+    explain_x,
+    X_train=background_x,
+    sample_size=50,
+    num_features=10,
+    num_samples=1000,
+    random_state=42,
+)
+
+print(shap_importance.head(10))
+print(pdp_curve.head())
+print(ice_curve.head())
+print(ale_curve.head())
+print(lime_local.head(10))
+print(lime_global.head(10))
+```
+
+## 8. 生成 Excel 报告
 
 ```python
 from ExcelMaster.ExcelMaster import ExcelMaster
@@ -143,7 +195,7 @@ import numpy as np
 import pandas as pd
 from Modeling_Tool import (
     SampleSplitter, WOE_Master, LRMaster,
-    GradientBoostingModel, PerformanceEvaluator,
+    GradientBoostingModel, PerformanceEvaluator, ModelExplainer,
 )
 from ExcelMaster.ExcelMaster import ExcelMaster
 
@@ -185,7 +237,21 @@ perf = PerformanceEvaluator(
     feature_cols=woe_features,
 ).add_dataset("train", train_woe).add_dataset("test", test_woe).evaluate()
 
-# 6) 报告
+# 6) 解释
+explain_x = test_woe[woe_features]
+background_x = train_woe[woe_features].sample(n=min(1000, len(train_woe)), random_state=42)
+focus_feature = woe_features[0]
+explainer = ModelExplainer(gbm, background_data=background_x)
+
+explainer.explain(explain_x)
+shap_importance = explainer.feature_importance(normalize=True)
+pdp_curve = explainer.partial_dependence(explain_x, focus_feature, sample_size=1000, random_state=42)
+ice_curve = explainer.ice(explain_x, focus_feature, sample_size=100, centered=True, random_state=42)
+ale_curve = explainer.ale(explain_x, focus_feature, bins=20)
+lime_local = explainer.lime_explain_instance(explain_x.iloc[0], X_train=background_x, num_features=10)
+lime_global = explainer.lime_global_importance(explain_x, X_train=background_x, sample_size=50)
+
+# 7) 报告
 em = ExcelMaster("model_report.xlsx", verbose=False)
 ws = em.add_worksheet("Performance")
 em.write_dataframe(ws, perf, title="模型性能",
@@ -198,5 +264,6 @@ em.close_workbook()
 ## 下一步
 
 - 想了解每一步的更多选项，请阅读 [端到端流水线](pipeline.md)
+- 想深入模型解释方法，请阅读 [模型解释](guides/explainability.md)
 - 想看所有公开 API 的详细说明，请跳转到 [API 参考](api/index.md)
 - 想直接生成可直接部署的脚本，请参考各 [用户指南](guides/index.md) 中的代码片段
