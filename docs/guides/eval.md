@@ -293,12 +293,12 @@ evaluate_performance(
 
 ??? question "Gains 表里 N 与 N_RAW 差很多，该看哪个？"
 
-  业务指标（坏样本率、Lift、捕获率）基于 `N`（权重和）。
-  `N_RAW` 仅反映原始行数，用于核对「这一箱有多少户/笔」。
-  若一行一户且权重均为 1，则 `N == N_RAW`。
+    业务指标（坏样本率、Lift、捕获率）基于 `N`（权重和）。
+    `N_RAW` 仅反映原始行数，用于核对「这一箱有多少户/笔」。
+    若一行一户且权重均为 1，则 `N == N_RAW`。
 
 ??? question "训练用了权重，评估忘记传会怎样？"
 
-  评估默认等权（每行权重 1），与加权训练模型的目标分布不一致，
-  可能导致 AUC/KS/Lift 与训练期认知偏差。请在 `PerformanceEvaluator`、
-  `GainsTableCalculator` 等处统一传入相同的 `weight_col`。
+    评估默认等权（每行权重 1），与加权训练模型的目标分布不一致，
+    可能导致 AUC/KS/Lift 与训练期认知偏差。请在 `PerformanceEvaluator`、
+    `GainsTableCalculator` 等处统一传入相同的 `weight_col`。
