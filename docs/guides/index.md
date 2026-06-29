@@ -28,11 +28,11 @@
 
 - :material-brain: **[模型训练](model.md)**
 
-    `LRMaster` / `GradientBoostingModel` / `BackwardVariableEliminator`
+    `LRMaster` / `GradientBoostingModel` / `BackwardVariableEliminator`（含 `weight_col`）
 
 - :material-tune: **[GBM 超参搜索](gbm_param_search.md)**
 
-    `GradientBoostingModel.param_search` / grid search / Optuna / INS-OOS-OOT holdout
+    `GradientBoostingModel.param_search` / grid search / Optuna / INS-OOS-OOT holdout（含加权 AUC）
 
 - :material-archive-cog: **[模型注册与版本管理](model_registry.md)**
 
@@ -40,7 +40,7 @@
 
 - :material-chart-line: **[模型评估](eval.md)**
 
-    `PerformanceEvaluator` / `GainsTableCalculator` / `EvaluationPipeline`
+    `PerformanceEvaluator` / `GainsTableCalculator` / `EvaluationPipeline`（含加权 Gains / KS / AUC）
 
 - :material-lightbulb-on: **[模型解释](explainability.md)**
 

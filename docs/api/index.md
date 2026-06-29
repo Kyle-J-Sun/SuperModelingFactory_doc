@@ -9,8 +9,8 @@
 | **Modeling_Tool.Core** | [`api/core.md`](core.md) | 分箱、ODPS、工具、加密、JSON、斜率 |
 | **Modeling_Tool.WOE** | [`api/woe.md`](woe.md) | WOE 主控、转换器、绘图器、单调分箱器 |
 | **Modeling_Tool.Feature** | [`api/feature.md`](feature.md) | PSI、IV、相关性、分布 |
-| **Modeling_Tool.Model** | [`api/model.md`](model.md) | LR、LightGBM、XGBoost、后向消元 |
-| **Modeling_Tool.Eval** | [`api/eval.md`](eval.md) | Gains 表、ROC/KS、链式评估 |
+| **Modeling_Tool.Model** | [`api/model.md`](model.md) | LR、LightGBM、XGBoost、CatBoost、后向消元（含样本权重） |
+| **Modeling_Tool.Eval** | [`api/eval.md`](eval.md) | Gains 表、ROC/KS、链式评估（含 `weight_col` 加权指标） |
 | **Modeling_Tool.Sample** | [`api/sample.md`](sample.md) | 切分、分层、均衡、拒绝推断 |
 | **Modeling_Tool.Explainability** | [`api/explainability.md`](explainability.md) | SHAP 模型解释（`ModelExplainer`） |
 | **Modeling_Tool.UAT** | [`api/uat.md`](uat.md) | 线上线下一致性校验 |
@@ -104,3 +104,7 @@ def calc_woe(data, bad_pct, good_pct):
 ```
 
 如需给函数补充 docstring，请遵循同一风格保持一致。
+
+## 样本权重 API
+
+训练与评估的加权参数已作为**原生公开 API** 合入主仓（`LRMaster.fit(weight_col=...)`、`GradientBoostingModel.fit(sample_weight=...)`、`PerformanceEvaluator(weight_col=...)` 等）。实战用法与指标语义见 [模型训练 — 样本权重](guides/model.md#样本权重) 与 [模型评估 — 样本权重评估](guides/eval.md#样本权重评估)。

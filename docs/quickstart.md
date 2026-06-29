@@ -124,6 +124,13 @@ perf = evaluator.evaluate()
 print(perf[["index", "KS", "AUC", "Top10%_TargetRate"]])
 ```
 
+!!! tip "样本带权重？"
+
+    若 DataFrame 含 `sample_wgt` 等权重列，在 `fit` / `PerformanceEvaluator` / `GainsTableCalculator`
+    等处传入 `weight_col="sample_wgt"` 即可；训练与评估请使用同一列名。详见
+    [模型训练 — 样本权重](guides/model.md#样本权重) 与
+    [模型评估 — 样本权重评估](guides/eval.md#样本权重评估)。
+
 ## 7. 模型解释
 
 ```python
