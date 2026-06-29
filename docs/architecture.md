@@ -59,6 +59,7 @@ flowchart TD
 | 文件 | 职责 |
 |------|------|
 | `Binning_Tool.py` | 等频 / 等距 / 卡方 / 决策树分箱 |
+| `sample_weight_utils.py` | 样本权重解析（`weight_col` / `sample_weight`）与加权聚合 |
 | `ODPS_Tool.py` | 阿里云 MaxCompute 客户端 |
 | `utils.py` | 杂项工具、评分、WOE/IV 基础计算 |
 | `Model_Registry_Tool.py` | 模型 artifact 与 metadata 持久化 |
@@ -87,16 +88,16 @@ flowchart TD
 
 | 文件 | 职责 |
 |------|------|
-| `GBM_Tool.py` | LightGBM / XGBoost 统一接口 |
+| `GBM_Tool.py` | LightGBM / XGBoost / CatBoost 统一接口（含样本权重） |
 | `GBM_Search_Tool.py` | GBM 超参搜索 |
-| `LRM_Tool.py` | 逻辑回归、statsmodels 摘要、逐步选择 |
-| `Backward_Tool.py` | 后向变量消元 |
+| `LRM_Tool.py` | 逻辑回归、statsmodels 摘要、逐步选择（含 `weight_col`） |
+| `Backward_Tool.py` | 后向变量消元（含训练/验证权重列） |
 
 ### Eval / Sample / UAT
 
 | 模块 | 职责 |
 |------|------|
-| `Eval` | Gains、ROC、KS、性能汇总、评估流水线 |
+| `Eval` | Gains、ROC、KS、性能汇总、评估流水线；`weighted_eval_utils.py` 提供加权指标实现 |
 | `Sample` | 样本切分、分层采样、拒绝推断、分布适配 |
 | `UAT` | 线上线下分数 / 特征一致性校验 |
 

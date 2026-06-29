@@ -22,17 +22,15 @@ NameError: name 'exit' is not defined
 
 **根本原因**
 
-环境中安装了 NumPy 2.x（如 2.2.6），但 `matplotlib`、`lightgbm` 等依赖是用 NumPy 1.x ABI 编译的。
-`Modeling_Tool` 的 `.so`/`.pyd` 闭源扩展模块同样基于 NumPy 1.x 编译。
-两者 ABI 不兼容，导致整条 import 链崩溃：
+环境中安装了 NumPy 2.x（如 2.2.6），但 `matplotlib`、`lightgbm` 等依赖是用 NumPy 1.x ABI 编译的，
+与当前 NumPy 大版本 ABI 不兼容，导致整条 import 链崩溃：
 
 ```
 NumPy 2.x 安装
   └─► matplotlib (NumPy 1.x 编译) → _ARRAY_API not found
         └─► lightgbm/compat.py 导入 matplotlib 失败
-              └─► GBM_Tool.py 导入 lightgbm 失败
-                    └─► Backward_Tool .so 初始化中断
-                          └─► NameError: 'exit' is not defined
+                    └─► GBM_Tool.py 导入 lightgbm 失败
+                          └─► 后续 Model 子模块初始化中断
 ```
 
 **解决方案**
@@ -43,17 +41,18 @@ NumPy 2.x 安装
     pip install "numpy<2" --force-reinstall
     ```
 
-    执行后**重启 Jupyter Kernel**。这是最简单、最稳妥的方法，与 `Modeling_Tool` 所有模块完全兼容。
+    执行后**重启 Jupyter Kernel**。这是最简单、最稳妥的方法。
 
 === "方案二：升级依赖到支持 NumPy 2.x 的版本"
 
-    若环境策略不允许降级 NumPy，则需升级 `matplotlib` 和 `lightgbm`：
+    若环境策略不允许降级 NumPy，则需升级 `matplotlib` 和 `lightgbm` 到与 NumPy 2.x 兼容的版本：
 
     ```bash
     pip install "matplotlib>=3.9" "lightgbm>=4.3" --upgrade
     ```
 
-    > ⚠️ 注意：`Modeling_Tool` 的 `.so` 扩展本身也需要使用 NumPy 2.x 重新编译的版本才能完整支持，请联系维护者获取对应构建。
+    主仓已切换为**纯 Python 源码分发**（见 [PR #24](https://github.com/Kyle-J-Sun/SuperModelingFactory/pull/24)），
+    不再依赖预编译 `.so`/`.pyd` 扩展；按矩阵约束安装 `numpy` / `lightgbm` 即可。
 
 === "方案三：按需导入，绕过 Model 模块"
 
@@ -339,6 +338,25 @@ lr   = LRMaster(params={"C": 1.0})
 | `ImportError: No module named 'dotenv'` | 没装 `python-dotenv` | `pip install python-dotenv` |
 | 部署到 K8s 后被 `.env` 覆盖了正确的凭据 | 使用了 `override=True` | 改回 `override=False`（推荐默认值） |
 | 一个 notebook 同时调多个数据源，AK 用错了 | `os.environ` 是进程级全局状态 | 同进程内多账号场景请直接用 `ODPS(access_id=..., secret_access_key=...)` 显式参数 |
+
+---
+
+## 样本权重
+
+### Q4: 何时使用样本权重？`weight_col` 与 `sample_weight` 有何区别？
+
+典型场景：抽样偏差校正（过采样后给原始样本更高权重）、按贷款余额/金额加权、时间衰减加权等。
+
+| 参数 | 适用层 | 说明 |
+|------|--------|------|
+| `weight_col` | 训练（`LRMaster.fit`）、评估（`PerformanceEvaluator`）、DataFrame 类 API | 从 DataFrame 列解析，推荐与业务表字段同名 |
+| `sample_weight` | `GradientBoostingModel.fit`、底层 `calc_roc` / `evaluate_performance` | 直接传一维 numpy 数组 |
+
+`weight_col` 与 `sample_weight` **不可同时传入**（`resolve_sample_weight` 会报错）。也接受 `wgt` / `wgt_col` 别名。
+
+训练用了权重、评估忘记传时，指标会按等权（每行 1）计算，与训练目标不一致。请在训练与评估链路统一传入同一权重列。
+
+详细语义（`N` vs `N_RAW`、加权 AUC/KS/Lift）见 [模型评估 — 样本权重评估](guides/eval.md#样本权重评估) 与 [模型训练 — 样本权重](guides/model.md#样本权重)。
 
 ---
 
