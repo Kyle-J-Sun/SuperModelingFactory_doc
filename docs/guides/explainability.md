@@ -221,3 +221,12 @@ print(lime_global)
     ```bash
     pip install 'supermodelingfactory[explain]'
     ```
+
+??? question "XGBoost + SHAP 报 `could not convert string to float: '[5E-1]'` 怎么办？"
+
+    这是 XGBoost 3.x 与旧版 SHAP 的已知兼容问题。XGBoost 3.1+ 会把 `base_score` 序列化为单元素数组字符串，例如 `"[5E-1]"`，而 SHAP 0.49 及更早版本仍按标量解析。
+
+    SuperModelingFactory 会在 `ModelExplainer` 构建 XGBoost `TreeExplainer` 时自动兼容这种单目标 `base_score` 格式。若仍遇到同类错误，优先选择以下版本组合：
+
+    - Python 3.11+：升级到 `shap>=0.50.0`。
+    - Python 3.10：保持当前 SMF 版本，或临时固定 `xgboost<3.1`。
