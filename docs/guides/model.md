@@ -2,6 +2,11 @@
 
 SuperModelingFactory 在 [`Model`](../api/model.md) 子包封装了**逻辑回归（评分卡首选）、LightGBM、XGBoost、CatBoost** 四大类模型，并提供**后向变量消元**辅助工具。
 
+!!! tip "样本权重"
+
+    训练与评估均支持可选的样本权重（`weight_col` / `sample_weight`）。
+    不传权重时行为与历史版本完全一致（向后兼容）。评估侧语义见 [模型评估 — 样本权重](eval.md#样本权重评估)。
+
 ## 1. 逻辑回归 —— `LRMaster`
 
 ```python
@@ -15,6 +20,21 @@ lr.fit(train_woe, woe_features, "bad_flag")
 summary = lr.get_statsmodel_summary()
 print(summary)
 ```
+
+### 样本权重
+
+`fit` 支持从 DataFrame 列名或显式数组传入权重（**二选一**，也接受 `wgt` / `wgt_col` 别名）：
+
+```python
+# 方式 1：列名（推荐，与评估侧 weight_col 命名一致）
+lr.fit(train_woe, woe_features, "bad_flag", weight_col="sample_wgt")
+
+# 方式 2：显式数组
+lr.fit(train_woe, woe_features, "bad_flag", sample_weight=train_woe["sample_wgt"].values)
+```
+
+`stepwise_selection`、`calibrate_model`、`get_aic` / `get_bic` 同样透传权重。
+权重须为非负有限值。
 
 ### 关键参数（透传 sklearn）
 
@@ -45,6 +65,7 @@ selected = lr.stepwise_selection(
     train_woe, woe_features, "bad_flag",
     criterion="aic",        # 'aic' 或 'bic'
     direction="both",       # 'forward' / 'backward' / 'both'
+    weight_col="sample_wgt",  # 可选：加权 AIC/BIC
 )
 print(f"逐步选择保留 {len(selected)} 个变量: {selected}")
 ```
@@ -122,6 +143,8 @@ results = tuner.grid_search_params(
     primary_set="oot",              # 缺省为 eval_sets 的最后一个键
     gap_ref_sets=["ins", "oos"],    # 缺省为除 primary_set 外的所有集
     refit=True,                     # 搜完用最优参数在 data 上重训 self
+    weight_col="sample_wgt",        # 训练集权重列
+    eval_weight_col="sample_wgt",   # 各 eval set 上的加权 AUC 评分
 )
 
 print(tuner.best_params_)     # 最优参数 dict
@@ -186,6 +209,35 @@ proba = gbm.predict(test_X)
 
 # 校准（可选）
 gbm.calibrate(val_X, val_y, method="isotonic")
+```
+
+### 样本权重
+
+`GradientBoostingModel.fit` 及底层 `LightGBMModel` / `XGBoostModel` / `CatBoostModel`
+支持训练集 `sample_weight`（别名 `wgt`）和验证集 `eval_sample_weight`：
+
+```python
+gbm.fit(
+    train_woe[woe_features], train_woe["bad_flag"],
+    test_woe[woe_features],  test_woe["bad_flag"],
+    sample_weight=train_woe["sample_wgt"],
+    eval_sample_weight=test_woe["sample_wgt"],
+)
+```
+
+CatBoost 通过 `Pool(weight=...)` 注入权重。`calibrate` 与内部 `roc_auc` / `brier_score`
+评估同样接受 `sample_weight`。
+
+`lgbm_quick_train` / `xgbm_quick_train` 可用 `val_wgt_col` 指定验证集权重列：
+
+```python
+from Modeling_Tool import lgbm_quick_train
+
+model = lgbm_quick_train(
+    train_X, train_y, val_X, val_y,
+    params={"n_estimators": 200},
+    val_wgt_col="sample_wgt",
+)
 ```
 
 #### CatBoost 示例（`model_type="cat"`）
@@ -345,6 +397,8 @@ eliminator = BackwardVariableEliminator(
     oot_data=oot_woe,
     params={"n_estimators": 100, "learning_rate": 0.1},
     y="bad_flag",
+    weight_col="sample_wgt",              # 训练集权重列
+    validation_weight_col="sample_wgt",   # 验证集权重列
     results_output_dir="./output/",   # 构造器参数，非 fit 参数
     modelsave_dir="./models/",
 )
@@ -353,6 +407,9 @@ eliminator.fit(x=woe_features)
 result = eliminator.analyze()
 print(result)   # 后向消元每轮的变量数与性能
 ```
+
+底层 `backward_lgbm` / `backward_xgbm` 同样接受 `weight_col` 与 `validation_weight_col`，
+训练与性能汇总（`get_perf_summary`）均按权重计算。
 
 ### 工作原理
 
@@ -401,16 +458,19 @@ models = {
 results = {}
 for name, model in models.items():
     if name == "LR":
-        model.fit(train_woe, woe_features, "bad_flag")
+        model.fit(train_woe, woe_features, "bad_flag", weight_col="sample_wgt")
     else:
         model.fit(train_woe[woe_features], train_woe["bad_flag"],
-                  test_woe[woe_features],  test_woe["bad_flag"])
+                  test_woe[woe_features],  test_woe["bad_flag"],
+                  sample_weight=train_woe["sample_wgt"],
+                  eval_sample_weight=test_woe["sample_wgt"])
 
     raw_model = model._model.model if name != "LR" else model.model
     evaluator = PerformanceEvaluator(
         tgt_name="bad_flag",
         model=raw_model,
         feature_cols=woe_features,
+        weight_col="sample_wgt",
     )
     perf = evaluator.add_dataset("train", train_woe) \
                     .add_dataset("test",  test_woe).evaluate()
@@ -476,3 +536,12 @@ for name, perf in results.items():
     from sklearn.model_selection import cross_val_score
     scores = cross_val_score(model._model.model, X, y, cv=5, scoring="roc_auc")
     ```
+
+    GBM 超参搜索见 [GBM 超参搜索](gbm_param_search.md)。
+
+??? question "何时使用样本权重？`weight_col` 与 `sample_weight` 有何区别？"
+
+    典型场景：抽样偏差校正（如过采样后给原始样本更高权重）、按金额/余额加权、
+    按时间衰减加权等。`weight_col` 从 DataFrame 列解析（推荐，与评估侧一致）；
+    `sample_weight` 直接传 numpy 数组。二者不可同时传入。
+    评估侧统一用 `weight_col`；底层绘图函数用 `sample_weight` 键（见 [模型评估](eval.md)）。
