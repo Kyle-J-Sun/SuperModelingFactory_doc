@@ -94,6 +94,8 @@ print(perf[["tgt_name", "index", "KS", "AUC"]])
 
 > 传单个 `str`（如 `tgt_name="bad_flag"`）时行为不变，输出不含 `tgt_name` 列（向后兼容）。
 
+`Model_Evaluation_Tool.model_perf_compare()` 是对 `PerformanceEvaluator` 的高层封装，会按 `base_score + comp_scrlist` 批量比较 OOT 性能并附加 `score_name` 列。
+
 ## 2. Gains 表 —— `GainsTableCalculator`
 
 按分数分箱的收益表，是业务方最熟悉的报表形式。
@@ -116,7 +118,36 @@ print(gains_table)   # 含 N（权重和）与 N_RAW（行数）
 `get_gains_table` / `get_gains_table_by_cust_metrics` 同样接受 `weight_col`；
 加权时坏/好样本计数、坏样本率、Lift、KS、WOE、IV 均按权重计算。
 
-## 3. 自定义指标 —— `get_gains_table_by_cust_metrics`
+`Model_Evaluation_Tool.get_gains_summary()` 内部使用 `GainsTableCalculator`，为多分数批量生成 gains 表，并支持 `add_func` 注入自定义列。
+
+## 3. 自定义指标 —— `add_func`
+
+`Model_Evaluation_Tool.get_gains_summary(add_func=...)` 与 `GainsTableCalculator.calculate(add_func=...)` 使用同一扩展点：在分箱后的 grouped data 上追加自定义统计列。
+
+```python
+from Modeling_Tool import Model_Evaluation_Tool, GainsTableCalculator
+
+def mean_income(group):
+    return pd.Series({"mean_income": group["income"].mean()})
+
+m_eval = Model_Evaluation_Tool(
+    data=test_woe,
+    dep="bad_flag",
+    base_score="prob",
+    comp_scrlist=["prob"],
+)
+gains = m_eval.get_gains_summary(add_func=mean_income)
+
+# 或直接调用计算器
+gains = GainsTableCalculator(
+    data=test_woe,
+    score="prob",
+    dep="bad_flag",
+    nbins=10,
+).calculate(add_func=mean_income)
+```
+
+函数级 API `get_gains_table_by_cust_metrics` 仍可用于按列名批量聚合：
 
 ```python
 from Modeling_Tool import get_gains_table_by_cust_metrics
@@ -127,7 +158,7 @@ gains = get_gains_table_by_cust_metrics(
     dep="bad_flag",
     weight_col="sample_wgt",
     nbins=10,
-    eval_metrics=["income", "n_overdue"],   # 待聚合的列
+    eval_metrics=["income", "n_overdue"],
     metric_agg_func="mean",
 )
 ```
