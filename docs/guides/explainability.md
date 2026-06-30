@@ -91,6 +91,32 @@ print(cs["summary"][["n_features", "mean_abs_corr", "max_abs_corr"]])
 
 融合逻辑是：业务先验优先，其余特征使用 Spearman 相关距离的自动聚类兜底。`prior_groups` 可以包含当前数据中不存在的变量名，工具会自动忽略；但同一个有效特征不能同时出现在多个先验组里。
 
+#### 使用 MIC 捕捉非线性关联
+
+默认 `corr_method="spearman"` 基于秩相关，适合单调关系。若变量之间存在明显非线性关联（例如 `x` 与 `x²`），可改用 **Maximal Information Coefficient (MIC)**：
+
+```python
+cs = build_coalition_structure(
+    train_woe[woe_features],
+    threshold=0.35,
+    corr_method="MIC",
+)
+```
+
+!!! note "MIC 可选依赖"
+
+    MIC 需要额外安装 `minepy`（GPLv3，含 C 扩展）：
+
+    ```bash
+    pip install 'supermodelingfactory[mic]'
+    ```
+
+    - `corr_method="MIC"` 大小写不敏感（`"mic"` 亦可）。
+    - `threshold` 仍作用于 `1 - MIC` 距离：MIC 越高，特征越容易分到同一组。
+    - `summary` 中的 `mean_abs_corr` / `max_abs_corr` 在 MIC 模式下表示组内平均/最大 MIC。
+    - MIC 需对所有特征两两计算，复杂度约为特征对数量级，通常比 Spearman 慢得多。
+    - `minepy` 目前在 Python 3.11+ 上存在已知构建问题；若安装失败，请使用 Python 3.10 环境，或回退 `corr_method="spearman"`。
+
 ### 3.2 通过 ModelExplainer 计算 Owen Value
 
 ```python
@@ -204,7 +230,11 @@ print(lime_global)
 
 ??? question "threshold=0.35 是什么意思？"
 
-    使用距离 `1 - abs(Spearman corr)` 聚类，`0.35` 约等价于 `|corr| > 0.65` 的特征更容易先聚到同一组。强相关场景可用 `0.20~0.35`，更宽松可用 `0.50`。
+    使用距离 `1 - abs(association)` 聚类。默认 `corr_method="spearman"` 时，`0.35` 约等价于 `|corr| > 0.65` 的特征更容易先聚到同一组。若使用 `corr_method="MIC"`，同一阈值作用于 `1 - MIC`。强相关场景可用 `0.20~0.35`，更宽松可用 `0.50`。
+
+??? question "什么时候用 corr_method='MIC'？"
+
+    当变量之间存在明显非线性关联、Spearman 难以把它们聚到同一组时。MIC 更慢，且需要单独安装 `pip install 'supermodelingfactory[mic]'`；Python 3.11+ 若 `minepy` 安装失败，请使用 Python 3.10 或继续用 `spearman`。
 
 ??? question "PDP 和 ALE 怎么选？"
 
