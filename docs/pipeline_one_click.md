@@ -1,8 +1,8 @@
 # 一键建模流水线
 
-`Modeling_Tool.Pipeline` 提供三条高层业务流水线，把常见的端到端脚本封装成可复用、可配置、可返回结构化结果的 API。
+`Modeling_Tool.Pipeline` 提供四条高层业务流水线，把常见的端到端脚本封装成可复用、可配置、可返回结构化结果的 API。
 
-这三条 Pipeline **不生成模拟数据**。调用方需要先准备真实业务 DataFrame，然后通过 `Config` 控制要跑哪些步骤、哪些模型、哪些维度和哪些输出。
+这些 Pipeline **不生成模拟数据**。调用方需要先准备真实业务 DataFrame、模型分数据，或项目 SQL，然后通过 `Config` 控制要跑哪些步骤、哪些模型、哪些维度和哪些输出。
 
 ```python
 from Modeling_Tool.Pipeline import (
@@ -12,6 +12,8 @@ from Modeling_Tool.Pipeline import (
     CreditModelPipelineConfig,
     ScoreComparisonPipeline,
     ScoreComparisonPipelineConfig,
+    ScoreConsistencyUATPipeline,
+    ScoreConsistencyUATPipelineConfig,
 )
 ```
 
@@ -624,6 +626,128 @@ cfg = ScoreComparisonPipelineConfig(
 | `pairwise_cross` | compare score x base score 的 pairwise cross risk。 |
 | `report_path` | Excel 报告路径；若 `write_excel=False` 则为空。 |
 
+## 4. UAT 线上/离线一致性流水线
+
+`ScoreConsistencyUATPipeline` 用于模型上线或 UAT 阶段的 online/offline 一致性校验。它复用主包 `UATConsistencyChecker`，检查 flow_id 覆盖、主模型分、子模型分、全量特征、时间字段和 per-flow 问题明细。
+
+### SQL 模式示例
+
+```python
+from Modeling_Tool import ScoreConsistencyUATPipeline, ScoreConsistencyUATPipelineConfig
+from Modeling_Tool.Core import ODPSRunner
+
+cfg = ScoreConsistencyUATPipelineConfig(
+    sql_dir="sql",
+    offline_sql="pull_offline.sql",
+    online_sql="pull_online.sql",
+    sqlrunner=ODPSRunner(),
+    main_model_score_col="credit_risk_v31_cdc_submodel_score",
+    info_list=["user_id", "curp", "launch_time", "flowtime", "cdc_inserttime"],
+)
+
+result = ScoreConsistencyUATPipeline(cfg).run()
+```
+
+### DataFrame 模式示例
+
+```python
+cfg = ScoreConsistencyUATPipelineConfig(
+    main_model_score_col="score",
+    info_list=["user_id", "launch_time"],
+    time_featlist=["decision_time"],
+    tol_score=1e-6,
+    tol_feat=1e-2,
+    write_outputs=False,
+    write_excel=False,
+)
+
+result = ScoreConsistencyUATPipeline(cfg).run(
+    offline_data=df_offline,
+    online_data=df_online,
+)
+```
+
+### 输入数据要求
+
+| 要求 | 说明 |
+|---|---|
+| `flow_id` | 必须存在，作为 online/offline merge 主键。 |
+| 主模型分字段 | offline 与 online 需同名，例如 `score`；merge 后线上列会变成 `score_online`。 |
+| 特征字段 | 同名字段会自动组成 `col` / `col_online` 特征对。 |
+| 时间字段 | 配在 `time_featlist` 中，按 datetime 语义和秒级容忍度比较。 |
+| 信息字段 | 配在 `info_list` 中，会进入明细报表，并从数值特征自动对比中排除。 |
+
+### `ScoreConsistencyUATPipelineConfig` 参数
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `output_dir` | `"output/score_consistency_uat"` | CSV/Excel 输出根目录。 |
+| `random_state` | `42` | 预留随机种子，保持高层 Pipeline 统一接口。 |
+| `write_outputs` | `True` | 是否输出 summary、feature diff、per-flow 等 CSV。 |
+| `write_excel` | `True` | 是否调用 `export_excel()` 输出 UAT Excel 报告。 |
+| `sql_dir` | `"sql"` | SQL 文件目录。 |
+| `offline_sql` | `"pull_offline.sql"` | 离线回溯 SQL 文件名。 |
+| `online_sql` | `"pull_online.sql"` | 线上结果 SQL 文件名。 |
+| `sqlrunner` | `None` | 已初始化的 SQL runner；SQL 模式不传时默认使用 `ODPSRunner()`。 |
+| `env_path` | `None` | 可选 `.env` 路径；传入后用 `python-dotenv` 加载。 |
+| `n_process` | `"auto"` | SQL 并发进程数；`"auto"` 表示 `cpu_count - 1`。 |
+| `offline_data` | `None` | 可选离线 DataFrame；与 `online_data` 同时传入时走 DataFrame 模式。 |
+| `online_data` | `None` | 可选线上 DataFrame。 |
+| `main_model_score_col` | `"credit_risk_v31_cdc_submodel_score"` | 主模型分字段名。 |
+| `tol_score` | `1e-6` | 主模型分和子模型分容忍度。 |
+| `tol_feat` | `1e-2` | 普通数值特征容忍度。 |
+| `time_featlist` | `[]` | 需要按时间语义比较的字段。 |
+| `tol_time_seconds` | `60.0` | 时间字段秒级容忍度。 |
+| `excel_output_path` | `None` | Excel 报告路径；为空时写到 `output_dir/report/Score_Consistency_UAT_Report.xlsx`。 |
+| `excel_font` | `"Arial"` | Excel 报告字体。 |
+| `info_list` | `[]` | 明细报表附带字段，也会从自动特征对比中排除。 |
+| `include_submodel_scores` | `True` | `True` 时子模型分作为普通特征自动检查；`False` 时启用专项检查。 |
+| `submodel_pairs` | `{}` | 子模型专项检查映射，格式为 `{offline_col: online_col}`。 |
+
+### 子模型分专项检查
+
+默认 `include_submodel_scores=True`，子模型分由全量特征检查覆盖。如果希望单独在报告中展示子模型分检查，设置：
+
+```python
+cfg = ScoreConsistencyUATPipelineConfig(
+    include_submodel_scores=False,
+    submodel_pairs={
+        "sub_score_a": "sub_score_a_online",
+        "sub_score_b": "sub_score_b_online",
+    },
+)
+```
+
+### 结果对象
+
+`ScoreConsistencyUATPipeline.run()` 返回 `ScoreConsistencyUATPipelineResult`。
+
+| 字段 | 说明 |
+|---|---|
+| `offline_data` | 离线数据。 |
+| `online_data` | 线上数据。 |
+| `compare_data` | online/offline outer merge 后的数据。 |
+| `both_data` | 仅包含 online/offline 都存在的 common flow_id。 |
+| `coverage_summary` | flow_id 覆盖统计字典。 |
+| `main_score_summary` | 主模型分一致性统计。 |
+| `submodel_summary` | 子模型专项检查结果列表。 |
+| `feature_diff_summary` | 全量特征一致性汇总表。 |
+| `time_summary` | 时间字段一致性汇总表。 |
+| `per_flow_report` | flow_id 级别问题明细。 |
+| `summary` | 整体结论表。 |
+| `report_path` | Excel 报告路径；`write_excel=False` 时为 `None`。 |
+| `checker` | 底层 `UATConsistencyChecker` 实例，便于高级用户继续读取内部明细。 |
+
+### UAT 报告解读
+
+| 模块 | 重点看什么 |
+|---|---|
+| `Flow ID Coverage` | online/offline 是否覆盖同一批 flow_id，是否存在 only_online 或 only_offline。 |
+| `Main Model Score` | 主模型分是否有超过 `tol_score` 的差异或单边空值。 |
+| `Feature Variables` | 哪些特征有差异，差异样本数和最大绝对差。 |
+| `Time Fields` | 时间字段是否超过 `tol_time_seconds`。 |
+| `Per Flow-ID Report` | 每个 flow_id 具体哪些字段不一致，便于逐笔排查。 |
+
 ## 推荐配置模板
 
 ### 快速信用建模
@@ -677,6 +801,22 @@ cfg = ScoreComparisonPipelineConfig(
 )
 ```
 
+### UAT 线上/离线一致性
+
+```python
+cfg = ScoreConsistencyUATPipelineConfig(
+    sql_dir="sql",
+    offline_sql="pull_offline.sql",
+    online_sql="pull_online.sql",
+    main_model_score_col="credit_risk_v31_cdc_submodel_score",
+    info_list=["user_id", "curp", "launch_time", "flowtime", "cdc_inserttime"],
+    time_featlist=[],
+    tol_score=1e-6,
+    tol_feat=1e-2,
+    tol_time_seconds=60,
+)
+```
+
 ## 常见关闭项
 
 | 目标 | 配置 |
@@ -690,4 +830,4 @@ cfg = ScoreComparisonPipelineConfig(
 | 不跑 Owen | `owen_enabled=False` |
 | 不跑人群 x 时间交叉 | `include_time_population_cross=False` |
 | 不跑 pairwise cross risk | `pairwise_cross_enabled=False` |
-
+| UAT 不走 SQL 取数 | `run(offline_data=df_offline, online_data=df_online)` |
