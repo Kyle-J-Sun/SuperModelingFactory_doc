@@ -224,9 +224,18 @@ print(lime_global)
 
 ??? question "XGBoost + SHAP 报 `could not convert string to float: '[5E-1]'` 怎么办？"
 
-    这是 XGBoost 3.x 与旧版 SHAP 的已知兼容问题。XGBoost 3.1+ 会把 `base_score` 序列化为单元素数组字符串，例如 `"[5E-1]"`，而 SHAP 0.49 及更早版本仍按标量解析。
+    这是 XGBoost 3.1+ 与旧版 SHAP 的已知兼容问题。XGBoost 会把单目标模型的 `base_score` 序列化为单元素数组字符串，例如 `"[5E-1]"`，而 SHAP 0.49 及更早版本仍按标量解析。
 
-    SuperModelingFactory 会在 `ModelExplainer` 构建 XGBoost `TreeExplainer` 时自动兼容这种单目标 `base_score` 格式。若仍遇到同类错误，优先选择以下版本组合：
+    SuperModelingFactory 会在 `ModelExplainer` 构建 XGBoost `TreeExplainer` 时自动启用兼容层：
 
-    - Python 3.11+：升级到 `shap>=0.50.0`。
-    - Python 3.10：保持当前 SMF 版本，或临时固定 `xgboost<3.1`。
+    - 在 SHAP 的 UBJSON 解码阶段把单元素 `base_score` 归一为标量。
+    - 为 `XGBTreeModelLoader` 增加 XGBoost 专属 fallback，并在失败时重试一次。
+    - 仅作用于 `model_type in {"xgb", "xgboost"}` 的 TreeSHAP 路径，不影响 LightGBM、LR、Owen、PDP/ICE/ALE/LIME。
+
+    推荐顺序：
+
+    1. 安装最新 SuperModelingFactory 主分支或最新 release。
+    2. Python 3.11+ 环境可升级到 `shap>=0.50.0` 获得上游原生支持。
+    3. 仅当多分类/多目标模型仍失败时，再考虑临时固定 `xgboost<3.1` 作为最后兜底。
+
+    注意：SMF 不会把多元素 `base_score` 向量静默压成第一个元素，避免多目标 attribution 被错误解释。
