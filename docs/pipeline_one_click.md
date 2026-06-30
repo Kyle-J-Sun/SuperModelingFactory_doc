@@ -1,6 +1,6 @@
 # 一键建模流水线
 
-`Modeling_Tool.Pipeline` 提供四条高层业务流水线，把常见的端到端脚本封装成可复用、可配置、可返回结构化结果的 API。
+`Modeling_Tool.Pipeline` 提供五条高层业务流水线，把常见的端到端脚本封装成可复用、可配置、可返回结构化结果的 API。
 
 这些 Pipeline **不生成模拟数据**。调用方需要先准备真实业务 DataFrame、模型分数据，或项目 SQL，然后通过 `Config` 控制要跑哪些步骤、哪些模型、哪些维度和哪些输出。
 
@@ -14,6 +14,8 @@ from Modeling_Tool.Pipeline import (
     ScoreComparisonPipelineConfig,
     ScoreConsistencyUATPipeline,
     ScoreConsistencyUATPipelineConfig,
+    SampleAnalysisPipeline,
+    SampleAnalysisPipelineConfig,
 )
 ```
 
@@ -748,6 +750,97 @@ cfg = ScoreConsistencyUATPipelineConfig(
 | `Time Fields` | 时间字段是否超过 `tol_time_seconds`。 |
 | `Per Flow-ID Report` | 每个 flow_id 具体哪些字段不一致，便于逐笔排查。 |
 
+## 5. 纯样本分析流水线
+
+`SampleAnalysisPipeline` 用于建模前的样本成熟度与切分方案分析。它回答三个问题：不同 `y` 标签是否已经有足够表现样本、OOT 取最后几个时间窗更稳、INS/OOS 用 70/30、75/25 还是 80/20 更稳。Pipeline 使用 SMF `SampleSplitter` 做分层 INS/OOS 切分，并用 `EvaluationPipeline` 做分维度坏账率分析；Excel 报告由 `ExcelMaster` 生成。
+
+### 最小示例
+
+```python
+from Modeling_Tool import SampleAnalysisPipeline, SampleAnalysisPipelineConfig
+
+cfg = SampleAnalysisPipelineConfig(
+    target_cols=[
+        "y_flag_dpd7_in_mob1",
+        "y_flag_dpd7_in_mob3",
+        "y_flag_dpd7_in_mob6",
+        "y_flag_dpd7_in_mob12",
+    ],
+    time_col="apply_time",
+    time_dims=["apply_week", "apply_month", "apply_quarter"],
+    population_dims=["channel", "strategy_version"],
+    profile_cols=["age", "income", "education", "credit_limit"],
+    oot_time_dim="apply_month",
+    oot_windows=[1, 2, 3, 6],
+    ins_oos_ratios=[0.7, 0.75, 0.8],
+    random_seeds=range(3000, 3020),
+)
+
+result = SampleAnalysisPipeline(cfg).run(full_application_df)
+
+result.label_coverage_summary
+result.split_recommendation
+```
+
+### 输入数据要求
+
+| 列 | 是否必须 | 说明 |
+|---|---:|---|
+| `time_col` | 是 | 申请时间列，默认 `apply_time`，会被转换为 datetime。 |
+| `target_cols` | 是 | 多个候选建模标签。每个标签只使用 `notna()` 的成熟样本进入分析和切分。 |
+| `time_dims` | 是 | 时间维度列，例如 `apply_week`、`apply_month`、`apply_quarter`。 |
+| `population_dims` | 是 | 人群维度列，例如渠道、策略版本、产品、人群分层。 |
+| `profile_cols` | 是 | 画像字段，默认计算均值和中位数。 |
+| `oot_time_dim` | 是 | OOT 尾段切分使用的时间维度，默认 `apply_month`。 |
+| `is_approved` | 否 | 若存在，会在标签覆盖率表里输出成熟且通过样本数。 |
+
+### `SampleAnalysisPipelineConfig` 参数
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `target_cols` | `["y_flag_dpd7_in_mob1", "y_flag_dpd7_in_mob3", "y_flag_dpd7_in_mob6", "y_flag_dpd7_in_mob12"]` | 候选目标标签列表。每个标签单独计算覆盖率、坏账率和切分方案。 |
+| `time_col` | `"apply_time"` | 原始申请时间列。 |
+| `time_dims` | `["apply_week", "apply_month", "apply_quarter"]` | 坏账率与画像分析的时间维度，可替换或追加自定义时间列。 |
+| `population_dims` | `["channel", "strategy_version"]` | 坏账率与画像分析的人群维度，可传渠道、产品、城市层级、策略版本等。 |
+| `profile_cols` | `["age", "income", "education", "credit_limit"]` | 画像字段，输出每个维度下的 mean/median。 |
+| `oot_time_dim` | `"apply_month"` | OOT 候选窗口按该字段排序后取尾段。可以设为 `apply_week` 或 `apply_quarter`。 |
+| `oot_windows` | `[1, 2, 3, 6]` | 候选 OOT 尾段窗口长度；含义取决于 `oot_time_dim`，默认是最后 N 个月。 |
+| `ins_oos_ratios` | `[0.7, 0.75, 0.8]` | 候选 INS 占比，OOS 占比自动为 `1 - ins_ratio`。 |
+| `random_seeds` | `range(3000, 3020)` | 反复切分使用的随机种子集合，用于观察坏账率扰动。 |
+| `min_sample_size` | `500` | 推荐方案筛选时，INS/OOS/OOT 的最小样本量阈值。若无候选满足阈值，会在全量候选里选最稳组合。 |
+| `output_dir` | `"output/sample_analysis"` | CSV 和 Excel 报告输出目录。 |
+| `write_outputs` | `True` | 是否输出 5 张 CSV 明细表。 |
+| `write_excel` | `True` | 是否使用 `ExcelMaster` 输出 `Sample_Analysis_Report.xlsx`。 |
+
+### 分析口径
+
+每个 `target_col` 单独分析，只让该标签 `notna()` 的成熟样本进入坏账率、画像和 INS/OOS/OOT 候选切分。OOT 先按 `oot_time_dim` 排序取最后 N 个时间窗；剩余样本再通过 `SampleSplitter(test_size=1-ins_ratio, stratify=True)` 分层切 INS/OOS。若某个小样本标签无法分层切分，会自动退回非分层切分。
+
+### 结果对象
+
+`SampleAnalysisPipeline.run()` 返回 `SampleAnalysisPipelineResult`。
+
+| 字段 | 说明 |
+|---|---|
+| `label_coverage_summary` | 每个标签的全量样本数、有表现样本数、覆盖率、坏账率、最早/最晚申请时间。 |
+| `segment_bad_rate_summary` | 全局、时间维度、人群维度、时间 x 人群维度下的样本数与坏账率。 |
+| `profile_summary` | 全局、时间维度、人群维度、时间 x 人群维度下的画像均值和中位数。 |
+| `split_candidate_summary` | 所有 `target x oot_window x ins_oos_ratio x seed` 组合的样本量、坏账率和稳定性指标。 |
+| `split_recommendation` | 每个标签推荐的一组 OOT/INS/OOS 方案。排序优先坏账率最大差异更小，再优先 OOT 样本更大，再优先接近 75/25。 |
+| `output_paths` | CSV 与 Excel 报告路径；若 `write_outputs=False` 且 `write_excel=False` 则为空字典。 |
+
+### ExcelMaster 报告图表
+
+开启 `write_excel=True` 后，报告包含明细表和 `Charts` 汇总页。图表包括：
+
+| 图表 | 用途 |
+|---|---|
+| `Label maturity coverage and observed bad rate` | 对比不同标签的成熟样本量、覆盖率和观察坏账率。 |
+| `Recommended split bad-rate comparison` | 对比每个标签推荐方案的 INS/OOS/OOT 坏账率。 |
+| `Average max bad-rate gap by OOT window` | 判断 OOT 取几个时间窗时坏账率差异更稳。 |
+| `Seed stability: average max bad-rate gap` | 判断随机种子对切分坏账率扰动是否明显。 |
+| `Population bad-rate snapshot` | 快速查看主要人群维度下各标签坏账率差异。 |
+
 ## 推荐配置模板
 
 ### 快速信用建模
@@ -817,6 +910,21 @@ cfg = ScoreConsistencyUATPipelineConfig(
 )
 ```
 
+### 纯样本分析
+
+```python
+cfg = SampleAnalysisPipelineConfig(
+    target_cols=["y_mob1", "y_mob3", "y_mob6", "y_mob12"],
+    time_dims=["apply_month", "apply_quarter"],
+    population_dims=["channel", "strategy_version", "product_type"],
+    profile_cols=["age", "income", "education", "credit_limit"],
+    oot_time_dim="apply_month",
+    oot_windows=[1, 2, 3, 6],
+    ins_oos_ratios=[0.7, 0.75, 0.8],
+    random_seeds=range(3000, 3020),
+)
+```
+
 ## 常见关闭项
 
 | 目标 | 配置 |
@@ -831,3 +939,4 @@ cfg = ScoreConsistencyUATPipelineConfig(
 | 不跑人群 x 时间交叉 | `include_time_population_cross=False` |
 | 不跑 pairwise cross risk | `pairwise_cross_enabled=False` |
 | UAT 不走 SQL 取数 | `run(offline_data=df_offline, online_data=df_online)` |
+| 样本分析不写落盘文件 | `write_outputs=False, write_excel=False` |
