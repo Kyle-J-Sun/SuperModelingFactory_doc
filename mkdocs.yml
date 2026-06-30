@@ -127,7 +127,9 @@ nav:
   - 安装: installation.md
   - 快速上手: quickstart.md
   - 架构: architecture.md
-  - 端到端建模流水线: pipeline.md
+  - 端到端流水线:
+      - 端到端建模流水线: pipeline.md
+      - 一键建模流水线: pipeline_one_click.md
   - 用户指南:
       - guides/index.md
       - 样本管理: guides/sample.md
