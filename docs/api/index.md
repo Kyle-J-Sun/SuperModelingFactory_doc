@@ -107,4 +107,4 @@ def calc_woe(data, bad_pct, good_pct):
 
 ## 样本权重 API
 
-训练与评估的加权参数已作为**原生公开 API** 合入主仓（`LRMaster.fit(weight_col=...)`、`GradientBoostingModel.fit(sample_weight=...)`、`PerformanceEvaluator(weight_col=...)` 等）。实战用法与指标语义见 [模型训练 — 样本权重](guides/model.md#样本权重) 与 [模型评估 — 样本权重评估](guides/eval.md#样本权重评估)。
+训练与评估的加权参数已作为**原生公开 API** 合入主仓（`LRMaster.fit(weight_col=...)`、`GradientBoostingModel.fit(sample_weight=...)`、`PerformanceEvaluator(weight_col=...)` 等）。实战用法与指标语义见 [模型训练 — 样本权重](../guides/model.md#样本权重) 与 [模型评估 — 样本权重评估](../guides/eval.md#样本权重评估)。
