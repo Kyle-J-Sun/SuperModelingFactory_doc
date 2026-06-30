@@ -256,6 +256,9 @@ coalition = build_coalition_structure(
 )
 print(coalition["summary"][["n_features", "mean_abs_corr", "max_abs_corr"]])
 
+# 非线性关联场景可改用 MIC：pip install 'supermodelingfactory[mic]'
+# coalition = build_coalition_structure(background_x, threshold=0.35, corr_method="MIC")
+
 explainer.explain_owen(
     explain_x,
     coalition_structure=coalition,
