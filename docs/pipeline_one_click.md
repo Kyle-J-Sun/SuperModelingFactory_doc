@@ -233,29 +233,36 @@ flowchart LR
     C --> H["特征筛选<br/>PSI / IV / Corr"]
     G --> H
     H --> I["WOE 分箱与转换"]
-    I --> J{"warm_start_enabled"}
-    J -->|True| K["读取前置分<br/>probability / log_odds"]
-    J -->|False| L["普通训练输入"]
-    K --> M["训练候选模型<br/>LR / LGB / XGB / Cat"]
+    I --> J{"backward_enabled"}
+    J -->|True| K["WOE 特征逐步剔除"]
+    J -->|False| L["保留 WOE 特征"]
+    K --> M["selected_woe_features"]
     L --> M
-    M --> N{"backward_enabled"}
-    N -->|True| O["逐步回归 / 变量剔除"]
-    N -->|False| P["保留筛选后特征"]
-    O --> Q{"LR 参数筛选"}
-    P --> Q
-    Q -->|lr_search_enabled| R["LR grid_search_params"]
-    Q -->|关闭| S["跳过 LR search"]
-    R --> T{"Optuna"}
-    S --> T
-    T -->|optuna_models 非空| U["GBM 超参搜索"]
-    T -->|空| V["跳过调参"]
-    U --> W["性能评估<br/>warm-start 融合预测"]
-    V --> W
-    W --> X{"解释性"}
-    X -->|explain_models / owen_enabled| Y["SHAP / LIME / PDP / ALE / ICE / Owen"]
-    X -->|关闭| Z["跳过解释"]
-    Y --> AA["CSV / Excel / Result"]
-    Z --> AA
+    M --> N{"gbm_feature_source"}
+    N -->|LR| O["LR 固定使用 WOE 特征"]
+    N -->|GBM = woe| P["LGB / XGB / Cat 使用 WOE 特征"]
+    N -->|GBM = raw| Q["WOE 特征映射回原始变量<br/>LGB / XGB / Cat 使用 raw 特征"]
+    O --> R{"LR 参数筛选"}
+    P --> R
+    Q --> R
+    R -->|lr_search_enabled| S["LR grid_search_params"]
+    R -->|关闭| T["跳过 LR search"]
+    S --> U{"warm_start_enabled"}
+    T --> U
+    U -->|True| V["读取前置分<br/>probability / log_odds"]
+    U -->|False| W["普通训练输入"]
+    V --> X["训练候选模型<br/>LR / LGB / XGB / Cat"]
+    W --> X
+    X --> Y{"Optuna"}
+    Y -->|optuna_models 非空| Z["GBM 超参搜索"]
+    Y -->|空| AA["跳过调参"]
+    Z --> AB["性能评估<br/>按模型特征源预测"]
+    AA --> AB
+    AB --> AC{"解释性"}
+    AC -->|explain_models / owen_enabled| AD["SHAP / LIME / PDP / ALE / ICE / Owen"]
+    AC -->|关闭| AE["跳过解释"]
+    AD --> AF["CSV / Excel / Result"]
+    AE --> AF
 ```
 
 ### 中间步骤与可配置参数
@@ -265,10 +272,11 @@ flowchart LR
 | 样本切分 | `splits`，包含 `ins/oos/oot` | `sample_col`、`oot_col`、`split_config`、`random_state` |
 | 特征筛选 | `feature_selection_summary`、候选特征列表 | `feature_cols`、`feature_selection.psi_enabled`、`feature_selection.iv_enabled`、`feature_selection.corr_enabled` 及各阈值 |
 | WOE 分箱与转换 | `woe_artifacts`、WOE 特征 | `woe_engine`、`woe_params`、`monotone_woe_params` |
-| 候选模型训练 | `models`、初始模型表现 | `train_models`、`model_params`、`target_col` |
-| 前置分 warm-start | `warm_start_summary`、GBM 增量模型 | `warm_start_enabled`、`warm_start_score_col`、`warm_start_score_type`、`warm_start_models` |
 | Backward 变量剔除 | `backward_summary`、`selected_features` | `backward_enabled`、`backward_model`、`backward_params`、`use_backward_features` |
+| 模型特征来源 | `model_feature_sources`、`model_feature_sets` | `gbm_feature_source`。LR 固定使用 WOE；LGB/XGB/Cat 可选 `"woe"` 或 `"raw"` |
 | LR 参数筛选 | `lr_search_results`、LR best params | `lr_search_enabled`、`lr_search_param_grid`、`lr_search_params`、`use_lr_search_params` |
+| 前置分 warm-start | `warm_start_summary`、GBM 增量模型 | `warm_start_enabled`、`warm_start_score_col`、`warm_start_score_type`、`warm_start_models` |
+| 候选模型训练 | `models`、初始模型表现 | `train_models`、`model_params`、`target_col` |
 | Optuna 调参 | `optuna_results`、调参后模型 | `optuna_models`、`optuna_n_trials`、`optuna_params` |
 | 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop` |
 | 解释性与 Owen | `explain_outputs` | `explain_models`、`explain_params`、`owen_enabled`、`business_prior_groups` |
@@ -289,6 +297,7 @@ cfg = CreditModelPipelineConfig(
     oot_col="oot_flag",
     woe_engine="equal_freq",
     train_models=["lr", "lgb", "xgb", "cat"],
+    gbm_feature_source="woe",
     backward_enabled=True,
     optuna_models=["lgb", "xgb", "cat"],
     explain_models=["lr", "lgb", "cat"],
@@ -329,6 +338,7 @@ result.perf_results["lgb"]
 | `monotone_woe_params` | `{"n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2}` | `MonotoneWOEBinner` 参数。 |
 | `train_models` | `["lr", "lgb", "xgb", "cat"]` | 要训练的模型列表。 |
 | `model_params` | `{}` | 每个模型的参数字典。 |
+| `gbm_feature_source` | `"woe"` | GBM 入模特征来源。可传全局 `"woe"` / `"raw"`，也可传 `{"lgb": "raw", "xgb": "woe", "cat": "raw"}`。LR 始终使用 WOE 特征。 |
 | `lr_search_enabled` | `False` | 是否为 LR 运行 `LRMaster.grid_search_params()` 参数筛选。 |
 | `lr_search_param_grid` | `{"C": [0.01, 0.1, 1.0, 10.0]}` | LR 参数网格；会做笛卡尔积搜索。 |
 | `lr_search_params` | `{}` | 覆盖 LR search 的 `objective`、`primary_set`、`gap_ref_sets`、`metric`、`refit`、`verbose` 等参数。 |
@@ -479,6 +489,41 @@ cfg = CreditModelPipelineConfig(
 
 默认搜索训练集为 `ins`，评估集为 `oos/oot`。搜索结果返回在 `result.lr_search_results`，并可落盘为 `lr_param_search.csv`。
 
+### GBM 原始 / WOE 特征开关
+
+默认情况下，`CreditModelPipeline` 仍保持历史行为：LR、LGB、XGB、CatBoost 都使用 WOE 后特征。若希望树模型直接吃原始变量，可以通过 `gbm_feature_source` 切换。
+
+```python
+cfg = CreditModelPipelineConfig(
+    train_models=["lr", "lgb", "xgb", "cat"],
+    gbm_feature_source={
+        "lgb": "raw",
+        "xgb": "woe",
+        "cat": "raw",
+    },
+)
+```
+
+规则如下：
+
+| 模型 | 特征来源规则 |
+|---|---|
+| `lr` | 固定使用 WOE 特征，不受 `gbm_feature_source` 影响。 |
+| `lgb/xgb/cat` | 可使用 `"woe"` 或 `"raw"`；全局传字符串时三个 GBM 使用同一来源，传 dict 时可逐模型配置。 |
+| backward 后 raw GBM | backward 仍在 WOE 特征上筛选；当 GBM 选择 raw 且 `use_backward_features=True` 时，Pipeline 会把 `xxx_woe` 映射回原始 `xxx`。 |
+| 类别特征 | raw 模式不自动做类别编码；如 CatBoost 需要 `cat_features`，请通过 `model_params["cat"]` 传给底层模型。 |
+
+运行后可查看：
+
+```python
+result.model_feature_sources   # {"lr": "woe", "lgb": "raw", ...}
+result.model_feature_sets      # 每个模型实际使用的字段
+result.selected_raw_features
+result.selected_woe_features
+```
+
+若 `write_outputs=True`，还会输出 `model_feature_sources.csv`；Excel 报告中对应 sheet 为 `Model_Feature_Source`。
+
 ### GBM 前置分 Warm-Start
 
 `warm_start_enabled=True` 时，Pipeline 会把输入数据里的前置分转换为 GBM 的 `init_score/base_margin`。训练和评估时都会使用该前置分；评估阶段会走 `predict_with_base_margin()`，输出的是“前置分 + 增量模型”的融合概率。
@@ -579,7 +624,11 @@ business_prior_groups={
 | `feature_selection_summary` | PSI、IV、相关性筛选结果和最终变量列表。 |
 | `woe_artifacts` | WOE 引擎、WOE 后数据、WOE 特征名、WOE 表。 |
 | `models` | `{model_name: (wrapper, raw_model, feature_cols)}`。 |
-| `selected_features` | 最终用于训练和评估的特征。 |
+| `selected_features` | 兼容旧代码的 WOE 主线特征，等同于 `selected_woe_features`。 |
+| `selected_raw_features` | 原始变量名版本的最终特征集合，供 raw GBM 使用。 |
+| `selected_woe_features` | WOE 变量名版本的最终特征集合，供 LR 和 WOE GBM 使用。 |
+| `model_feature_sources` | 每个模型实际使用 `"woe"` 还是 `"raw"`。 |
+| `model_feature_sets` | 每个模型实际训练、评估、解释使用的字段列表。 |
 | `backward_summary` | backward 汇总表；未启用时为空。 |
 | `lr_search_results` | LR 参数筛选结果；未启用时为空。 |
 | `optuna_results` | `{model_name: search_result_df}`。 |
