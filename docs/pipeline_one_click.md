@@ -233,21 +233,29 @@ flowchart LR
     C --> H["特征筛选<br/>PSI / IV / Corr"]
     G --> H
     H --> I["WOE 分箱与转换"]
-    I --> J["训练候选模型<br/>LR / LGB / XGB / Cat"]
-    J --> K{"backward_enabled"}
-    K -->|True| L["逐步回归 / 变量剔除"]
-    K -->|False| M["保留筛选后特征"]
-    L --> N{"Optuna"}
-    M --> N
-    N -->|optuna_models 非空| O["超参搜索"]
-    N -->|空| P["跳过调参"]
-    O --> Q["性能评估"]
+    I --> J{"warm_start_enabled"}
+    J -->|True| K["读取前置分<br/>probability / log_odds"]
+    J -->|False| L["普通训练输入"]
+    K --> M["训练候选模型<br/>LR / LGB / XGB / Cat"]
+    L --> M
+    M --> N{"backward_enabled"}
+    N -->|True| O["逐步回归 / 变量剔除"]
+    N -->|False| P["保留筛选后特征"]
+    O --> Q{"LR 参数筛选"}
     P --> Q
-    Q --> R{"解释性"}
-    R -->|explain_models / owen_enabled| S["SHAP / LIME / PDP / ALE / ICE / Owen"]
-    R -->|关闭| T["跳过解释"]
-    S --> U["CSV / Excel / Result"]
-    T --> U
+    Q -->|lr_search_enabled| R["LR grid_search_params"]
+    Q -->|关闭| S["跳过 LR search"]
+    R --> T{"Optuna"}
+    S --> T
+    T -->|optuna_models 非空| U["GBM 超参搜索"]
+    T -->|空| V["跳过调参"]
+    U --> W["性能评估<br/>warm-start 融合预测"]
+    V --> W
+    W --> X{"解释性"}
+    X -->|explain_models / owen_enabled| Y["SHAP / LIME / PDP / ALE / ICE / Owen"]
+    X -->|关闭| Z["跳过解释"]
+    Y --> AA["CSV / Excel / Result"]
+    Z --> AA
 ```
 
 ### 中间步骤与可配置参数
@@ -258,7 +266,9 @@ flowchart LR
 | 特征筛选 | `feature_selection_summary`、候选特征列表 | `feature_cols`、`feature_selection.psi_enabled`、`feature_selection.iv_enabled`、`feature_selection.corr_enabled` 及各阈值 |
 | WOE 分箱与转换 | `woe_artifacts`、WOE 特征 | `woe_engine`、`woe_params`、`monotone_woe_params` |
 | 候选模型训练 | `models`、初始模型表现 | `train_models`、`model_params`、`target_col` |
+| 前置分 warm-start | `warm_start_summary`、GBM 增量模型 | `warm_start_enabled`、`warm_start_score_col`、`warm_start_score_type`、`warm_start_models` |
 | Backward 变量剔除 | `backward_summary`、`selected_features` | `backward_enabled`、`backward_model`、`backward_params`、`use_backward_features` |
+| LR 参数筛选 | `lr_search_results`、LR best params | `lr_search_enabled`、`lr_search_param_grid`、`lr_search_params`、`use_lr_search_params` |
 | Optuna 调参 | `optuna_results`、调参后模型 | `optuna_models`、`optuna_n_trials`、`optuna_params` |
 | 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop` |
 | 解释性与 Owen | `explain_outputs` | `explain_models`、`explain_params`、`owen_enabled`、`business_prior_groups` |
@@ -319,6 +329,16 @@ result.perf_results["lgb"]
 | `monotone_woe_params` | `{"n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2}` | `MonotoneWOEBinner` 参数。 |
 | `train_models` | `["lr", "lgb", "xgb", "cat"]` | 要训练的模型列表。 |
 | `model_params` | `{}` | 每个模型的参数字典。 |
+| `lr_search_enabled` | `False` | 是否为 LR 运行 `LRMaster.grid_search_params()` 参数筛选。 |
+| `lr_search_param_grid` | `{"C": [0.01, 0.1, 1.0, 10.0]}` | LR 参数网格；会做笛卡尔积搜索。 |
+| `lr_search_params` | `{}` | 覆盖 LR search 的 `objective`、`primary_set`、`gap_ref_sets`、`metric`、`refit`、`verbose` 等参数。 |
+| `use_lr_search_params` | `True` | 是否把 LR best params 合并进最终 LR 训练参数。 |
+| `warm_start_enabled` | `False` | 是否启用 GBM 前置分 warm-start。 |
+| `warm_start_score_col` | `None` | 输入数据中的前置分列。 |
+| `warm_start_score_type` | `"probability"` | `"probability"` 会裁剪后转 log-odds；`"log_odds"` 直接作为 init score。 |
+| `warm_start_models` | `["lgb", "xgb"]` | 启用 warm-start 的 GBM 模型。当前底层支持 `lgb/xgb`。 |
+| `warm_start_on_unsupported` | `"skip"` | CatBoost 等不支持 init score 时跳过 warm-start 或抛错。 |
+| `warm_start_apply_to_optuna` | `False` | 是否在 GBM 参数搜索中传入 `fit_kwargs={"init_score": ...}`。 |
 | `backward_enabled` | `True` | 是否运行 backward variable elimination。 |
 | `backward_model` | `"lgb"` | backward 使用的代理模型。 |
 | `backward_params` | `{}` | backward 初始化和运行参数。 |
@@ -436,6 +456,46 @@ model_params={
 }
 ```
 
+### LR 参数筛选
+
+`lr_search_enabled=True` 且 `train_models` 包含 `"lr"` 时，Pipeline 会在 WOE 后、最终模型训练前运行 `LRMaster.grid_search_params()`。
+
+```python
+cfg = CreditModelPipelineConfig(
+    train_models=["lr", "lgb"],
+    lr_search_enabled=True,
+    lr_search_param_grid={"C": [0.01, 0.1, 1.0, 10.0]},
+    lr_search_params={
+        "objective": "oot_gap_penalized",
+        "primary_set": "oos",
+        "gap_ref_sets": ["oot"],
+        "metric": "auc",
+        "refit": False,
+        "verbose": False,
+    },
+    use_lr_search_params=True,
+)
+```
+
+默认搜索训练集为 `ins`，评估集为 `oos/oot`。搜索结果返回在 `result.lr_search_results`，并可落盘为 `lr_param_search.csv`。
+
+### GBM 前置分 Warm-Start
+
+`warm_start_enabled=True` 时，Pipeline 会把输入数据里的前置分转换为 GBM 的 `init_score/base_margin`。训练和评估时都会使用该前置分；评估阶段会走 `predict_with_base_margin()`，输出的是“前置分 + 增量模型”的融合概率。
+
+```python
+cfg = CreditModelPipelineConfig(
+    train_models=["lr", "lgb"],
+    warm_start_enabled=True,
+    warm_start_score_col="base_model_prob",
+    warm_start_score_type="probability",
+    warm_start_models=["lgb"],
+    warm_start_apply_to_optuna=False,
+)
+```
+
+`warm_start_score_type="probability"` 适合传入概率分，Pipeline 会自动裁剪到 `(0, 1)` 并转为 log-odds；`"log_odds"` 适合已经准备好的 raw margin。当前底层 warm-start 支持 `lgb/xgb`，CatBoost 默认记录为 `skipped_unsupported`，也可以通过 `warm_start_on_unsupported="raise"` 改为直接抛错。
+
 ### Backward 参数
 
 ```python
@@ -521,7 +581,9 @@ business_prior_groups={
 | `models` | `{model_name: (wrapper, raw_model, feature_cols)}`。 |
 | `selected_features` | 最终用于训练和评估的特征。 |
 | `backward_summary` | backward 汇总表；未启用时为空。 |
+| `lr_search_results` | LR 参数筛选结果；未启用时为空。 |
 | `optuna_results` | `{model_name: search_result_df}`。 |
+| `warm_start_summary` | 前置分 warm-start 启用、跳过、score 类型和缺失率汇总；未启用时为空。 |
 | `perf_results` | `{model_name: perf_df}`。 |
 | `explain_outputs` | SHAP/Owen 等解释输出。 |
 | `report_path` | Excel 报告路径；若 `write_excel=False` 则为空。 |
