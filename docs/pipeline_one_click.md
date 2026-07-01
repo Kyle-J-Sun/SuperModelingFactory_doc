@@ -1324,11 +1324,50 @@ scored_df = parallel_apply(
 | `"chunk"` | 用户自己传 `chunks`，适合 SQL 列表、文件列表、模型列表、变量列表等非 DataFrame 任务。 | `pd.concat(axis=0)`，也可设为 `list/dict` |
 | `"auto"` | 小样本分别尝试 row/column 拆分并与串行结果对比；不确定或双向都可行时抛错。 | 根据识别结果决定 |
 
+### 执行后端
+
+`backend` 控制 chunk 被如何执行。无论选择哪种后端，引擎都会走同一套切分、执行、合并、错误处理和 `summary` 汇总逻辑；差异只在 chunk 是串行执行、多线程执行，还是多进程执行。
+
+| `backend` | 执行方式 | 适合场景 | 注意事项 |
+|---|---|---|---|
+| `"sequential"` | 当前 Python 进程内按 chunk 顺序逐个执行。 | 调试函数、小数据任务、建立串行基准、函数或参数不可序列化时先跑通逻辑。 | 不会开启 worker；即使 `n_jobs > 1`，也仍然串行执行。 |
+| `"thread"` | 使用 joblib `threading` 后端，多线程共享同一进程内存。 | IO 密集任务、网络/SQL/文件请求、对象不方便 pickling 但函数本身线程安全的场景。 | 共享全局状态；如果函数修改类方法、全局变量、环境变量、随机种子或连接池，需要函数内部自行加锁。 |
+| `"process"` | 使用 joblib `loky` 后端，多进程隔离执行。 | CPU 密集任务、可序列化函数、大规模行/列 chunk 计算。 | 函数、参数和 chunk 需要可序列化；跨进程复制数据有额外开销。 |
+
+`backend="sequential"` 不是关闭引擎，而是“串行执行同一套引擎流程”。它常用于验证拆分和合并逻辑：
+
+```python
+seq = parallel_apply(
+    data=df,
+    func=my_func,
+    split_axis="row",
+    backend="sequential",
+    n_chunks=10,
+)
+
+par = parallel_apply(
+    data=df,
+    func=my_func,
+    split_axis="row",
+    backend="process",
+    n_jobs=8,
+    n_chunks=10,
+)
+
+pd.testing.assert_frame_equal(seq, par)
+```
+
+推荐使用顺序：
+
+1. 先用 `"sequential"` 调试函数、chunk 切分和结果合并。
+2. 如果是 CPU 密集且函数可序列化，切到 `"process"`。
+3. 如果是 IO 密集或对象无法 pickling，但函数线程安全，切到 `"thread"`。
+
 ### 关键参数
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `backend` | `"process"` | CPU 密集任务用 `"process"`；IO 密集或对象不可序列化时用 `"thread"`；调试用 `"sequential"`。`thread` 后端共享进程内全局状态。 |
+| `backend` | `"process"` | CPU 密集任务用 `"process"`；IO 密集或对象不可序列化时用 `"thread"`；调试和小数据基准用 `"sequential"`。 |
 | `n_jobs` | `"auto"` | `"auto"` 使用 `CPU - 1`；`-1` 使用所有 CPU；正整数指定 worker 数。 |
 | `chunk_size` / `n_chunks` | `None` | 二选一，控制切分粒度。 |
 | `combine` | `"concat"` | 支持 `"concat"`、`"list"`、`"dict"`、`"none"`。 |
