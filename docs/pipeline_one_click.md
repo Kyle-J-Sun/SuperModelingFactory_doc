@@ -1,6 +1,6 @@
 # 一键建模流水线
 
-`Modeling_Tool.Pipeline` 提供五条高层业务流水线，把常见的端到端脚本封装成可复用、可配置、可返回结构化结果的 API。
+`Modeling_Tool.Pipeline` 提供五条高层业务流水线和一个 mock 数据生成 Pipeline，把常见的端到端脚本封装成可复用、可配置、可返回结构化结果的 API。
 
 这些 Pipeline **不生成模拟数据**。调用方需要先准备真实业务 DataFrame、模型分数据，或项目 SQL，然后通过 `Config` 控制要跑哪些步骤、哪些模型、哪些维度和哪些输出。
 
@@ -16,6 +16,8 @@ from Modeling_Tool.Pipeline import (
     ScoreConsistencyUATPipelineConfig,
     SampleAnalysisPipeline,
     SampleAnalysisPipelineConfig,
+    MockSamplePipeline,
+    MockSamplePipelineConfig,
 )
 ```
 
@@ -905,7 +907,132 @@ cfg = ScoreConsistencyUATPipelineConfig(
 | `Time Fields` | 时间字段是否超过 `tol_time_seconds`。 |
 | `Per Flow-ID Report` | 每个 flow_id 具体哪些字段不一致，便于逐笔排查。 |
 
-## 5. 纯样本分析流水线
+## 5. Mock 样本生成流水线
+
+`MockSamplePipeline` 用于生成模拟申请样本或通过样本，方便快速验证 `SampleAnalysisPipeline`、建模 demo 和模型分对比流程。它只负责造数和可选 CSV 输出，不做建模分析，也不输出 Excel。
+
+### 流程图
+
+```mermaid
+flowchart LR
+    A["配置 n_samples / applied_sample"] --> B["生成 flow_id / apply_timestamp"]
+    B --> C["生成 latent risk"]
+    C --> D["按 approve_rate 审批通过"]
+    D --> E["生成随机业务特征"]
+    E --> F["生成 online_model_pb 分数"]
+    F --> G["按 y_flag_candidates 生成表现标签"]
+    G --> H{"applied_sample"}
+    H -->|1| I["输出全量申请"]
+    H -->|0| J["只输出通过样本"]
+    I --> K{"write_csv"}
+    J --> K
+    K -->|True| L["写 CSV"]
+    K -->|False| M["只返回 pandas DataFrame"]
+    L --> N["Result"]
+    M --> N
+```
+
+### 最小示例
+
+```python
+from Modeling_Tool import MockSamplePipeline, MockSamplePipelineConfig
+
+result = MockSamplePipeline(
+    MockSamplePipelineConfig(
+        n_samples=80_000,
+        applied_sample=1,
+    )
+).run()
+
+df = result.data
+result.summary
+result.feature_metadata
+```
+
+只输出通过样本：
+
+```python
+result = MockSamplePipeline(
+    MockSamplePipelineConfig(applied_sample=0)
+).run()
+
+assert result.data["is_approved"].eq(1).all()
+```
+
+输出 CSV：
+
+```python
+cfg = MockSamplePipelineConfig(
+    write_csv=True,
+    output_path="output/mock_sample/mock_sample.csv",
+)
+result = MockSamplePipeline(cfg).run()
+```
+
+### `MockSamplePipelineConfig` 参数
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `n_samples` | `80_000` | 初始全量申请样本量。若 `applied_sample=0`，最终输出约为 `n_samples * approve_rate`。 |
+| `applied_sample` | `1` | `1` 输出全量申请；`0` 只输出通过样本，且 `is_approved` 全为 1。 |
+| `approve_rate` | `0.25` | 全量申请中的审批通过率。 |
+| `num_online_scores` | `5` | 生成 `online_model_pb_1 ... online_model_pb_n`。 |
+| `y_flag_candidates` | `[15, 30, 45]` | 生成 `y_flag_dpd7_in_15d`、`y_flag_dpd7_in_30d`、`y_flag_dpd7_in_45d` 等标签。 |
+| `num_features` | `20` | 随机生成特征变量数量。 |
+| `min_num_feature_business_type` | `5` | 特征至少覆盖的业务类型数量；不得大于 `num_features`，最多 10 类。 |
+| `random_state` | `42` | 随机种子。 |
+| `observation_timestamp` | 当前日期 | 判断表现标签是否成熟的观察日；测试或复现实验时建议固定。 |
+| `application_months` | `18` | 申请时间向前回溯的月份数。 |
+| `write_csv` | `False` | 是否输出 CSV。 |
+| `output_path` | `"output/mock_sample/mock_sample.csv"` | CSV 输出路径。 |
+
+### 输出字段
+
+| 字段 | 说明 |
+|---|---|
+| `flow_id` | 模拟申请流水号。 |
+| `apply_timestamp` | 模拟申请时间。 |
+| `apply_week` / `apply_month` / `apply_quarter` | 由申请时间衍生的时间维度，方便直接进入样本分析。 |
+| `is_approved` | 审批通过标识。 |
+| `online_model_pb_*` | 随机生成的模型坏账概率分。 |
+| `y_flag_dpd7_in_{days}d` | 指定天数内 DPD7 表现标签；`1` 为 bad，`0` 为 good，未表现为空。 |
+| `feat_{business_type}_{idx}` | 随机业务特征变量。 |
+
+业务类型最多 10 类：`basic_info`、`multi_loan`、`credit_report_stats`、`historical_limit`、`overdue_status`、`query_count`、`telecom_data`、`consumption_data`、`income_data`、`address_data`。
+
+### 结果对象
+
+`MockSamplePipeline.run()` 返回 `MockSamplePipelineResult`。
+
+| 字段 | 说明 |
+|---|---|
+| `data` | 生成的 pandas DataFrame。 |
+| `summary` | 样本量、通过率、标签成熟人数、标签坏账率等摘要。 |
+| `feature_metadata` | 每个随机特征对应的业务类型和分布类型。 |
+| `output_path` | CSV 文件路径；`write_csv=False` 时为 `None`。 |
+
+### 联动 `SampleAnalysisPipeline`
+
+```python
+mock_result = MockSamplePipeline(MockSamplePipelineConfig()).run()
+
+analysis_result = SampleAnalysisPipeline(
+    SampleAnalysisPipelineConfig(
+        target_cols=[
+            "y_flag_dpd7_in_15d",
+            "y_flag_dpd7_in_30d",
+            "y_flag_dpd7_in_45d",
+        ],
+        time_col="apply_timestamp",
+        time_dims=["apply_month"],
+        oot_time_dim="apply_month",
+        population_dims=[],
+        profile_cols=list(mock_result.feature_metadata["feature"].head(5)),
+    )
+).run(mock_result.data)
+```
+
+## 6. 纯样本分析流水线
 
 `SampleAnalysisPipeline` 用于建模前的样本成熟度与切分方案分析。它回答三个问题：不同 `y` 标签是否已经有足够表现样本、OOT 取最后几个时间窗更稳、INS/OOS 用 70/30、75/25 还是 80/20 更稳。Pipeline 使用 SMF `SampleSplitter` 做分层 INS/OOS 切分，并用 `EvaluationPipeline` 做分维度坏账率分析；Excel 报告由 `ExcelMaster` 生成。
 
