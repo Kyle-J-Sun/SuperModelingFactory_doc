@@ -1,6 +1,6 @@
 # 顶层封装流水线
 
-`Modeling_Tool.Pipeline` 提供五条高层业务流水线和一个 mock 数据生成 Pipeline，把常见的端到端脚本封装成可复用、可配置、可返回结构化结果的 API。
+`Modeling_Tool.Pipeline` 提供六条高层业务流水线和一个 mock 数据生成 Pipeline，把常见的端到端脚本封装成可复用、可配置、可返回结构化结果的 API。
 
 这些 Pipeline **不生成模拟数据**。调用方需要先准备真实业务 DataFrame、模型分数据，或项目 SQL，然后通过 `Config` 控制要跑哪些步骤、哪些模型、哪些维度和哪些输出。
 
@@ -10,6 +10,8 @@ from Modeling_Tool.Pipeline import (
     RejectInferencePipelineConfig,
     CreditModelPipeline,
     CreditModelPipelineConfig,
+    FeatureValidationPipeline,
+    FeatureValidationPipelineConfig,
     ScoreComparisonPipeline,
     ScoreComparisonPipelineConfig,
     ScoreConsistencyUATPipeline,
@@ -637,7 +639,134 @@ business_prior_groups={
 | `explain_outputs` | SHAP/Owen 等解释输出。 |
 | `report_path` | Excel 报告路径；若 `write_excel=False` 则为空。 |
 
-## 3. 模型分对比流水线
+## 3. 特征验收流水线
+
+`FeatureValidationPipeline` 用于新接特征宽表验收。它关注新特征的分布稳定性、区分能力、PSI、WOE 分箱图、与现有特征的相关性，以及可落地复核的 ExcelMaster 报告。
+
+### 流程图
+
+```mermaid
+flowchart LR
+    A["宽表 DataFrame<br/>flow_id / apply_time / features / labels"] --> B["输入校验与时间字段派生"]
+    B --> C["INS / OOS / OOT 切分"]
+    C --> D["全局 / 时间 / 人群分布<br/>proc_means_by_grp"]
+    C --> E{"target_cols"}
+    E -->|有标签| F["WOE 分箱<br/>默认 MonotoneWOEBinner"]
+    E -->|无标签| G["跳过 WOE / IV / KS"]
+    F --> H{"Monotone refine"}
+    H -->|显式开启| I["refine_cate / refine_dtree / refine_chi2"]
+    H -->|默认关闭| J["保留贪婪单调分箱"]
+    I --> K["PSI<br/>可复用 WOE bins"]
+    J --> K
+    G --> K
+    K --> L["IV / KS<br/>全局 / 时间 / 人群"]
+    L --> M["相关性矩阵与高相关对<br/>new-new / new-incumbent"]
+    M --> N["ExcelMaster / CSV / Result"]
+```
+
+### 最小示例
+
+```python
+from Modeling_Tool import FeatureValidationPipeline, FeatureValidationPipelineConfig
+
+cfg = FeatureValidationPipelineConfig(
+    output_dir="output/feature_validation",
+    id_col="flow_id",
+    apply_time_col="apply_time",
+    target_cols=["badflag"],
+    new_feature_cols=["new_score", "new_income", "new_channel"],
+    incumbent_feature_cols=["old_score", "old_income"],
+    categorical_features=["new_channel"],
+    population_dims=["channel"],
+    woe_engine="monotone",
+    corr_include_incumbent=True,
+)
+
+result = FeatureValidationPipeline(cfg).run(feature_wide_df)
+
+result.psi_summary
+result.ivks_summary
+result.high_corr_pairs
+```
+
+### 中间步骤与可配置参数
+
+| 步骤 | 产物 | 主要可配置参数 |
+|---|---|---|
+| 样本切分 | `splits` | `sample_col`、`oot_col`、`split_config`、`random_state` |
+| 分布分析 | `distribution_summary` | `time_dims`、`population_dims`、`group_specs`、`distribution_params` |
+| WOE 分箱 | `woe_artifacts` | `woe_engine`、`woe_params`、`monotone_woe_params`、`categorical_features` |
+| Monotone refine | `woe_artifacts["refine_summary"]` | `monotone_refine_cate_enabled`、`monotone_refine_dtree_enabled`、`monotone_refine_chi2_enabled` 及对应 params |
+| PSI | `psi_summary`、`psi_details` | `psi_reference_dataset`、`psi_reference_data`、`psi_group_dims`、`psi_use_woe_bins`、`psi_params` |
+| IV / KS | `ivks_summary` | `ivks_group_dims`、`ivks_use_woe_bins`、`ivks_params`、`min_group_size` |
+| 相关性 | `corr_matrix`、`high_corr_pairs`、`correlated_detail` | `corr_include_incumbent`、`corr_use_woe_bins`、`corr_params` |
+| 报告输出 | `output_paths`、`report_path` | `output_dir`、`write_outputs`、`write_excel` |
+
+### `FeatureValidationPipelineConfig` 参数
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `output_dir` | `"output/feature_validation"` | 输出目录。 |
+| `id_col` | `"flow_id"` | 主键列。 |
+| `apply_time_col` | `"apply_time"` | 申请时间列，用于派生 `apply_week/month/quarter`。 |
+| `target_cols` | `None` | 标签列；为空时跳过 WOE、IV、KS 和相关性中的 IV/KS 对比。 |
+| `new_feature_cols` | `None` | 新接特征列表；建议显式传入。 |
+| `incumbent_feature_cols` | `None` | 现有特征列表，主要用于 new vs incumbent 相关性对比。 |
+| `sample_col` / `oot_col` | `"sample_ind"` / `"oot_flag"` | 与 `CreditModelPipeline` 一致的样本切分字段。 |
+| `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS 切分配置。 |
+| `time_dims` | `["apply_month"]` | 时间维度。 |
+| `population_dims` | `[]` | 人群维度，如渠道、产品、策略版本。 |
+| `group_specs` | `None` | 自定义分组规格；不传时自动组合 global/time/population/time x population。 |
+| `min_group_size` | `100` | PSI/IV/KS 分组最小样本数保护。 |
+| `woe_engine` | `"monotone"` | 默认 `MonotoneWOEBinner`；也支持 `"equal_freq"` 使用 `WOE_Master`。 |
+| `categorical_features` | `None` | 类别特征列表，传给 `MonotoneWOEBinner(cate_feats=...)`。 |
+| `monotone_refine_cate_enabled` | `False` | 是否对类别变量调用 `refine_cate()`。 |
+| `monotone_refine_cate_params` | `{}` | 透传 `refine_cate(features, max_bins, min_bin_size, badrate_tol)`。 |
+| `monotone_refine_dtree_enabled` | `False` | 是否调用 `refine_dtree()`。 |
+| `monotone_refine_dtree_params` | `{}` | 透传 `refine_dtree(df, features, max_bins, min_samples_leaf, monotone, n_jobs)`。 |
+| `monotone_refine_chi2_enabled` | `False` | 是否调用 `refine_chi2()`。 |
+| `monotone_refine_chi2_params` | `{}` | 透传 `refine_chi2(df, features, chi2_p, chi2_init_size, n_jobs)`。 |
+| `psi_reference_dataset` | `"ins"` | PSI benchmark，可选 `ins/oos/oot/external`。 |
+| `psi_reference_data` | `None` | 外部 PSI benchmark；`psi_reference_dataset="external"` 时必传。 |
+| `psi_use_woe_bins` | `True` | 是否复用 step 3 WOE 分箱边界。 |
+| `ivks_use_woe_bins` | `True` | 是否复用 step 3 WOE 分箱边界计算 IV/KS。 |
+| `corr_include_incumbent` | `True` | 相关性是否纳入现有特征。 |
+| `corr_use_woe_bins` | `True` | 相关性对比中的 IV/KS 是否复用 step 3 WOE 分箱。 |
+| `write_outputs` / `write_excel` | `True` / `True` | 是否输出 CSV/图片和 ExcelMaster 报告。 |
+
+### Monotone Refine 示例
+
+```python
+cfg = FeatureValidationPipelineConfig(
+    woe_engine="monotone",
+    categorical_features=["new_channel", "new_industry"],
+    monotone_refine_cate_enabled=True,
+    monotone_refine_cate_params={"max_bins": 5, "min_bin_size": 0.02},
+    monotone_refine_dtree_enabled=True,
+    monotone_refine_dtree_params={"max_bins": 6, "min_samples_leaf": 0.05},
+    monotone_refine_chi2_enabled=True,
+    monotone_refine_chi2_params={"chi2_p": 0.95, "n_jobs": 4},
+)
+```
+
+默认不执行任何 refine；执行顺序固定为 `refine_cate` -> `refine_dtree` -> `refine_chi2`。
+
+### 结果对象
+
+| 字段 | 说明 |
+|---|---|
+| `splits` | `{"ins": df, "oos": df, "oot": df}`。 |
+| `distribution_summary` | 分布分析结果字典，包含数值和类别变量分组统计。 |
+| `woe_artifacts` | WOE engine、WOE 表、WOE 后数据、refine summary。 |
+| `psi_summary` / `psi_details` | PSI 汇总和分箱明细。 |
+| `ivks_summary` | IV、KS、Lift、缺失率、分箱数等区分能力指标。 |
+| `corr_matrix` | 相关性矩阵。 |
+| `high_corr_pairs` | 超过阈值的两两高相关变量。 |
+| `correlated_detail` | 高相关组中各变量 IV/KS 对比和保留/剔除建议。 |
+| `validation_summary` | 行数、特征数、目标数、输出规模等总览。 |
+| `output_paths` / `report_path` | CSV/Excel 输出路径。 |
+
+## 4. 模型分对比流水线
 
 `ScoreComparisonPipeline` 用于多模型分、多版本分数或 champion/challenger 模型分对比。它封装全局 AUC/KS、分维度 AUC/KS、Gains、自定义指标、cross risk 和 pairwise score cross risk。
 
@@ -911,7 +1040,7 @@ cfg = ScoreComparisonPipelineConfig(
 | `pairwise_cross` | compare score x base score 的 pairwise cross risk。 |
 | `report_path` | Excel 报告路径；若 `write_excel=False` 则为空。 |
 
-## 4. UAT 线上/离线一致性流水线
+## 5. UAT 线上/离线一致性流水线
 
 `ScoreConsistencyUATPipeline` 用于模型上线或 UAT 阶段的 online/offline 一致性校验。它复用主包 `UATConsistencyChecker`，检查 flow_id 覆盖、主模型分、子模型分、全量特征、时间字段和 per-flow 问题明细。
 
@@ -1068,7 +1197,7 @@ cfg = ScoreConsistencyUATPipelineConfig(
 | `Time Fields` | 时间字段是否超过 `tol_time_seconds`。 |
 | `Per Flow-ID Report` | 每个 flow_id 具体哪些字段不一致，便于逐笔排查。 |
 
-## 5. Mock 样本生成流水线
+## 6. Mock 样本生成流水线
 
 `MockSamplePipeline` 用于生成模拟申请样本或通过样本，方便快速验证 `SampleAnalysisPipeline`、建模 demo 和模型分对比流程。它只负责造数和可选 CSV 输出，不做建模分析，也不输出 Excel。
 
@@ -1193,7 +1322,7 @@ analysis_result = SampleAnalysisPipeline(
 ).run(mock_result.data)
 ```
 
-## 6. 纯样本分析流水线
+## 7. 纯样本分析流水线
 
 `SampleAnalysisPipeline` 用于建模前的样本成熟度与切分方案分析。它回答三个问题：不同 `y` 标签是否已经有足够表现样本、OOT 取最后几个时间窗更稳、INS/OOS 用 70/30、75/25 还是 80/20 更稳。Pipeline 使用 SMF `SampleSplitter` 做分层 INS/OOS 切分，并用 `EvaluationPipeline` 做分维度坏账率分析；Excel 报告由 `ExcelMaster` 生成。
 
@@ -1322,7 +1451,7 @@ result.split_recommendation
 | `Seed stability: average max bad-rate gap` | 判断随机种子对切分坏账率扰动是否明显。 |
 | `Population bad-rate snapshot` | 快速查看主要人群维度下各标签坏账率差异。 |
 
-## 7. 通用多进程引擎
+## 8. 通用多进程引擎
 
 `ParallelApplyEngine` 是一个通用执行引擎，不绑定某条业务 Pipeline。它可以把可序列化函数分配到多进程或多线程执行，适合对 SMF 现有函数、用户自定义清洗函数、变量分析函数、SQL/文件任务做并行加速。
 
