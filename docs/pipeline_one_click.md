@@ -41,18 +41,23 @@ flowchart LR
     C --> E["全量样本打 pre-score"]
     D --> F["拆分 approved / rejected"]
     E --> F
-    F --> G{"OOT 来源"}
-    G -->|oot_data| H["使用外部 OOT"]
-    G -->|oot_frac| I["从 approved 抽样 OOT"]
-    H --> J["生成 RI 增强数据集"]
-    I --> J
-    J --> K["simple / hard / fuzzy / parceling"]
-    K --> L{"train_ri_models"}
-    L -->|True| M["训练 RI 后模型"]
-    L -->|False| N["只输出 RI 数据集与摘要"]
-    M --> O["评估 OOT 表现并选择 best_method"]
-    N --> P["CSV / Excel / Result"]
+    F --> G{"RI approved reference"}
+    G -->|默认| H["主数据全量 approved"]
+    G -->|ri_approved_query / func| I["主数据 approved 子样本"]
+    G -->|ri_approved_data| J["外部 approved reference"]
+    H --> K["估计 RI 规则"]
+    I --> K
+    J --> K
+    K --> L["生成 rejected inferred"]
+    L --> M{"ri_approved_scope"}
+    M -->|reference_only| N["主数据全量 approved + rejected inferred"]
+    M -->|output_subset| O["approved 子样本 + rejected inferred"]
+    N --> P{"train_ri_models"}
     O --> P
+    P -->|True| Q["训练 RI 后模型并评估 OOT"]
+    P -->|False| R["只输出 RI 数据集与摘要"]
+    Q --> S["CSV / Excel / Result"]
+    R --> S
 ```
 
 ### 中间步骤与可配置参数
@@ -62,6 +67,7 @@ flowchart LR
 | 输入校验与特征准备 | `approved_data`、`rejected_data` 基础样本 | `approved_col`、`target_col`、`score_col`、`feature_cols` |
 | pre-score 训练或复用 | `score_col` 分数列、`prescore_model` | `train_prescore`、`prescore_model_type`、`prescore_params`、`prescore_test_size`、`random_state` |
 | OOT 口径确定 | OOT 样本、建模样本池 | `oot_data`、`oot_frac`、`random_state` |
+| RI 参考样本确定 | `ri_approved_reference_data`、`ri_approved_summary` | `ri_approved_data`、`ri_approved_query`、`ri_approved_func`、`ri_approved_frac`、`ri_approved_n`、`ri_approved_scope` |
 | RI 数据集生成 | `ri_datasets`、`ri_summary` | `ri_methods`、`ri_method_params`，例如 `bad_rate`、`cutoff`、`weight_factor`、`n_parcels` |
 | RI 后模型训练 | `ri_models`、`ri_model_perf` | `train_ri_models`、`ri_model_type`、`ri_model_params` |
 | 性能评估与报告 | `best_method`、`report_path` | `perf_pct_bins`、`min_bin_prop`、`write_outputs`、`write_excel`、`output_dir` |
@@ -127,6 +133,12 @@ result.best_method
 | `oot_frac` | `0.2` | 未传 `oot_data` 时，从 approved 样本中随机抽取 OOT 的比例。 |
 | `perf_pct_bins` | `10` | `PerformanceEvaluator` 的分箱数量。 |
 | `min_bin_prop` | `0.03` | 性能评估最小分箱占比。 |
+| `ri_approved_data` | `None` | 外部 approved reference 样本，仅用于估计 RI 规则；默认最终增强样本仍输出主数据全量 approved。 |
+| `ri_approved_query` | `None` | 从主数据 approved 中筛选 RI reference 的 pandas query。 |
+| `ri_approved_func` | `None` | 从主数据 approved 中筛选 RI reference 的自定义函数，返回 bool mask。 |
+| `ri_approved_frac` | `None` | 从 RI reference 中随机抽样比例，不能和 `ri_approved_n` 同时使用。 |
+| `ri_approved_n` | `None` | 从 RI reference 中随机抽样条数，不能和 `ri_approved_frac` 同时使用。 |
+| `ri_approved_scope` | `"reference_only"` | `reference_only` 表示仅用 reference 估计 RI 规则，最终输出全量 approved；`output_subset` 表示最终只输出筛选后的 approved + rejected inferred。 |
 
 ### `ri_method_params` 写法
 
@@ -149,6 +161,41 @@ cfg = RejectInferencePipelineConfig(
 | `fuzzy_augment` | `weight_factor` | 控制 fuzzy augmentation 权重强度。 |
 | `parceling` | `n_parcels` | 按 score 分档的档数。 |
 
+### RI approved reference 样本
+
+默认情况下，Pipeline 使用主数据中的全量 approved 样本来估计 RI 规则，并输出“全量 approved + 全量 rejected inferred”的增强样本。若你只想用一部分 approved 或一份外部 approved 样本来估计 RI 规则，可以配置 reference 样本。
+
+外部 reference 只参与 RI 估计，最终增强样本仍输出主数据全量 approved：
+
+```python
+cfg = RejectInferencePipelineConfig(
+    ri_approved_data=external_approved_df,
+    ri_methods=["parceling", "fuzzy_augment"],
+    ri_approved_scope="reference_only",
+)
+```
+
+从主数据 approved 中筛选 reference，但最终仍输出主数据全量 approved：
+
+```python
+cfg = RejectInferencePipelineConfig(
+    ri_approved_query="channel == 'Google'",
+    ri_approved_frac=0.5,
+    ri_approved_scope="reference_only",
+)
+```
+
+如果你希望最终增强样本也只包含筛选后的 approved：
+
+```python
+cfg = RejectInferencePipelineConfig(
+    ri_approved_query="channel == 'Google'",
+    ri_approved_scope="output_subset",
+)
+```
+
+注意：`ri_approved_scope="output_subset"` 仅适用于从主数据筛选 reference；外部 `ri_approved_data` 不会被写入主数据增强输出。
+
 ### 结果对象
 
 `RejectInferencePipeline.run()` 返回 `RejectInferencePipelineResult`。
@@ -164,6 +211,9 @@ cfg = RejectInferencePipelineConfig(
 | `prescore_model` | pre-score 模型 wrapper；若 `train_prescore=False` 则为空。 |
 | `ri_models` | `{method: model}`，每种 RI 方法训练出的模型。 |
 | `report_path` | Excel 报告路径；若 `write_excel=False` 则为空。 |
+| `approved_full_data` | 主输入数据中的全量 approved 样本。 |
+| `ri_approved_reference_data` | 实际用于 RI 规则估计的 approved reference 样本。 |
+| `ri_approved_summary` | approved reference 来源、样本量、输出 approved 样本量和保留比例。 |
 
 ## 2. 信用建模流水线
 
