@@ -1273,6 +1273,81 @@ result.split_recommendation
 | `Seed stability: average max bad-rate gap` | 判断随机种子对切分坏账率扰动是否明显。 |
 | `Population bad-rate snapshot` | 快速查看主要人群维度下各标签坏账率差异。 |
 
+## 7. 通用多进程引擎
+
+`ParallelApplyEngine` 是一个通用执行引擎，不绑定某条业务 Pipeline。它可以把可序列化函数分配到多进程或多线程执行，适合对 SMF 现有函数、用户自定义清洗函数、变量分析函数、SQL/文件任务做并行加速。
+
+### 使用边界
+
+引擎不能可靠证明任意函数一定能按行或按列拆分。函数如果依赖全局均值、排序、窗口、跨 chunk 状态、随机数或外部副作用，拆分后结果可能改变。因此默认建议用户显式传入 `split_axis="row"`、`"column"` 或 `"chunk"`；`split_axis="auto"` 只做小样本 probe，不能证明时会要求用户显式指定。
+
+### 最小示例
+
+```python
+from Modeling_Tool import ParallelApplyEngine, ParallelApplyConfig, parallel_apply
+
+def score_chunk(df):
+    return df.assign(score=df["x1"] * 0.3 + df["x2"] * 0.7)
+
+result = ParallelApplyEngine(
+    ParallelApplyConfig(
+        split_axis="row",
+        backend="process",
+        n_jobs=8,
+        n_chunks=16,
+    )
+).run(data=modeling_df, func=score_chunk)
+
+scored_df = result.output
+```
+
+便捷函数直接返回合并结果：
+
+```python
+scored_df = parallel_apply(
+    data=modeling_df,
+    func=score_chunk,
+    split_axis="row",
+    backend="process",
+    n_jobs=8,
+)
+```
+
+### 拆分方式
+
+| `split_axis` | 用途 | 合并默认 |
+|---|---|---|
+| `"row"` | 对评分、清洗、逐行特征生成等行独立函数分行处理。 | `pd.concat(axis=0)` |
+| `"column"` | 对变量分析、单变量统计、WOE/PSI/IV 类任务分列处理；可通过 `required_cols` / `id_cols` 给每个 chunk 带上标签或主键。 | `pd.concat(axis=1)` |
+| `"chunk"` | 用户自己传 `chunks`，适合 SQL 列表、文件列表、模型列表、变量列表等非 DataFrame 任务。 | `pd.concat(axis=0)`，也可设为 `list/dict` |
+| `"auto"` | 小样本分别尝试 row/column 拆分并与串行结果对比；不确定或双向都可行时抛错。 | 根据识别结果决定 |
+
+### 关键参数
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `backend` | `"process"` | CPU 密集任务用 `"process"`；IO 密集或对象不可序列化时用 `"thread"`；调试用 `"sequential"`。 |
+| `n_jobs` | `"auto"` | `"auto"` 使用 `CPU - 1`；`-1` 使用所有 CPU；正整数指定 worker 数。 |
+| `chunk_size` / `n_chunks` | `None` | 二选一，控制切分粒度。 |
+| `combine` | `"concat"` | 支持 `"concat"`、`"list"`、`"dict"`、`"none"`。 |
+| `preserve_order` | `True` | 输出按 chunk 顺序合并。 |
+| `pass_chunk_info` | `False` | 为 `True` 时给函数传入 `chunk_info`，包含 `chunk_id/rows/columns`。 |
+| `on_error` | `"raise"` | `"raise"` 遇错抛出；`"collect"` 收集失败 chunk 到 `result.errors`。 |
+| `validate_picklable` | `True` | 多进程前校验函数和参数是否可序列化。 |
+| `required_cols` / `id_cols` | `[]` | column split 时每个列 chunk 都保留这些列。 |
+
+### 返回结果
+
+`ParallelApplyEngine.run()` 返回 `ParallelApplyResult`：
+
+| 字段 | 说明 |
+|---|---|
+| `output` | 合并后的最终结果。 |
+| `chunk_outputs` | 每个成功 chunk 的原始输出。 |
+| `errors` | `on_error="collect"` 时的错误明细。 |
+| `summary` | 实际 split、backend、worker 数、chunk 数、成功/失败数和耗时。 |
+| `split_axis_resolved` | `auto` 模式下最终识别出的拆分方式。 |
+
 ## 推荐配置模板
 
 ### 快速信用建模
