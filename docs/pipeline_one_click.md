@@ -1281,6 +1281,8 @@ result.split_recommendation
 
 引擎不能可靠证明任意函数一定能按行或按列拆分。函数如果依赖全局均值、排序、窗口、跨 chunk 状态、随机数或外部副作用，拆分后结果可能改变。因此默认建议用户显式传入 `split_axis="row"`、`"column"` 或 `"chunk"`；`split_axis="auto"` 只做小样本 probe，不能证明时会要求用户显式指定。
 
+`backend="thread"` 会共享同一个 Python 进程内的全局状态。如果被调用函数会修改类方法、全局配置、环境变量、随机种子或连接池状态，需要函数自身提供线程安全保护；`ODPSRunner.run_sql()` 的宽表下载补丁已内置锁和引用计数保护。
+
 ### 最小示例
 
 ```python
@@ -1326,7 +1328,7 @@ scored_df = parallel_apply(
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `backend` | `"process"` | CPU 密集任务用 `"process"`；IO 密集或对象不可序列化时用 `"thread"`；调试用 `"sequential"`。 |
+| `backend` | `"process"` | CPU 密集任务用 `"process"`；IO 密集或对象不可序列化时用 `"thread"`；调试用 `"sequential"`。`thread` 后端共享进程内全局状态。 |
 | `n_jobs` | `"auto"` | `"auto"` 使用 `CPU - 1`；`-1` 使用所有 CPU；正整数指定 worker 数。 |
 | `chunk_size` / `n_chunks` | `None` | 二选一，控制切分粒度。 |
 | `combine` | `"concat"` | 支持 `"concat"`、`"list"`、`"dict"`、`"none"`。 |

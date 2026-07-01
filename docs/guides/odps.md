@@ -50,14 +50,14 @@ df = odps.run_sql(
 
 ### 3.2 宽表 schema 补丁
 
-当 SQL 返回列数 > 200 时, `_patch_wide_schema_download` 自动 patch ODPS Tunnel:
+当 SQL 返回列数 > 200 时, `ODPSRunner` 会自动启用线程安全的 wide-schema patch:
 
 ```text
 HTTP 414 (URI Too Long) ← 原始请求中包含全部列名作为 URL query 参数
                          修补后 → 移除 columns 参数, 由 server 全量返回
 ```
 
-补丁会自动恢复 (`finally` 块), 对调用方透明。
+补丁会自动恢复，对调用方透明。多线程同时下载宽表时，内部用锁和引用计数保证最后一个下载任务退出后才恢复 ODPS 原始方法，避免并发 patch/unpatch 互相覆盖。
 
 ### 3.3 `__init__` 中的连接配置
 
@@ -136,7 +136,7 @@ odps.run_sql(sql, to_df=False, csv_path="x.csv")
 odps.errors.InternalServerError: HTTP 414 (Request-URI Too Long)
 ```
 
-已由 `_patch_wide_schema_download` 自动处理, 无需手动干预。
+已由 `ODPSRunner` 的线程安全 wide-schema patch 自动处理, 无需手动干预。
 
 ### ❌ 坑 3: ODPS Instance 是一次性的
 
