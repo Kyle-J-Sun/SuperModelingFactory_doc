@@ -29,6 +29,41 @@ from Modeling_Tool import CreditModelPipeline, CreditModelPipelineConfig
 
 `RejectInferencePipeline` 用于已审批通过样本有标签、被拒绝样本无标签的场景。它可以自动训练 pre-score，也可以直接使用你已经准备好的拒绝推断分数。
 
+### 流程图
+
+```mermaid
+flowchart LR
+    A["申请样本<br/>approved / rejected"] --> B{"train_prescore"}
+    B -->|True| C["通过样本训练 pre-score"]
+    B -->|False| D["使用已有 score_col"]
+    C --> E["全量样本打 pre-score"]
+    D --> F["拆分 approved / rejected"]
+    E --> F
+    F --> G{"OOT 来源"}
+    G -->|oot_data| H["使用外部 OOT"]
+    G -->|oot_frac| I["从 approved 抽样 OOT"]
+    H --> J["生成 RI 增强数据集"]
+    I --> J
+    J --> K["simple / hard / fuzzy / parceling"]
+    K --> L{"train_ri_models"}
+    L -->|True| M["训练 RI 后模型"]
+    L -->|False| N["只输出 RI 数据集与摘要"]
+    M --> O["评估 OOT 表现并选择 best_method"]
+    N --> P["CSV / Excel / Result"]
+    O --> P
+```
+
+### 中间步骤与可配置参数
+
+| 步骤 | 产物 | 主要可配置参数 |
+|---|---|---|
+| 输入校验与特征准备 | `approved_data`、`rejected_data` 基础样本 | `approved_col`、`target_col`、`score_col`、`feature_cols` |
+| pre-score 训练或复用 | `score_col` 分数列、`prescore_model` | `train_prescore`、`prescore_model_type`、`prescore_params`、`prescore_test_size`、`random_state` |
+| OOT 口径确定 | OOT 样本、建模样本池 | `oot_data`、`oot_frac`、`random_state` |
+| RI 数据集生成 | `ri_datasets`、`ri_summary` | `ri_methods`、`ri_method_params`，例如 `bad_rate`、`cutoff`、`weight_factor`、`n_parcels` |
+| RI 后模型训练 | `ri_models`、`ri_model_perf` | `train_ri_models`、`ri_model_type`、`ri_model_params` |
+| 性能评估与报告 | `best_method`、`report_path` | `perf_pct_bins`、`min_bin_prop`、`write_outputs`、`write_excel`、`output_dir` |
+
 ### 最小示例
 
 ```python
@@ -131,6 +166,51 @@ cfg = RejectInferencePipelineConfig(
 ## 2. 信用建模流水线
 
 `CreditModelPipeline` 封装完整信用建模主线：样本切分、PSI/IV/相关性筛选、WOE、模型训练、backward、Optuna、评估、解释和 Excel 报告。
+
+### 流程图
+
+```mermaid
+flowchart LR
+    A["建模样本 DataFrame"] --> B{"已有 sample_col"}
+    B -->|有 ins/oos/oot| C["读取样本切分"]
+    B -->|无| D{"oot_col"}
+    D -->|有| E["按 oot_col 拆 OOT"]
+    D -->|无| F["随机切 INS / OOS / OOT"]
+    E --> G["INS / OOS 切分"]
+    F --> G
+    C --> H["特征筛选<br/>PSI / IV / Corr"]
+    G --> H
+    H --> I["WOE 分箱与转换"]
+    I --> J["训练候选模型<br/>LR / LGB / XGB / Cat"]
+    J --> K{"backward_enabled"}
+    K -->|True| L["逐步回归 / 变量剔除"]
+    K -->|False| M["保留筛选后特征"]
+    L --> N{"Optuna"}
+    M --> N
+    N -->|optuna_models 非空| O["超参搜索"]
+    N -->|空| P["跳过调参"]
+    O --> Q["性能评估"]
+    P --> Q
+    Q --> R{"解释性"}
+    R -->|explain_models / owen_enabled| S["SHAP / LIME / PDP / ALE / ICE / Owen"]
+    R -->|关闭| T["跳过解释"]
+    S --> U["CSV / Excel / Result"]
+    T --> U
+```
+
+### 中间步骤与可配置参数
+
+| 步骤 | 产物 | 主要可配置参数 |
+|---|---|---|
+| 样本切分 | `splits`，包含 `ins/oos/oot` | `sample_col`、`oot_col`、`split_config`、`random_state` |
+| 特征筛选 | `feature_selection_summary`、候选特征列表 | `feature_cols`、`feature_selection.psi_enabled`、`feature_selection.iv_enabled`、`feature_selection.corr_enabled` 及各阈值 |
+| WOE 分箱与转换 | `woe_artifacts`、WOE 特征 | `woe_engine`、`woe_params`、`monotone_woe_params` |
+| 候选模型训练 | `models`、初始模型表现 | `train_models`、`model_params`、`target_col` |
+| Backward 变量剔除 | `backward_summary`、`selected_features` | `backward_enabled`、`backward_model`、`backward_params`、`use_backward_features` |
+| Optuna 调参 | `optuna_results`、调参后模型 | `optuna_models`、`optuna_n_trials`、`optuna_params` |
+| 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop` |
+| 解释性与 Owen | `explain_outputs` | `explain_models`、`explain_params`、`owen_enabled`、`business_prior_groups` |
+| 报告输出 | `report_path` | `output_dir`、`write_outputs`、`write_excel` |
 
 ### 最小示例
 
@@ -398,6 +478,46 @@ business_prior_groups={
 
 `ScoreComparisonPipeline` 用于多模型分、多版本分数或 champion/challenger 模型分对比。它封装全局 AUC/KS、分维度 AUC/KS、Gains、自定义指标、cross risk 和 pairwise score cross risk。
 
+### 流程图
+
+```mermaid
+flowchart LR
+    A["带标签和多列 score 的 DataFrame"] --> B["校验 target / score / weight"]
+    B --> C["全局模型表现<br/>AUC / KS"]
+    C --> D["分组表现"]
+    D --> E["时间维度<br/>time_dims"]
+    D --> F["人群维度<br/>population_dims"]
+    D --> G["时间 x 人群交叉"]
+    C --> H["Gains 表"]
+    H --> I{"自定义指标"}
+    I -->|gains_add_func| J["用户自定义函数"]
+    I -->|custom_metric_cols| K["内置均值/计数指标"]
+    E --> L["Cross risk"]
+    F --> L
+    G --> L
+    L --> M{"pairwise_cross_enabled"}
+    M -->|True| N["base score x comp score<br/>pairwise cross risk"]
+    M -->|False| O["跳过 pairwise"]
+    J --> P["CSV / Excel / Result"]
+    K --> P
+    N --> P
+    O --> P
+```
+
+### 中间步骤与可配置参数
+
+| 步骤 | 产物 | 主要可配置参数 |
+|---|---|---|
+| 输入校验与分数角色定义 | 标准化后的 score 数据 | `target_col`、`score_cols`、`base_score`、`comp_scores`、`weight_col` |
+| 全局表现评估 | `global_perf` | `nbins`、`min_data_size`、`weight_col` |
+| 分时间维度评估 | `group_perf[time_dim]` | `time_dims`、`group_min_size`、`group_specs` |
+| 分人群维度评估 | `group_perf[population_dim]` | `population_dims`、`segment_dims`、`group_min_size`、`group_specs` |
+| 时间 x 人群交叉评估 | `group_perf[population_x_time]` | `include_time_population_cross`、`time_dims`、`population_dims`、`group_min_size` |
+| Gains 与业务指标 | `gains` | `gains_add_func`、`custom_metric_cols`、`nbins` |
+| Cross risk | `cross_results` | `cross_vars`、`cross_metrics`、`cross_binning_numeric`、`nbins`、`min_bin_prop`、`equal_freq` |
+| Pairwise score cross | `pairwise_cross` | `pairwise_cross_enabled`、`pairwise_cross_agg_dict`、`base_score`、`comp_scores` |
+| 报告输出 | `report_path` | `output_dir`、`write_outputs`、`write_excel` |
+
 ### 最小示例
 
 ```python
@@ -632,6 +752,41 @@ cfg = ScoreComparisonPipelineConfig(
 
 `ScoreConsistencyUATPipeline` 用于模型上线或 UAT 阶段的 online/offline 一致性校验。它复用主包 `UATConsistencyChecker`，检查 flow_id 覆盖、主模型分、子模型分、全量特征、时间字段和 per-flow 问题明细。
 
+### 流程图
+
+```mermaid
+flowchart LR
+    A{"数据来源"} -->|SQL 模式| B["读取 offline_sql / online_sql"]
+    A -->|DataFrame 模式| C["offline_data / online_data"]
+    B --> D["SQLRunner 拉数"]
+    C --> E["标准化 online / offline 数据"]
+    D --> E
+    E --> F["flow_id outer merge"]
+    F --> G["覆盖率检查<br/>common / only_offline / only_online"]
+    G --> H["主模型分一致性"]
+    H --> I{"子模型分"}
+    I -->|include_submodel_scores=True| J["作为普通特征检查"]
+    I -->|False + submodel_pairs| K["子模型专项检查"]
+    J --> L["全量特征一致性"]
+    K --> L
+    L --> M["时间字段容忍度检查"]
+    M --> N["per-flow 问题明细"]
+    N --> O["CSV / Excel / Result"]
+```
+
+### 中间步骤与可配置参数
+
+| 步骤 | 产物 | 主要可配置参数 |
+|---|---|---|
+| 数据获取 | `offline_data`、`online_data` | `offline_data`、`online_data`、`sql_dir`、`offline_sql`、`online_sql`、`sqlrunner`、`env_path`、`n_process` |
+| 覆盖率检查 | `coverage_summary`、`compare_data`、`both_data` | 固定以 `flow_id` 为主键；`info_list` 会进入明细报告 |
+| 主模型分检查 | `main_score_summary` | `main_model_score_col`、`tol_score` |
+| 子模型分检查 | `submodel_summary` | `include_submodel_scores`、`submodel_pairs`、`tol_score` |
+| 普通特征一致性 | `feature_diff_summary` | `tol_feat`、`info_list`、`time_featlist`、主模型分和子模型分配置 |
+| 时间字段一致性 | `time_summary` | `time_featlist`、`tol_time_seconds` |
+| per-flow 明细 | `per_flow_report`、`summary` | `info_list`、各类容忍度配置 |
+| 报告输出 | `report_path` | `output_dir`、`write_outputs`、`write_excel`、`excel_output_path`、`excel_font` |
+
 ### SQL 模式示例
 
 ```python
@@ -753,6 +908,44 @@ cfg = ScoreConsistencyUATPipelineConfig(
 ## 5. 纯样本分析流水线
 
 `SampleAnalysisPipeline` 用于建模前的样本成熟度与切分方案分析。它回答三个问题：不同 `y` 标签是否已经有足够表现样本、OOT 取最后几个时间窗更稳、INS/OOS 用 70/30、75/25 还是 80/20 更稳。Pipeline 使用 SMF `SampleSplitter` 做分层 INS/OOS 切分，并用 `EvaluationPipeline` 做分维度坏账率分析；Excel 报告由 `ExcelMaster` 生成。
+
+### 流程图
+
+```mermaid
+flowchart LR
+    A["全量申请样本"] --> B["标签成熟度统计"]
+    B --> C["逐个 target_col 过滤成熟样本"]
+    C --> D["全局坏账率"]
+    C --> E["时间维度坏账率<br/>time_dims"]
+    C --> F["人群维度坏账率<br/>population_dims"]
+    C --> G["时间 x 人群坏账率"]
+    C --> H["画像统计<br/>profile_cols"]
+    C --> I["候选 OOT 窗口"]
+    I --> J["按 oot_time_dim 取尾段"]
+    J --> K["INS / OOS 分层切分"]
+    K --> L["遍历 ins_oos_ratios 和 random_seeds"]
+    L --> M["坏账率 gap 与样本量稳定性"]
+    M --> N["推荐 split 方案"]
+    D --> O["CSV / ExcelMaster / Result"]
+    E --> O
+    F --> O
+    G --> O
+    H --> O
+    N --> O
+```
+
+### 中间步骤与可配置参数
+
+| 步骤 | 产物 | 主要可配置参数 |
+|---|---|---|
+| 标签成熟度统计 | `label_coverage_summary` | `target_cols`、`time_col`；若有 `is_approved` 会额外统计成熟通过样本数 |
+| 坏账率分维度分析 | `segment_bad_rate_summary` | `time_dims`、`population_dims` |
+| 时间 x 人群交叉分析 | `segment_bad_rate_summary` 中的 `time_x_population` | `time_dims`、`population_dims` |
+| 画像分析 | `profile_summary` | `profile_cols`、`time_dims`、`population_dims` |
+| OOT 候选窗口生成 | 候选 OOT 样本 | `oot_time_dim`、`oot_windows` |
+| INS/OOS 稳定性切分 | `split_candidate_summary` | `ins_oos_ratios`、`random_seeds`、`target_cols` |
+| 推荐方案排序 | `split_recommendation` | `min_sample_size`；排序逻辑优先坏账率 gap 小、OOT 样本大、接近 75/25 |
+| ExcelMaster 报告 | `Sample_Analysis_Report.xlsx` | `output_dir`、`write_outputs`、`write_excel` |
 
 ### 最小示例
 
