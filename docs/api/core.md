@@ -18,6 +18,10 @@
 
 ::: Modeling_Tool.Core.ODPS_Tool
 
+## ODPS 并发管理 — `Parallel_ODPS_Manager`
+
+::: Modeling_Tool.Core.Parallel_ODPS_Manager
+
 ## 斜率计算 — `Slope_Tool`
 
 ::: Modeling_Tool.Core.Slope_Tool

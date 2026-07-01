@@ -38,7 +38,7 @@ df = odps.run_sql(
 
 !!! warning "反直觉的 `to_df=False + csv_path`"
 
-    历史上 `to_df=False` 会让 `csv_path` 也被**静默忽略** — 见 [§5 历史坑位](#5-常见坑位)。
+    历史上 `to_df=False` 会让 `csv_path` 也被**静默忽略** — 见 [§6 历史坑位](#6-常见坑位)。
     当前版本已修复: `to_df` 与 `csv_path` 互相独立, 只要任一被设置就会触发下载。
 
 ## 3. 内部机制
@@ -118,7 +118,90 @@ _ = odps.run_sql(sql, to_df=False, csv_path=str(csv_path), n_process=4)
 print(f"样本已抽取: {csv_path}")
 ```
 
-## 5. 常见坑位
+## 5. `ParallelODPSManager` 并发拉取/上传
+
+`ParallelODPSManager` 是 `ODPSRunner + ParallelApplyEngine` 的高层封装，适合把大表按 chunk 并发处理：
+
+- `pull()`：按 `unique_key` 哈希分桶，并发执行 SQL 拉数，合并成本地 CSV。
+- `push()`：接受 pandas DataFrame 或本地 CSV，按行拆 chunk 上传为 ODPS 临时表，再 `UNION ALL` 写入目标表，并清理临时表。
+
+### 5.1 并发 pull
+
+SQL 模板必须包含 `{chunk_filter}`，并放在希望切分的基础表 `WHERE` 子句里：
+
+```sql
+SELECT flow_id, score, apply_time
+FROM mex_anls.source_table
+WHERE 1 = 1
+  AND {chunk_filter}
+```
+
+Python 调用：
+
+```python
+from Modeling_Tool import ParallelODPSConfig, ParallelODPSManager
+
+manager = ParallelODPSManager(
+    ParallelODPSConfig(
+        unique_key="flow_id",
+        n_chunks=20,
+        n_jobs=5,
+        backend="thread",
+        tmp_dir="data/_chunks",
+    )
+)
+
+summary = manager.pull(
+    sql_path="sql/pull_sample.sql",
+    out_path="data/sample.csv",
+)
+```
+
+每个 chunk 会自动注入：
+
+```sql
+ABS(HASH(flow_id)) % 20 = <chunk_id>
+```
+
+如果不直接传 `n_chunks`，可以传 `chunk_size`；此时 `pull()` 会先跑 `count_query` 推导分块数。对复杂宽表 join，建议手写更轻量的 `count_query`。
+
+### 5.2 并发 push
+
+`push()` 支持 DataFrame 或 CSV 路径。目标表写入模式必须显式指定，避免误覆盖生产表：
+
+```python
+summary = manager.push(
+    data=df_or_csv_path,
+    target_table="mex_anls.target_table",
+    write_mode="overwrite",  # 必填: "overwrite" 或 "append"
+)
+```
+
+执行流程：
+
+1. 按行拆分 DataFrame；CSV 输入使用 `pd.read_csv(..., chunksize=...)` 流式切分到本地临时 chunk 文件。
+2. 每个 chunk 上传到独立 ODPS tmp 表，例如 `tmp_parallel_odps_<run_id>_0000`。
+3. 所有 tmp 表通过 `UNION ALL` 写入最终目标表。
+4. 成功后清理 tmp 表；失败时默认也清理，除非 `keep_tmp_on_error=True`。
+
+写入模式：
+
+| `write_mode` | 行为 |
+|---|---|
+| `"overwrite"` | 先删除目标表，再 `CREATE TABLE target AS SELECT ... UNION ALL ...`。 |
+| `"append"` | 使用 `INSERT INTO TABLE target SELECT ... UNION ALL ...` 追加到已有目标表。 |
+
+### 5.3 backend 建议
+
+| backend | 建议 |
+|---|---|
+| `"thread"` | ODPS IO 任务默认推荐；共享连接池，`ODPSRunner` 宽表下载补丁已做线程安全保护。 |
+| `"sequential"` | 调试 chunk SQL、上传逻辑和 tmp 表清理时使用。 |
+| `"process"` | 每个 worker 内新建 `ODPSRunner()`，不跨进程传活连接；适合隔离性更强但开销更高的场景。 |
+
+第一版 `push()` 不支持分区目标表；如果需要分区写入，后续可扩展 `partition` 参数。
+
+## 6. 常见坑位
 
 ### ❌ 坑 1: `to_df=False + csv_path` 历史上 CSV 不会写
 
@@ -180,7 +263,7 @@ PID=$!
 echo "ODPS job PID=$PID, log=/tmp/odps_*.log"
 ```
 
-## 6. `ODPSRunner` 其他方法
+## 7. `ODPSRunner` 其他方法
 
 ### `download_table(table_name, partition=None, n_process=1, csv_path=None)`
 
@@ -220,7 +303,7 @@ schema = ODPSRunner.cre_table_schema(df, partition_name="dt")
 # int64 → bigint, float64 → double, object → string
 ```
 
-## 7. 相关工具函数
+## 8. 相关工具函数
 
 [`Modeling_Tool.Core.utils.pull_attributes_in_batch`](../api/core.md) 提供按批切分 `{varlist}` 的能力 — 当单次 SQL 拉取列数 > 2000 时强烈建议使用:
 
