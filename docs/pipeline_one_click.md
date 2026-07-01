@@ -939,7 +939,7 @@ from Modeling_Tool import MockSamplePipeline, MockSamplePipelineConfig
 
 result = MockSamplePipeline(
     MockSamplePipelineConfig(
-        n_samples=80_000,
+        n_samples=80000,
         applied_sample=1,
     )
 ).run()
@@ -973,7 +973,7 @@ result = MockSamplePipeline(cfg).run()
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `n_samples` | `80_000` | 初始全量申请样本量。若 `applied_sample=0`，最终输出约为 `n_samples * approve_rate`。 |
+| `n_samples` | `80000` | 初始全量申请样本量。若 `applied_sample=0`，最终输出约为 `n_samples * approve_rate`。 |
 | `applied_sample` | `1` | `1` 输出全量申请；`0` 只输出通过样本，且 `is_approved` 全为 1。 |
 | `approve_rate` | `0.25` | 全量申请中的审批通过率。 |
 | `num_online_scores` | `5` | 生成 `online_model_pb_1 ... online_model_pb_n`。 |
