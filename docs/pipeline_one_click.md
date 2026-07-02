@@ -71,7 +71,7 @@ flowchart LR
 |---|---|---|
 | 输入校验与特征准备 | `approved_data`、`rejected_data` 基础样本 | `approved_col`、`target_col`、`score_col`、`feature_cols` |
 | pre-score 训练或复用 | `score_col` 分数列、`prescore_model` | `train_prescore`、`prescore_model_type`、`prescore_params`、`prescore_test_size`、`random_state` |
-| OOT 口径确定 | OOT 样本、建模样本池、`oot_summary` | `oot_data`、`oot_frac`、`random_state`；外部 OOT 会自动过滤 `target_col` 为空的未表现样本 |
+| OOT 口径确定 | OOT 样本、建模样本池、`oot_summary` | `split_col`、`oot_data`、`oot_frac`、`random_state`；外部 OOT 或 split OOT 会自动过滤 `target_col` 为空的未表现样本 |
 | RI 参考样本确定 | `ri_approved_reference_data`、`ri_approved_summary` | `ri_approved_data`、`ri_approved_query`、`ri_approved_func`、`ri_approved_frac`、`ri_approved_n`、`ri_approved_scope` |
 | RI 数据集生成 | `ri_datasets`、`ri_summary` | `ri_methods`、`ri_method_params`，例如 `bad_rate`、`cutoff`、`weight_factor`、`n_parcels` |
 | RI 后模型训练 | `ri_models`、`ri_model_perf` | `train_ri_models`、`include_no_ri_benchmark`、`ri_model_type`、`ri_model_params` |
@@ -110,12 +110,15 @@ result.best_method
 
 `save_models=True` 时会保存中间模型 pkl：pre-score 模型保存为 `prescore_model.pkl`，每个 RI 后模型保存为 `ri_model_{method}.pkl`，benchmark 保存为 `ri_model_no_ri_benchmark.pkl`。默认使用 SMF `save_model()` artifact 格式保存 metadata。
 
-外部 `oot_data` 可以传全量申请数据。若 `target_col` 为空，Pipeline 会自动过滤未表现样本，并通过 warning 提示过滤数量；过滤情况会写入 `result.oot_summary`。
+如果输入数据已有 `INS/OOS/OOT` 切分字段，推荐传 `split_col`。此时 `INS/OOS` 样本用于 pre-score、RI reference 和 RI 后模型训练，`OOT` 样本只用于评估，不进入 RI 增强训练集。
+
+外部 `oot_data` 可以传全量申请数据，且优先级高于 `split_col == "oot"`。若 OOT 中 `target_col` 为空，Pipeline 会自动过滤未表现样本，并通过 warning 提示过滤数量；过滤情况会写入 `result.oot_summary`。
 
 ```python
 cfg = RejectInferencePipelineConfig(
     ri_methods=["simple_augment", "parceling"],
     train_ri_models=True,
+    split_col="model_split",
     include_no_ri_benchmark=True,
     save_models=True,
     oot_data=df_oot_full_application,
@@ -146,6 +149,7 @@ result.oot_summary        # 外部 OOT 成熟样本过滤摘要
 | `target_col` | `"badflag"` | 目标标签列。 |
 | `score_col` | `"prescore_prob"` | RI 使用的预评分列。 |
 | `feature_cols` | `None` | 特征列列表。建议显式传入；不传时会从数值列中排除标签、审批标识、分数字段后推断。 |
+| `split_col` | `None` | 已切分样本标识列，取值大小写不敏感，支持 `ins/oos/oot`。传入后 `ins/oos` 用于 RI 训练，`oot` 只用于评估；若同时传 `oot_data`，优先使用 `oot_data`。 |
 | `random_state` | `42` | 随机种子，用于 pre-score 切分和 OOT 抽样。 |
 | `write_outputs` | `True` | 是否写 CSV、图片等中间产物。 |
 | `write_excel` | `True` | 是否输出 Excel 报告。 |
@@ -258,7 +262,7 @@ cfg = RejectInferencePipelineConfig(
 
 ```mermaid
 flowchart LR
-    A["建模样本 DataFrame"] --> B{"已有 sample_col"}
+    A["建模样本 DataFrame"] --> B{"已有 split_col / sample_col"}
     B -->|有 ins/oos/oot| C["读取样本切分"]
     B -->|无| D{"oot_col"}
     D -->|有| E["按 oot_col 拆 OOT"]
@@ -304,7 +308,7 @@ flowchart LR
 
 | 步骤 | 产物 | 主要可配置参数 |
 |---|---|---|
-| 样本切分 | `splits`，包含 `ins/oos/oot` | `sample_col`、`oot_col`、`split_config`、`random_state` |
+| 样本切分 | `splits`，包含 `ins/oos/oot` | `split_col`、`sample_col`、`oot_col`、`split_config`、`random_state` |
 | 特征筛选 | `feature_selection_summary`、候选特征列表 | `feature_cols`、`feature_selection.psi_enabled`、`feature_selection.iv_enabled`、`feature_selection.corr_enabled` 及各阈值 |
 | WOE 分箱与转换 | `woe_artifacts`、WOE 特征 | `woe_engine`、`woe_params`、`monotone_woe_params` |
 | Backward 变量剔除 | `backward_summary`、`selected_features` | `backward_enabled`、`backward_model`、`backward_params`、`use_backward_features` |
@@ -350,7 +354,7 @@ result.perf_results["lgb"]
 
 | 场景 | 必需列 | 说明 |
 |---|---|---|
-| 已切好样本 | `sample_col` | 默认 `sample_ind`，取值建议为 `ins`、`oos`、`oot`。 |
+| 已切好样本 | `split_col` 或 `sample_col` | 推荐使用 `split_col` 指定字段名；`sample_col` 保留兼容。取值大小写不敏感，支持 `ins/oos/oot`。 |
 | 只标记 OOT | `oot_col` | 默认 `oot_flag`，`0` 为 INS+OOS，非 `0` 为 OOT；Pipeline 再随机切 INS/OOS。 |
 | 未标记样本 | 无 | 会从全量数据随机切 INS/OOS，并用 OOS 作为 OOT 的兜底。 |
 
@@ -361,8 +365,9 @@ result.perf_results["lgb"]
 | `output_dir` | `"output"` | 输出根目录。 |
 | `target_col` | `"badflag"` | 目标标签列。 |
 | `feature_cols` | `None` | 原始入模特征列。建议显式传入；不传时从数值列推断。 |
-| `sample_col` | `"sample_ind"` | 已切分样本标识列。若存在并包含 `ins/oos/oot`，优先使用。 |
-| `oot_col` | `"oot_flag"` | OOT 标识列。仅在没有有效 `sample_col` 时使用。 |
+| `split_col` | `None` | 推荐的新样本切分字段名。若传入，优先于 `sample_col`，取值支持 `ins/oos/oot`。 |
+| `sample_col` | `"sample_ind"` | 兼容旧版本的已切分样本标识列。未传 `split_col` 时使用。 |
+| `oot_col` | `"oot_flag"` | OOT 标识列。仅在没有有效 `split_col/sample_col` 时使用。 |
 | `random_state` | `42` | 随机种子。 |
 | `write_outputs` | `True` | 是否输出 CSV、图表等中间文件。 |
 | `write_excel` | `True` | 是否输出 Excel 报告。 |
@@ -726,7 +731,7 @@ result.high_corr_pairs
 
 | 步骤 | 产物 | 主要可配置参数 |
 |---|---|---|
-| 样本切分 | `splits` | `sample_col`、`oot_col`、`split_config`、`random_state` |
+| 样本切分 | `splits` | `split_col`、`sample_col`、`oot_col`、`split_config`、`random_state` |
 | 分布分析 | `distribution_summary` | `time_dims`、`population_dims`、`group_specs`、`distribution_params` |
 | WOE 分箱 | `woe_artifacts` | `woe_engine`、`woe_params`、`monotone_woe_params`、`categorical_features` |
 | Monotone refine | `woe_artifacts["refine_summary"]` | `monotone_refine_cate_enabled`、`monotone_refine_dtree_enabled`、`monotone_refine_chi2_enabled` 及对应 params |
@@ -745,7 +750,8 @@ result.high_corr_pairs
 | `target_cols` | `None` | 标签列；为空时跳过 WOE、IV、KS 和相关性中的 IV/KS 对比。 |
 | `new_feature_cols` | `None` | 新接特征列表；建议显式传入。 |
 | `incumbent_feature_cols` | `None` | 现有特征列表，主要用于 new vs incumbent 相关性对比。 |
-| `sample_col` / `oot_col` | `"sample_ind"` / `"oot_flag"` | 与 `CreditModelPipeline` 一致的样本切分字段。 |
+| `split_col` | `None` | 推荐的新样本切分字段名，取值大小写不敏感，支持 `ins/oos/oot`。优先于 `sample_col`。 |
+| `sample_col` / `oot_col` | `"sample_ind"` / `"oot_flag"` | 与 `CreditModelPipeline` 一致的兼容切分字段；未传 `split_col` 时使用 `sample_col`。 |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS 切分配置。 |
 | `time_dims` | `["apply_month"]` | 时间维度。 |
 | `population_dims` | `[]` | 人群维度，如渠道、产品、策略版本。 |
@@ -835,6 +841,7 @@ flowchart LR
 |---|---|---|
 | 输入校验与分数角色定义 | 标准化后的 score 数据 | `target_col`、`score_cols`、`base_score`、`comp_scores`、`weight_col` |
 | 全局表现评估 | `global_perf` | `nbins`、`min_data_size`、`weight_col` |
+| 分 INS/OOS/OOT 评估 | `group_perf[split_col]` | `split_col`；仅作为分组维度，不做训练切分 |
 | 分时间维度评估 | `group_perf[time_dim]` | `time_dims`、`group_min_size`、`group_specs` |
 | 分人群维度评估 | `group_perf[population_dim]` | `population_dims`、`segment_dims`、`group_min_size`、`group_specs` |
 | 时间 x 人群交叉评估 | `group_perf[population_x_time]` | `include_time_population_cross`、`time_dims`、`population_dims`、`group_min_size` |
@@ -893,6 +900,7 @@ result.pairwise_cross
 | `base_score` | `None` | 基准分数列。未传时使用 `score_cols[0]`。 |
 | `comp_scores` | `None` | 待比较分数列。未传时使用 `score_cols` 中除 `base_score` 以外的列。 |
 | `weight_col` | `None` | 样本权重列。 |
+| `split_col` | `None` | 已切分样本标识列，取值支持 `ins/oos/oot`。在本 Pipeline 中作为默认分组维度输出，不改变 global/cross 全量评估。 |
 | `random_state` | `42` | 随机种子，保留给后续需要抽样的扩展逻辑。 |
 | `write_outputs` | `True` | 是否输出 CSV。 |
 | `write_excel` | `True` | 是否输出 Excel 报告。 |
@@ -936,6 +944,7 @@ Pipeline 会自动生成：
 
 | 输出 key | 维度 |
 |---|---|
+| `split_col` 字段名 | INS/OOS/OOT 分组；仅在配置 `split_col` 时生成 |
 | `apply_month` | 单时间维度 |
 | `vintage` | 单时间维度 |
 | `channel` | 单人群维度 |
