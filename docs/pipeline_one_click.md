@@ -254,6 +254,10 @@ cfg = RejectInferencePipelineConfig(
 | `model_paths` | `{model_key: path}`，当 `save_models=True` 时记录 pre-score、benchmark 和 RI 后模型 pkl 路径。 |
 | `oot_summary` | OOT 来源、原始样本数、成熟样本数、过滤未表现样本数和缺失率。 |
 
+### 图表输出
+
+当 `write_outputs=True` 且 `train_ri_models=True` 时，`RejectInferencePipeline` 会在 `report/perf_figs/` 下输出每个 RI 后模型的性能图，例如 `perf_simple_augment.png`、`perf_fuzzy_augment.png`。`fuzzy_augment` 这类带样本权重的评估会继续按加权口径输出表格，同时也会保存对应的 score performance 图。
+
 ## 2. 信用建模流水线
 
 `CreditModelPipeline` 封装完整信用建模主线：样本切分、PSI/IV/相关性筛选、WOE、模型训练、backward、Optuna、评估、解释和 Excel 报告。
@@ -319,7 +323,7 @@ flowchart LR
 | Optuna 调参 | `optuna_results`、调参后模型 | `optuna_models`、`optuna_n_trials`、`optuna_params` |
 | 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop` |
 | 解释性与 Owen | `explain_outputs` | `explain_models`、`explain_params`、`owen_enabled`、`business_prior_groups` |
-| 报告输出 | `report_path` | `output_dir`、`write_outputs`、`write_excel` |
+| 报告输出 | `report_path` | `output_dir`、`write_outputs`、`write_excel`、`plot_outputs` |
 
 ### 最小示例
 
@@ -371,6 +375,7 @@ result.perf_results["lgb"]
 | `random_state` | `42` | 随机种子。 |
 | `write_outputs` | `True` | 是否输出 CSV、图表等中间文件。 |
 | `write_excel` | `True` | 是否输出 Excel 报告。 |
+| `plot_outputs` | `True` | 是否输出 Pipeline 自动生成的分析图。关闭后 CSV/Excel 仍由 `write_outputs`、`write_excel` 控制。 |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS 切分配置。 |
 | `feature_selection` | 见下表 | PSI、IV、相关性筛选开关和阈值。 |
 | `woe_engine` | `"equal_freq"` | WOE 引擎。支持 `"equal_freq"` 和 `"monotone"`。 |
@@ -676,6 +681,17 @@ business_prior_groups={
 | `perf_results` | `{model_name: perf_df}`。 |
 | `explain_outputs` | SHAP/Owen 等解释输出。 |
 | `report_path` | Excel 报告路径；若 `write_excel=False` 则为空。 |
+
+### 图表输出
+
+当 `write_outputs=True` 且 `plot_outputs=True` 时，`CreditModelPipeline` 会自动输出以下图表：
+
+| 目录 | 内容 | 触发条件 |
+|---|---|---|
+| `figs/var_analysis/overall/` | `VarExtractionInsights.plot_woe()` 生成的变量 WOE 分析图。 | `feature_selection["iv_enabled"]=True` |
+| `figs/woe/overall/` | `WOE_Master.plot_bivar_graph()` 生成的 equal-freq WOE 图。 | `woe_engine="equal_freq"` |
+| `figs/mono_woe/` | `MonotoneWOEBinner.plot_woe_graph()` 生成的单调分箱 WOE 图。 | `woe_engine="monotone"` |
+| `figs/perf/` | 每个模型的性能评估图，例如 `perf_lr.png`、`perf_lgb.png`。 | 对应模型训练成功 |
 
 ## 3. 特征验收流水线
 
