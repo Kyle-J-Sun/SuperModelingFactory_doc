@@ -56,9 +56,12 @@ flowchart LR
     M -->|output_subset| O["approved 子样本 + rejected inferred"]
     N --> P{"train_ri_models"}
     O --> P
-    P -->|True| Q["训练 RI 后模型并评估 OOT"]
+    P -->|True| Q["训练 RI 后模型<br/>含 no_ri_benchmark"]
     P -->|False| R["只输出 RI 数据集与摘要"]
-    Q --> S["CSV / Excel / Result"]
+    Q --> T{"save_models"}
+    T -->|True| U["保存 pre-score / RI 模型 pkl"]
+    T -->|False| S["CSV / Excel / Result"]
+    U --> S
     R --> S
 ```
 
@@ -68,11 +71,11 @@ flowchart LR
 |---|---|---|
 | 输入校验与特征准备 | `approved_data`、`rejected_data` 基础样本 | `approved_col`、`target_col`、`score_col`、`feature_cols` |
 | pre-score 训练或复用 | `score_col` 分数列、`prescore_model` | `train_prescore`、`prescore_model_type`、`prescore_params`、`prescore_test_size`、`random_state` |
-| OOT 口径确定 | OOT 样本、建模样本池 | `oot_data`、`oot_frac`、`random_state` |
+| OOT 口径确定 | OOT 样本、建模样本池、`oot_summary` | `oot_data`、`oot_frac`、`random_state`；外部 OOT 会自动过滤 `target_col` 为空的未表现样本 |
 | RI 参考样本确定 | `ri_approved_reference_data`、`ri_approved_summary` | `ri_approved_data`、`ri_approved_query`、`ri_approved_func`、`ri_approved_frac`、`ri_approved_n`、`ri_approved_scope` |
 | RI 数据集生成 | `ri_datasets`、`ri_summary` | `ri_methods`、`ri_method_params`，例如 `bad_rate`、`cutoff`、`weight_factor`、`n_parcels` |
-| RI 后模型训练 | `ri_models`、`ri_model_perf` | `train_ri_models`、`ri_model_type`、`ri_model_params` |
-| 性能评估与报告 | `best_method`、`report_path` | `perf_pct_bins`、`min_bin_prop`、`write_outputs`、`write_excel`、`output_dir` |
+| RI 后模型训练 | `ri_models`、`ri_model_perf` | `train_ri_models`、`include_no_ri_benchmark`、`ri_model_type`、`ri_model_params` |
+| 性能评估、模型保存与报告 | `best_method`、`model_paths`、`report_path` | `perf_pct_bins`、`min_bin_prop`、`save_models`、`model_output_dir`、`model_include_metadata`、`write_outputs`、`write_excel`、`output_dir` |
 
 ### 最小示例
 
@@ -99,6 +102,30 @@ result.ri_summary
 result.ri_datasets["parceling"]
 result.ri_model_perf
 result.best_method
+```
+
+### Benchmark、模型保存与外部 OOT
+
+`include_no_ri_benchmark=True` 时，Pipeline 会额外训练一个 `no_ri_benchmark` 模型：训练集只使用 approved 样本，不加入 rejected inferred。它会和各 RI 方法一起进入 `ri_model_perf` 排名，但不会写入 `ri_datasets`。
+
+`save_models=True` 时会保存中间模型 pkl：pre-score 模型保存为 `prescore_model.pkl`，每个 RI 后模型保存为 `ri_model_{method}.pkl`，benchmark 保存为 `ri_model_no_ri_benchmark.pkl`。默认使用 SMF `save_model()` artifact 格式保存 metadata。
+
+外部 `oot_data` 可以传全量申请数据。若 `target_col` 为空，Pipeline 会自动过滤未表现样本，并通过 warning 提示过滤数量；过滤情况会写入 `result.oot_summary`。
+
+```python
+cfg = RejectInferencePipelineConfig(
+    ri_methods=["simple_augment", "parceling"],
+    train_ri_models=True,
+    include_no_ri_benchmark=True,
+    save_models=True,
+    oot_data=df_oot_full_application,
+)
+
+result = RejectInferencePipeline(cfg).run(df_train)
+
+result.ri_model_perf      # 含 no_ri_benchmark
+result.model_paths        # prescore / no_ri_benchmark / RI method pkl 路径
+result.oot_summary        # 外部 OOT 成熟样本过滤摘要
 ```
 
 ### 输入数据要求
@@ -131,7 +158,11 @@ result.best_method
 | `train_ri_models` | `True` | 是否基于每个 RI 增强数据集训练后续模型并比较 OOT 表现。 |
 | `ri_model_type` | `"lgb"` | RI 后建模使用的模型类型。 |
 | `ri_model_params` | `{}` | RI 后模型参数，会覆盖默认 LightGBM 参数。 |
-| `oot_data` | `None` | 外部指定 OOT 数据。传入后不再从 approved 样本随机抽 OOT。 |
+| `include_no_ri_benchmark` | `True` | 是否额外训练 approved-only benchmark 模型，方法名为 `no_ri_benchmark`。 |
+| `save_models` | `False` | 是否保存 pre-score 和 RI 后模型 pkl。 |
+| `model_output_dir` | `None` | 模型 pkl 输出目录；不传时使用 `{output_dir}/models`。 |
+| `model_include_metadata` | `True` | 是否使用 SMF `save_model()` artifact envelope 保存 metadata。 |
+| `oot_data` | `None` | 外部指定 OOT 数据。传入后不再从 approved 样本随机抽 OOT；若包含 `target_col` 为空的未表现样本，会自动过滤并 warning。 |
 | `oot_frac` | `0.2` | 未传 `oot_data` 时，从 approved 样本中随机抽取 OOT 的比例。 |
 | `perf_pct_bins` | `10` | `PerformanceEvaluator` 的分箱数量。 |
 | `min_bin_prop` | `0.03` | 性能评估最小分箱占比。 |
@@ -208,14 +239,16 @@ cfg = RejectInferencePipelineConfig(
 | `rejected_data` | 拒绝样本数据，包含 pre-score。 |
 | `ri_datasets` | `{method: DataFrame}`，每种 RI 方法生成的增强训练集。 |
 | `ri_summary` | 每种 RI 方法的数据规模、坏账率、是否有权重列等汇总。 |
-| `ri_model_perf` | 每种 RI 增强数据训练模型后的 train / validation / OOT 表现。 |
-| `best_method` | 按 OOT AUC 排名的最佳 RI 方法。 |
+| `ri_model_perf` | 每种 RI 增强数据和 `no_ri_benchmark` 训练模型后的 train / validation / OOT 表现。 |
+| `best_method` | 按 OOT AUC 排名的最佳方法，可能是 RI 方法或 `no_ri_benchmark`。 |
 | `prescore_model` | pre-score 模型 wrapper；若 `train_prescore=False` 则为空。 |
-| `ri_models` | `{method: model}`，每种 RI 方法训练出的模型。 |
+| `ri_models` | `{method: model}`，每种 RI 方法和可选 `no_ri_benchmark` 训练出的模型。 |
 | `report_path` | Excel 报告路径；若 `write_excel=False` 则为空。 |
 | `approved_full_data` | 主输入数据中的全量 approved 样本。 |
 | `ri_approved_reference_data` | 实际用于 RI 规则估计的 approved reference 样本。 |
 | `ri_approved_summary` | approved reference 来源、样本量、输出 approved 样本量和保留比例。 |
+| `model_paths` | `{model_key: path}`，当 `save_models=True` 时记录 pre-score、benchmark 和 RI 后模型 pkl 路径。 |
+| `oot_summary` | OOT 来源、原始样本数、成熟样本数、过滤未表现样本数和缺失率。 |
 
 ## 2. 信用建模流水线
 
