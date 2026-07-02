@@ -134,6 +134,7 @@ nav:
       - guides/index.md
       - 样本管理: guides/sample.md
       - ODPS 数据抽取: guides/odps.md
+      - 数据一致性对比: guides/proc_compare.md
       - WOE 编码: guides/woe.md
       - WOE 分箱引擎: guides/woe_binning_engine.md
       - 特征筛选: guides/feature.md

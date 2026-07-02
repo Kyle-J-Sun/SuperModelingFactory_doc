@@ -22,6 +22,10 @@
 
 ::: Modeling_Tool.Core.Parallel_ODPS_Manager
 
+## 数据一致性对比 — `Proc_Compare`
+
+::: Modeling_Tool.Core.Proc_Compare
+
 ## 斜率计算 — `Slope_Tool`
 
 ::: Modeling_Tool.Core.Slope_Tool

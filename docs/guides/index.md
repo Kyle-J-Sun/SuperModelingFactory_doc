@@ -14,6 +14,10 @@
 
     `ODPSRunner` / `parse_sql_file` / `pull_attributes_in_batch`
 
+- :material-table-search: **[数据一致性对比](proc_compare.md)**
+
+    `ProcCompareEngine` / `proc_compare` / DataFrame 与 CSV 大表一致性校验
+
 - :material-chart-bell-curve: **[WOE 编码](woe.md)**
 
     `WOE_Master` / `MonotoneWOEBinner` / `is_monotonic`
