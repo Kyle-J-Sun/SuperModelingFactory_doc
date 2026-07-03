@@ -843,7 +843,9 @@ cfg = FeatureValidationPipelineConfig(
 |---|---|---|
 | `"off"` | 只做快速单变量验收 | 跳过相关性，最快、内存最低。 |
 | `"within_batch"` | 按业务域分批，主要关心批内重复变量 | 计算每批 new-new 以及 new-incumbent；不会发现跨 batch 的 new-new 高相关。 |
-| `"block_pairwise"` | 必须完整捕捉跨 batch 高相关变量 | 额外两两读取 feature batch，仅保留超过阈值的 pairs；支持 Pearson 和 Spearman，Spearman 更慢但能捕捉单调非线性关系；Kendall 第一版暂不支持。 |
+| `"block_pairwise"` | 必须完整捕捉跨 batch 高相关变量 | 额外两两读取 feature batch，仅保留超过阈值的 pairs；支持 Pearson 和 Spearman，Spearman 更慢但能捕捉单调非线性关系；Kendall 第一版暂不支持。若传入 `target_cols`，跨 batch 高相关 pair 也会补充到 `correlated_detail`，包含 IV/KS/Lift 和 keep/remove 建议。 |
+
+无论批内还是跨批，`high_corr_pairs` 的相关系数都基于原始数值列计算；`corr_use_woe_bins` 只影响 `correlated_detail` 中 IV/KS 等辅助指标的分箱口径。
 
 CSV batch 模式下，`woe_artifacts["by_target"]` 不会保留所有分箱 engine 对象，避免把内存压力带回结果对象；会保留合并后的 WOE 表、refine summary 和 `batch_metadata`。
 
