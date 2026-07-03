@@ -701,21 +701,24 @@ business_prior_groups={
 
 ```mermaid
 flowchart LR
-    A["宽表 DataFrame<br/>flow_id / apply_time / features / labels"] --> B["输入校验与时间字段派生"]
-    B --> C["INS / OOS / OOT 切分"]
-    C --> D["全局 / 时间 / 人群分布<br/>proc_means_by_grp"]
-    C --> E{"target_cols"}
-    E -->|有标签| F["WOE 分箱<br/>默认 MonotoneWOEBinner"]
-    E -->|无标签| G["跳过 WOE / IV / KS"]
-    F --> H{"Monotone refine"}
-    H -->|显式开启| I["refine_cate / refine_dtree / refine_chi2"]
-    H -->|默认关闭| J["保留贪婪单调分箱"]
-    I --> K["PSI<br/>可复用 WOE bins"]
-    J --> K
-    G --> K
-    K --> L["IV / KS<br/>全局 / 时间 / 人群"]
-    L --> M["相关性矩阵与高相关对<br/>new-new / new-incumbent"]
-    M --> N["ExcelMaster / CSV / Result"]
+    A["宽表 DataFrame / CSV<br/>flow_id / apply_time / features / labels"] --> B{"CSV feature batch"}
+    B -->|否| C["输入校验与时间字段派生"]
+    B -->|是| C1["按 feature batch 直读必要列<br/>base cols + batch features"]
+    C1 --> C
+    C --> D["INS / OOS / OOT 切分"]
+    D --> E["全局 / 时间 / 人群分布<br/>proc_means_by_grp"]
+    D --> F{"target_cols"}
+    F -->|有标签| G["WOE 分箱<br/>默认 MonotoneWOEBinner"]
+    F -->|无标签| H["跳过 WOE / IV / KS"]
+    G --> I{"Monotone refine"}
+    I -->|显式开启| J["refine_cate / refine_dtree / refine_chi2"]
+    I -->|默认关闭| K["保留贪婪单调分箱"]
+    J --> L["PSI<br/>可复用 WOE bins"]
+    K --> L
+    H --> L
+    L --> M["IV / KS<br/>全局 / 时间 / 人群"]
+    M --> N["相关性矩阵与高相关对<br/>within batch / block pairwise"]
+    N --> O["ExcelMaster / CSV / Result"]
 ```
 
 ### 最小示例
@@ -747,6 +750,7 @@ result.high_corr_pairs
 
 | 步骤 | 产物 | 主要可配置参数 |
 |---|---|---|
+| CSV 直读与分批 | `batch_metadata`、合并后的各分析表 | `input_type`、`csv_read_kwargs`、`feature_batch_size`、`feature_batches`、`batch_base_cols`、`batch_corr_mode` |
 | 样本切分 | `splits` | `split_col`、`sample_col`、`oot_col`、`split_config`、`random_state` |
 | 分布分析 | `distribution_summary` | `time_dims`、`population_dims`、`group_specs`、`distribution_params` |
 | WOE 分箱 | `woe_artifacts` | `woe_engine`、`woe_params`、`monotone_woe_params`、`categorical_features` |
@@ -766,6 +770,15 @@ result.high_corr_pairs
 | `target_cols` | `None` | 标签列；为空时跳过 WOE、IV、KS 和相关性中的 IV/KS 对比。 |
 | `new_feature_cols` | `None` | 新接特征列表；建议显式传入。 |
 | `incumbent_feature_cols` | `None` | 现有特征列表，主要用于 new vs incumbent 相关性对比。 |
+| `input_type` | `"auto"` | 输入类型，可选 `auto/dataframe/csv`。`auto` 会按 `run()` 传入对象自动识别 DataFrame 或 CSV 路径。 |
+| `csv_read_kwargs` | `{}` | 透传给 `pd.read_csv()` 的参数；Pipeline 会自己控制 `usecols/chunksize`，因此这两个键不能放在这里。 |
+| `feature_batch_size` | `None` | CSV batch 模式下，每批读取多少个 `new_feature_cols`。 |
+| `feature_batches` | `None` | 显式指定 feature 分批，优先级高于 `feature_batch_size`；未覆盖的特征会自动追加到最后的批次。 |
+| `batch_base_cols` | `None` | 每批固定读取的基础列；不传时自动包含 id、时间、split、target、time/population 维度、类别列、现有特征等必要列。 |
+| `batch_output_subdir` | `"feature_batches"` | 每批中间结果输出子目录。 |
+| `batch_keep_intermediate` | `True` | CSV batch 模式下是否保留每批独立输出；最终合并报告不受影响。 |
+| `batch_corr_mode` | `"within_batch"` | CSV batch 相关性模式：`within_batch` 只算批内相关，`block_pairwise` 额外两两读取 batch 捕捉跨批高相关，`off` 跳过相关性。 |
+| `batch_corr_pair_chunk_size` | `None` | `block_pairwise` 时，每次跨批相关性计算的变量子块大小，用于进一步控制内存峰值。 |
 | `split_col` | `None` | 推荐的新样本切分字段名，取值大小写不敏感，支持 `ins/oos/oot`。优先于 `sample_col`。 |
 | `sample_col` / `oot_col` | `"sample_ind"` / `"oot_flag"` | 与 `CreditModelPipeline` 一致的兼容切分字段；未传 `split_col` 时使用 `sample_col`。 |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS 切分配置。 |
@@ -788,6 +801,51 @@ result.high_corr_pairs
 | `corr_include_incumbent` | `True` | 相关性是否纳入现有特征。 |
 | `corr_use_woe_bins` | `True` | 相关性对比中的 IV/KS 是否复用 step 3 WOE 分箱。 |
 | `write_outputs` / `write_excel` | `True` / `True` | 是否输出 CSV/图片和 ExcelMaster 报告。 |
+
+### CSV 直读与超宽表分批
+
+当新特征很多、一次性读入 pandas 会占用过高内存时，可以直接把本地 CSV 路径传给 `run()`，并通过 `feature_batch_size` 或 `feature_batches` 按列分批。Pipeline 会先读取基础列生成稳定的 INS/OOS/OOT 切分，再逐批读取 `base cols + 当前批特征 + incumbent features`，最后合并分布、WOE、PSI、IV/KS、相关性和 ExcelMaster 报告。
+
+```python
+cfg = FeatureValidationPipelineConfig(
+    output_dir="output/feature_validation",
+    new_feature_cols=[f"new_x{i}" for i in range(1, 501)],
+    incumbent_feature_cols=["old_score", "old_income"],
+    target_cols=["badflag"],
+    split_col="model_split",
+    feature_batch_size=100,
+    batch_corr_mode="within_batch",
+)
+
+result = FeatureValidationPipeline(cfg).run("wide_features.csv")
+
+result.batch_metadata
+result.output_paths["batch_metadata"]
+```
+
+如果你已经按业务域整理好变量列表，可以显式传 `feature_batches`：
+
+```python
+cfg = FeatureValidationPipelineConfig(
+    feature_batches=[
+        ["telco_days_active", "telco_bill_amt"],
+        ["income_level", "income_stability"],
+        ["address_risk_score", "address_city_tier"],
+    ],
+    batch_corr_mode="block_pairwise",
+    corr_params={"method": "spearman", "corr_cutpoint": 0.8},
+)
+```
+
+`batch_corr_mode` 的建议：
+
+| 模式 | 适用场景 | 说明 |
+|---|---|---|
+| `"off"` | 只做快速单变量验收 | 跳过相关性，最快、内存最低。 |
+| `"within_batch"` | 按业务域分批，主要关心批内重复变量 | 计算每批 new-new 以及 new-incumbent；不会发现跨 batch 的 new-new 高相关。 |
+| `"block_pairwise"` | 必须完整捕捉跨 batch 高相关变量 | 额外两两读取 feature batch，仅保留超过阈值的 pairs；支持 Pearson 和 Spearman，Spearman 更慢但能捕捉单调非线性关系；Kendall 第一版暂不支持。 |
+
+CSV batch 模式下，`woe_artifacts["by_target"]` 不会保留所有分箱 engine 对象，避免把内存压力带回结果对象；会保留合并后的 WOE 表、refine summary 和 `batch_metadata`。
 
 ### Monotone Refine 示例
 
@@ -820,6 +878,8 @@ cfg = FeatureValidationPipelineConfig(
 | `correlated_detail` | 高相关组中各变量 IV/KS 对比和保留/剔除建议。 |
 | `validation_summary` | 行数、特征数、目标数、输出规模等总览。 |
 | `output_paths` / `report_path` | CSV/Excel 输出路径。 |
+| `batch_metadata` | CSV batch 模式下每批的特征列表、读取列、行数、状态和错误信息；普通 DataFrame 模式下为空。 |
+| `batch_results` | CSV batch 模式下每批输出路径和报告路径的轻量索引，不保留每批完整 Result 对象。 |
 
 ## 4. 模型分对比流水线
 
