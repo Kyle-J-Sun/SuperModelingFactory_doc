@@ -849,6 +849,19 @@ cfg = FeatureValidationPipelineConfig(
 
 CSV batch 模式下，`woe_artifacts["by_target"]` 不会保留所有分箱 engine 对象，避免把内存压力带回结果对象；会保留合并后的 WOE 表、refine summary 和 `batch_metadata`。
 
+`high_corr_pairs` 是一行一个高相关变量对，适合快速定位哪两个变量相关。`correlated_detail` 是变量级长表：同一个高相关 pair 通常会展开成两行，分别展示 pair 中每个变量自己的 IV/KS/Lift 和 keep/remove 建议。字段含义如下：
+
+| 字段 | 含义 |
+|---|---|
+| `corr_var1` / `corr_var2` | 真正计算相关性的两个变量。 |
+| `corr` | `corr_var1` 与 `corr_var2` 之间的相关系数。 |
+| `corr_pair_id` | `corr_var1||corr_var2`，用于把展开后的两行重新聚合回同一个 pair。 |
+| `var` / `metric_var` | 当前行展示 IV/KS/Lift 和 `recommended_action` 的变量。`metric_var` 与旧字段 `var` 保持一致。 |
+| `metric_var_position` | 当前 `metric_var` 位于 pair 的哪一侧，取值为 `corr_var1` 或 `corr_var2`。 |
+| `anchor_var` | `CorrelationFilter` 当前迭代中用于组织高相关组的锚点变量，不等价于最终保留变量。 |
+| `corr_method` | 相关系数方法，例如 `pearson` 或 `spearman`。 |
+| `detail_scope` | 明细来源，`within_batch` 表示批内相关性，`cross_batch` 表示跨批相关性。 |
+
 ### Monotone Refine 示例
 
 ```python
@@ -877,7 +890,7 @@ cfg = FeatureValidationPipelineConfig(
 | `ivks_summary` | IV、KS、Lift、缺失率、分箱数等区分能力指标。 |
 | `corr_matrix` | 相关性矩阵。 |
 | `high_corr_pairs` | 超过阈值的两两高相关变量。 |
-| `correlated_detail` | 高相关组中各变量 IV/KS 对比和保留/剔除建议。 |
+| `correlated_detail` | 高相关 pair 展开后的变量级 IV/KS/Lift 对比和保留/剔除建议；一行的 `corr` 对应 `corr_var1` 与 `corr_var2`。 |
 | `validation_summary` | 行数、特征数、目标数、输出规模等总览。 |
 | `output_paths` / `report_path` | CSV/Excel 输出路径。 |
 | `batch_metadata` | CSV batch 模式下每批的特征列表、读取列、行数、状态和错误信息；普通 DataFrame 模式下为空。 |
@@ -1522,7 +1535,7 @@ result.split_recommendation
 | `population_dims` | 是 | 人群维度列，例如渠道、策略版本、产品、人群分层。 |
 | `profile_cols` | 是 | 画像字段，默认计算均值和中位数。 |
 | `oot_time_dim` | 是 | OOT 尾段切分使用的时间维度，默认 `apply_month`。 |
-| `is_approved` | 否 | 若存在，会在标签覆盖率表里输出成熟且通过样本数。 |
+| `approved_col` | 否 | 默认对应 `is_approved`。若存在，会在标签覆盖率表里输出成熟且通过样本数；若业务字段名不是 `is_approved`，需在 Config 中配置 `approved_col`。 |
 
 ### `SampleAnalysisPipelineConfig` 参数
 
@@ -1538,6 +1551,7 @@ result.split_recommendation
 | `ins_oos_ratios` | `[0.7, 0.75, 0.8]` | 候选 INS 占比，OOS 占比自动为 `1 - ins_ratio`。 |
 | `random_seeds` | `range(3000, 3020)` | 反复切分使用的随机种子集合，用于观察坏账率扰动。 |
 | `min_sample_size` | `500` | 推荐方案筛选时，INS/OOS/OOT 的最小样本量阈值。若无候选满足阈值，会在全量候选里选最稳组合。 |
+| `approved_col` | `"is_approved"` | 通过样本标识字段，用于 `label_coverage_summary.n_approved_observed`。可配置为实际字段名，或设为 `None` 关闭该指标。 |
 | `output_dir` | `"output/sample_analysis"` | CSV 和 Excel 报告输出目录。 |
 | `write_outputs` | `True` | 是否输出 5 张 CSV 明细表。 |
 | `write_excel` | `True` | 是否使用 `ExcelMaster` 输出 `Sample_Analysis_Report.xlsx`。 |
