@@ -320,13 +320,13 @@ flowchart LR
 | 样本切分 | `splits`，包含 `ins/oos/oot` | `split_col`、`sample_col`、`oot_col`、`split_config`、`random_state` |
 | 特征筛选 | `feature_selection_summary`、候选特征列表 | `feature_cols`、`feature_selection.psi_enabled`、`feature_selection.iv_enabled`、`feature_selection.corr_enabled` 及各阈值 |
 | WOE 分箱与转换 | `woe_artifacts`、WOE 特征 | `woe_engine`、`woe_params`、`monotone_woe_params` |
-| Backward 变量剔除 | `backward_summary`、`selected_features` | `backward_enabled`、`backward_model`、`backward_params`、`use_backward_features` |
+| Backward 变量剔除 | `backward_summary`、`selected_features` | `backward_enabled`、`backward_model`、`backward_params`、`use_backward_features`、`weight_col` |
 | 模型特征来源 | `model_feature_sources`、`model_feature_sets` | `gbm_feature_source`。LR 固定使用 WOE；LGB/XGB/Cat 可选 `"woe"` 或 `"raw"` |
-| LR 参数筛选 | `lr_search_results`、LR best params | `lr_search_enabled`、`lr_search_param_grid`、`lr_search_params`、`use_lr_search_params` |
+| LR 参数筛选 | `lr_search_results`、LR best params | `lr_search_enabled`、`lr_search_param_grid`、`lr_search_params`、`use_lr_search_params`、`weight_col` |
 | 前置分 warm-start | `warm_start_summary`、GBM 增量模型 | `warm_start_enabled`、`warm_start_score_col`、`warm_start_score_type`、`warm_start_models` |
-| 候选模型训练 | `models`、初始模型表现 | `train_models`、`model_params`、`target_col` |
-| Optuna 调参 | `optuna_results`、调参后模型 | `optuna_models`、`optuna_n_trials`、`optuna_params` |
-| 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop` |
+| 候选模型训练 | `models`、初始模型表现 | `train_models`、`model_params`、`target_col`、`weight_col` |
+| Optuna 调参 | `optuna_results`、调参后模型 | `optuna_models`、`optuna_n_trials`、`optuna_params`、`weight_col` |
+| 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop`、`weight_col` |
 | 解释性与 Owen | `explain_outputs` | `explain_models`、`explain_params`、`owen_enabled`、`business_prior_groups` |
 | 报告输出 | `report_path` | `output_dir`、`write_outputs`、`write_excel`、`plot_outputs` |
 
@@ -366,6 +366,31 @@ result.perf_results["lgb"]
 | 已切好样本 | `split_col` 或 `sample_col` | 推荐使用 `split_col` 指定字段名；`sample_col` 保留兼容。取值大小写不敏感，支持 `ins/oos/oot`。 |
 | 只标记 OOT | `oot_col` | 默认 `oot_flag`，`0` 为 INS+OOS，非 `0` 为 OOT；Pipeline 再随机切 INS/OOS。 |
 | 未标记样本 | 无 | 会从全量数据随机切 INS/OOS，并用 OOS 作为 OOT 的兜底。 |
+| 加权样本 | `weight_col` 指定列 | 权重须为非负有限值；各 split（`ins/oos/oot`）中均保留该列。 |
+
+### 样本权重
+
+按余额加权、过采样校正等场景，可在配置中传入 `weight_col`，训练与评估使用同一列名：
+
+```python
+cfg = CreditModelPipelineConfig(
+    output_dir="output",
+    feature_cols=["income", "age", "score_b"],
+    weight_col="sample_wgt",
+    train_models=["lr", "lgb"],
+)
+result = CreditModelPipeline(cfg).run(modeling_df)
+```
+
+`weight_col` 会贯通以下阶段：
+
+- LR / GBM 模型训练（`LRMaster.fit`、`GradientBoostingModel.fit`）
+- LR 参数搜索（`grid_search_params`）与 GBM Optuna/Grid 搜索（`param_search`）
+- Backward 变量剔除（`BackwardVariableEliminator`）
+- 性能评估（`PerformanceEvaluator`）
+
+!!! note "v1 限制"
+    **特征筛选**（PSI / IV / 相关性）与 **WOE 分箱** 当前底层 API 不支持加权，Pipeline 在这两阶段仍按未加权样本执行。若业务强依赖加权 WOE，需后续扩展底层 API。
 
 ### `CreditModelPipelineConfig` 参数
 
@@ -377,6 +402,7 @@ result.perf_results["lgb"]
 | `split_col` | `None` | 推荐的新样本切分字段名。若传入，优先于 `sample_col`，取值支持 `ins/oos/oot`。 |
 | `sample_col` | `"sample_ind"` | 兼容旧版本的已切分样本标识列。未传 `split_col` 时使用。 |
 | `oot_col` | `"oot_flag"` | OOT 标识列。仅在没有有效 `split_col/sample_col` 时使用。 |
+| `weight_col` | `None` | 样本权重列。非空时贯通 LR/GBM 训练、LR/GBM 参数搜索、backward 与性能评估；`None` 时保持未加权行为。 |
 | `random_state` | `42` | 随机种子。 |
 | `write_outputs` | `True` | 是否输出 CSV、图表等中间文件。 |
 | `write_excel` | `True` | 是否输出 Excel 报告。 |
