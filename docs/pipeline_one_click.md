@@ -159,13 +159,18 @@ result.oot_summary        # 外部 OOT 成熟样本过滤摘要
 | `prescore_test_size` | `0.3` | 在通过样本内部切分 pre-score validation 的比例。 |
 | `ri_methods` | `["simple_augment", "hard_cutoff", "fuzzy_augment", "parceling"]` | 要尝试的拒绝推断方法。支持别名：`simple`、`hard`、`fuzzy`、`parcel`。 |
 | `ri_method_params` | `{}` | 各 RI 方法的独立参数。 |
+| `ri_score_direction` | `"high_bad"` | RI 分数方向。Pipeline 默认的 `prescore_prob` 是 P(bad)，因此默认高分=高风险；底层 inferrer 仍兼容 `"high_good"` 信用分语义。 |
 | `train_ri_models` | `True` | 是否基于每个 RI 增强数据集训练后续模型并比较 OOT 表现。 |
 | `ri_model_type` | `"lgb"` | RI 后建模使用的模型类型。 |
 | `ri_model_params` | `{}` | RI 后模型参数，会覆盖默认 LightGBM 参数。 |
 | `include_no_ri_benchmark` | `True` | 是否额外训练 approved-only benchmark 模型，方法名为 `no_ri_benchmark`。 |
+| `ri_validation_frac` | `0.2` | 没有显式 OOS 时，从 approved training pool 中切 validation 的比例；训练会排除 validation/OOT row。 |
 | `save_models` | `False` | 是否保存 pre-score 和 RI 后模型 pkl。 |
 | `model_output_dir` | `None` | 模型 pkl 输出目录；不传时使用 `{output_dir}/models`。 |
 | `model_include_metadata` | `True` | 是否使用 SMF `save_model()` artifact envelope 保存 metadata。 |
+| `write_ri_datasets` | `True` | 是否写出每个 RI 增强数据集 CSV；全量宽表可设为 `False` 避免写出几十 GB 文件。 |
+| `ri_dataset_output_cols` | `None` | RI 数据集 CSV 输出列白名单；不影响 `result.ri_datasets` 内存结果。 |
+| `ri_dataset_warn_mb` | `1024.0` | 单个 RI 数据集预计超过该内存大小时发出 warning。 |
 | `oot_data` | `None` | 外部指定 OOT 数据。传入后不再从 approved 样本随机抽 OOT；若包含 `target_col` 为空的未表现样本，会自动过滤并 warning。 |
 | `oot_frac` | `0.2` | 未传 `oot_data` 时，从 approved 样本中随机抽取 OOT 的比例。 |
 | `perf_pct_bins` | `10` | `PerformanceEvaluator` 的分箱数量。 |
@@ -194,9 +199,9 @@ cfg = RejectInferencePipelineConfig(
 | 方法 | 可配置参数 | 说明 |
 |---|---|---|
 | `simple_augment` | `bad_rate` | 不传时自动使用通过样本平均坏账率。 |
-| `hard_cutoff` | `cutoff` | 不传时使用通过样本坏样本 pre-score 的 25 分位数。 |
-| `fuzzy_augment` | `weight_factor` | 控制 fuzzy augmentation 权重强度。 |
-| `parceling` | `n_parcels` | 按 score 分档的档数。 |
+| `hard_cutoff` | `cutoff` | 不传时按 `ri_score_direction` 使用通过样本坏样本 pre-score 的合理分位数；`high_bad` 下高于 cutoff 判坏，`high_good` 下低于 cutoff 判坏。 |
+| `fuzzy_augment` | `weight_factor` | 拒绝件拆成 bad/good 两行，权重为 P(bad)/P(good)；真实 approved 样本默认权重为 1。 |
+| `parceling` | `n_parcels` | 用 approved 样本的同一套 qcut 边界映射 rejected 样本，并按 parcel bad rate 做二项抽样。 |
 
 ### RI approved reference 样本
 
@@ -376,6 +381,10 @@ result.perf_results["lgb"]
 | `write_outputs` | `True` | 是否输出 CSV、图表等中间文件。 |
 | `write_excel` | `True` | 是否输出 Excel 报告。 |
 | `plot_outputs` | `True` | 是否输出 Pipeline 自动生成的分析图。关闭后 CSV/Excel 仍由 `write_outputs`、`write_excel` 控制。 |
+| `save_models` | `False` | 是否保存训练好的模型 pkl。默认不创建空 `models/` 目录；开启后会写出模型和 artifact 路径表。 |
+| `model_output_dir` | `None` | 模型 pkl 输出目录；不传时使用 `{output_dir}/models`。 |
+| `model_include_metadata` | `True` | 是否使用 SMF `save_model()` artifact envelope 保存模型 metadata。 |
+| `save_woe_artifacts` | `True` | `save_models=True` 时是否同时保存 WOE table 和 WOE engine，便于模型复用。 |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS 切分配置。 |
 | `feature_selection` | 见下表 | PSI、IV、相关性筛选开关和阈值。 |
 | `woe_engine` | `"equal_freq"` | WOE 引擎。支持 `"equal_freq"` 和 `"monotone"`。 |
@@ -680,7 +689,29 @@ business_prior_groups={
 | `warm_start_summary` | 前置分 warm-start 启用、跳过、score 类型和缺失率汇总；未启用时为空。 |
 | `perf_results` | `{model_name: perf_df}`。 |
 | `explain_outputs` | SHAP/Owen 等解释输出。 |
+| `model_paths` | `save_models=True` 时每个模型 pkl 的路径。 |
+| `artifact_paths` | `save_models=True` 时 WOE table、WOE engine 等配套 artifact 路径。 |
 | `report_path` | Excel 报告路径；若 `write_excel=False` 则为空。 |
+
+### 模型落盘
+
+默认情况下 Pipeline 只把模型保留在 `result.models` 中，不会创建空的 `models/` 目录。需要复用训练产物时，开启 `save_models=True`：
+
+```python
+cfg = CreditModelPipelineConfig(
+    train_models=["lr", "lgb"],
+    save_models=True,
+    model_output_dir="output/credit_model/models",
+    save_woe_artifacts=True,
+)
+
+result = CreditModelPipeline(cfg).run(modeling_df)
+
+result.model_paths["lgb"]
+result.artifact_paths["woe_engine"]
+```
+
+保存的模型使用 SMF `save_model()` artifact envelope，metadata 会记录模型名、目标列、实际入模特征、GBM 使用 raw/WOE 的来源、warm-start 配置和随机种子。WOE 入模模型会同时保存 `woe_table.csv` 与 `woe_engine.pkl`，便于上线或离线复现时恢复同一套分箱口径。
 
 ### 图表输出
 
@@ -849,6 +880,8 @@ cfg = FeatureValidationPipelineConfig(
 
 CSV batch 模式下，`woe_artifacts["by_target"]` 不会保留所有分箱 engine 对象，避免把内存压力带回结果对象；会保留合并后的 WOE 表、refine summary 和 `batch_metadata`。
 
+Monotone WOE transform 在宽表场景下会先收集所有 `{feature}_woe` 列，再一次性 `concat` 回原表，避免 pandas 逐列插入造成的 fragmentation 和近 O(n²) 变慢。高维批处理建议保持默认 `inplace=False`；`inplace=True` 仅用于需要原地修改 DataFrame 的兼容场景。
+
 `high_corr_pairs` 是一行一个高相关变量对，适合快速定位哪两个变量相关。`correlated_detail` 是变量级长表：同一个高相关 pair 通常会展开成两行，分别展示 pair 中每个变量自己的 IV/KS/Lift 和 keep/remove 建议。字段含义如下：
 
 | 字段 | 含义 |
@@ -1003,6 +1036,8 @@ result.pairwise_cross
 | `include_missing` | `False` | 是否在分箱中包含缺失值。 |
 | `fillna` | `-999999` | 缺失填充值。 |
 | `positive_score_only` | `True` | 是否按正向分数处理。 |
+| `group_missing_values` | `["", " ", "NA", "NULL", "nan"]` | 分组维度中视为缺失的字符串值。 |
+| `drop_missing_group_values` | `True` | 分组评估前是否把上述值置为缺失，避免空字符串被当作独立人群。若设为 `False` 且 `include_missing=True`，会保留为 `[Missing]` 分组。 |
 | `time_dims` | `["apply_month"]` | 时间维度列表。 |
 | `population_dims` | `["channel"]` | 人群维度列表。 |
 | `segment_dims` | `None` | `population_dims` 的别名。传入后会覆盖 `population_dims`。 |
@@ -1051,6 +1086,8 @@ Pipeline 会自动生成：
 ```python
 result.group_perf["channel_x_apply_month"]
 ```
+
+`global_perf` 表会额外包含 `sample_scope="global"`，表示该表是全体输入样本的整体表现，不是 OOT 专属结果。
 
 如果你只想跑单维，不跑交叉：
 
