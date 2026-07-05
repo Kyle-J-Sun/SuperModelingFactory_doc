@@ -129,7 +129,7 @@ result = feature_screen(splits, features, "badflag", config=config, prefit_woe_e
 selected = result.selected_features
 ```
 
-`feature_selection` 字典可通过 `screen_config_from_mapping()` 转为 `FeatureScreenConfig`。`weight_col` 非空时走加权等频路径；加权 + `*_use_woe_bins` 暂回退等频并发出 warning（完整支持见后续版本）。
+`feature_selection` 字典可通过 `screen_config_from_mapping()` 转为 `FeatureScreenConfig`。`weight_col` 非空时默认走加权等频路径；设置 `*_use_woe_bins=True` 且提供（或自动 fit）WOE 引擎后，加权 PSI/IV 复用相同分箱边界。
 
 ## 5. 加权特征筛选（v0.3.8+）
 
