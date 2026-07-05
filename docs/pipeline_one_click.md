@@ -862,6 +862,7 @@ result.high_corr_pairs
 | PSI | `psi_summary`、`psi_details` | `psi_reference_dataset`、`psi_reference_data`、`psi_group_dims`、`psi_use_woe_bins`、`psi_params` |
 | IV / KS | `ivks_summary` | `ivks_group_dims`、`ivks_use_woe_bins`、`ivks_params`、`min_group_size` |
 | 相关性 | `corr_matrix`、`high_corr_pairs`、`correlated_detail` | `corr_include_incumbent`、`corr_use_woe_bins`、`corr_params` |
+| 变量筛选（可选） | `selected_features`、`screening_artifact`、`selection_summary` | `selection_enabled`、`selection_params`、`weight_col` |
 | 报告输出 | `output_paths`、`report_path` | `output_dir`、`write_outputs`、`write_excel` |
 
 ### `FeatureValidationPipelineConfig` 参数
@@ -905,6 +906,9 @@ result.high_corr_pairs
 | `ivks_use_woe_bins` | `True` | 是否复用 step 3 WOE 分箱边界计算 IV/KS。 |
 | `corr_include_incumbent` | `True` | 相关性是否纳入现有特征。 |
 | `corr_use_woe_bins` | `True` | 相关性对比中的 IV/KS 是否复用 step 3 WOE 分箱。 |
+| `selection_enabled` | `False` | 是否在验证后执行 PSI/IV/相关性剔除，产出 `selected_features` 与 `FeatureScreeningArtifact` 供 CM 承接。 |
+| `selection_params` | `{}` | 筛选阈值与开关，键名与 CM `feature_selection` 对齐（如 `psi_threshold`、`iv_threshold`、`corr_threshold`、`*_use_woe_bins`）。 |
+| `weight_col` | `None` | 加权筛选权重列；与 CM `weight_col` 一致。 |
 | `write_outputs` / `write_excel` | `True` / `True` | 是否输出 CSV/图片和 ExcelMaster 报告。 |
 
 ### CSV 直读与超宽表分批
