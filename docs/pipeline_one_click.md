@@ -446,6 +446,10 @@ result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
 | `save_woe_artifacts` | `True` | `save_models=True` 时是否同时保存 WOE table 和 WOE engine，便于模型复用。 |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS 切分配置。 |
 | `feature_selection` | 见下表 | PSI、IV、相关性筛选开关和阈值。 |
+| `screening_artifact` | `None` | FVP 产出的 `FeatureScreeningArtifact`；传入后跳过 CM 内部筛选。 |
+| `feature_validation_result` | `None` | 便捷字段：直接传 FVP 结果，内部转为 `screening_artifact`。 |
+| `feature_selection_mode` | `"run"` | `run` / `from_artifact` / `skip`；有 artifact 时自动 `from_artifact`。 |
+| `reuse_screening_woe` | `True` | handoff 时是否复用 artifact 内已拟合 WOE 引擎。 |
 | `woe_engine` | `"equal_freq"` | WOE 引擎。支持 `"equal_freq"` 和 `"monotone"`。 |
 | `woe_params` | `{"nbins": 10, "equal_freq": True, "min_bin_prop": 0.05}` | `WOE_Master.fit()` 参数和通用 WOE 配置。 |
 | `monotone_woe_params` | `{"n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2}` | `MonotoneWOEBinner` 参数。 |
@@ -910,6 +914,43 @@ result.high_corr_pairs
 | `selection_params` | `{}` | 筛选阈值与开关，键名与 CM `feature_selection` 对齐（如 `psi_threshold`、`iv_threshold`、`corr_threshold`、`*_use_woe_bins`）。 |
 | `weight_col` | `None` | 加权筛选权重列；与 CM `weight_col` 一致。 |
 | `write_outputs` / `write_excel` | `True` / `True` | 是否输出 CSV/图片和 ExcelMaster 报告。 |
+
+### FVP → CM 衔接
+
+验证并筛选后，将 `FeatureScreeningArtifact` 传给 `CreditModelPipeline`，可跳过 CM 内部 `_feature_selection` 并复用已拟合的 monotone WOE：
+
+```python
+from Modeling_Tool import (
+    CreditModelPipeline,
+    CreditModelPipelineConfig,
+    FeatureScreeningArtifact,
+    FeatureValidationPipeline,
+    FeatureValidationPipelineConfig,
+)
+
+fvp_result = FeatureValidationPipeline(
+    FeatureValidationPipelineConfig(
+        selection_enabled=True,
+        selection_params={"psi_threshold": 0.2, "iv_threshold": 0.02},
+        target_cols=["badflag"],
+        new_feature_cols=features,
+    )
+).run(data)
+
+artifact = FeatureScreeningArtifact.from_fvp_result(fvp_result)
+cm_result = CreditModelPipeline(
+    CreditModelPipelineConfig(
+        screening_artifact=artifact,
+        reuse_screening_woe=True,
+        target_col=artifact.target_col,
+        weight_col=artifact.weight_col,
+        feature_cols=artifact.selected_features,
+        woe_engine="monotone",
+    )
+).run(data)
+```
+
+也可直接传 `feature_validation_result=fvp_result`。设 `reuse_screening_woe=False` 时仅复用筛选列表，WOE 按 CM 配置重 fit。
 
 ### CSV 直读与超宽表分批
 
