@@ -523,6 +523,11 @@ feature_selection={
 | `corr_enabled` | `True` | 是否运行高相关剔除。 |
 | `corr_threshold` | `0.75` | 相关性阈值。 |
 | `corr_max_iterations` | `10` | 相关性剔除最大迭代次数。 |
+| `psi_use_woe_bins` | `False` | 是否复用 WOE 分箱边界计算 PSI（需 `woe_engine="monotone"` 或传入 prefit binner）。 |
+| `iv_use_woe_bins` | `False` | 是否复用 WOE 分箱边界计算 IV。 |
+| `corr_use_woe_bins` | `False` | 相关性 IV/KS 仲裁是否复用 WOE 分箱。 |
+
+`CreditModelPipeline._feature_selection` 内部已统一委托 `feature_screen`；默认保持 v0.3.8 等频/树分箱行为，开启 `*_use_woe_bins` 后与 `FeatureValidationPipeline` 口径对齐。
 
 ### WOE 参数
 

@@ -110,7 +110,28 @@ keep_vars = CorrelationFilter(
 | `woe_engine` | `master` | 分箱引擎名称 |
 | `woe_binner` | `None` | 已拟合的 `WOE_Master` 或 `MonotoneWOEBinner` |
 
-## 4. 加权特征筛选（v0.3.8+）
+## 4. 统一特征筛选（v0.3.9+）
+
+`feature_screen` 是 CM / FVP 共享的筛选内核，在 INS/OOS/OOT 分片上做 PSI → IV → 相关性剔除。`weighted_feature_screen` 与 `CreditModelPipeline._feature_selection` 均委托此 API。
+
+```python
+from Modeling_Tool import FeatureScreenConfig, feature_screen, fit_screening_woe_engine
+
+splits = {"ins": ins_df, "oos": oos_df, "oot": oot_df}
+binner = fit_screening_woe_engine(splits["ins"], features, "badflag", woe_engine="monotone")
+config = FeatureScreenConfig(
+    psi_compare_splits=["oos"],
+    psi_use_woe_bins=True,
+    iv_use_woe_bins=True,
+    corr_use_woe_bins=True,
+)
+result = feature_screen(splits, features, "badflag", config=config, prefit_woe_engine=binner)
+selected = result.selected_features
+```
+
+`feature_selection` 字典可通过 `screen_config_from_mapping()` 转为 `FeatureScreenConfig`。`weight_col` 非空时走加权等频路径；加权 + `*_use_woe_bins` 暂回退等频并发出 warning（完整支持见后续版本）。
+
+## 5. 加权特征筛选（v0.3.8+）
 
 `weighted_feature_screen` 把 PSI → IV → 相关性去冗余串成一条 API，并支持 `weight_col` 加权分位切点、加权 IV/PSI 与加权 Pearson 相关性（IV 仲裁）。
 
@@ -132,9 +153,9 @@ psi_table = result.psi_table     # psi_ins_oos / psi_ins_oot / psi_max
 
 典型场景：Fuzzy Augment 双行样本带 `_weight` 时，用加权 IV 避免未加权计数对冲失真；05E 实验可对 RI 增广样本 + `weight_col` 做加权 top-N 筛选。
 
-`CreditModelPipeline` 的 `_feature_selection` 已委托此 API；配置 `weight_col` 非空时自动走加权路径。
+`CreditModelPipeline` 的 `_feature_selection` 已委托 `feature_screen`；配置 `weight_col` 非空时自动走加权路径。
 
-## 5. 分布偏移分析
+## 6. 分布偏移分析
 
 ```python
 from Modeling_Tool import DistributionShiftAnalyzer
