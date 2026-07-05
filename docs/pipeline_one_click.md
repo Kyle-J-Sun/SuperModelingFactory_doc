@@ -319,14 +319,14 @@ flowchart LR
 |---|---|---|
 | 样本切分 | `splits`，包含 `ins/oos/oot` | `split_col`、`sample_col`、`oot_col`、`split_config`、`random_state` |
 | 特征筛选 | `feature_selection_summary`、候选特征列表 | `feature_cols`、`feature_selection.psi_enabled`、`feature_selection.iv_enabled`、`feature_selection.corr_enabled` 及各阈值 |
-| WOE 分箱与转换 | `woe_artifacts`、WOE 特征 | `woe_engine`、`woe_params`、`monotone_woe_params` |
+| WOE 分箱与转换 | `woe_artifacts`、WOE 特征 | `woe_engine`、`woe_params`、`monotone_woe_params`、`woe_fit_query` |
 | Backward 变量剔除 | `backward_summary`、`selected_features` | `backward_enabled`、`backward_model`、`backward_params`、`use_backward_features`、`weight_col` |
 | 模型特征来源 | `model_feature_sources`、`model_feature_sets` | `gbm_feature_source`。LR 固定使用 WOE；LGB/XGB/Cat 可选 `"woe"` 或 `"raw"` |
 | LR 参数筛选 | `lr_search_results`、LR best params | `lr_search_enabled`、`lr_search_param_grid`、`lr_search_params`、`use_lr_search_params`、`weight_col` |
 | 前置分 warm-start | `warm_start_summary`、GBM 增量模型 | `warm_start_enabled`、`warm_start_score_col`、`warm_start_score_type`、`warm_start_models` |
 | 候选模型训练 | `models`、初始模型表现 | `train_models`、`model_params`、`target_col`、`weight_col` |
 | Optuna 调参 | `optuna_results`、调参后模型 | `optuna_models`、`optuna_n_trials`、`optuna_params`、`weight_col` |
-| 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop`、`weight_col` |
+| 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop`、`weight_col`、`extra_eval_datasets` |
 | 解释性与 Owen | `explain_outputs` | `explain_models`、`explain_params`、`owen_enabled`、`business_prior_groups` |
 | 报告输出 | `report_path` | `output_dir`、`write_outputs`、`write_excel`、`plot_outputs` |
 
@@ -392,6 +392,38 @@ result = CreditModelPipeline(cfg).run(modeling_df)
 !!! note "v1 限制"
     **特征筛选**（PSI / IV / 相关性）与 **WOE 分箱** 当前底层 API 不支持加权，Pipeline 在这两阶段仍按未加权样本执行。若业务强依赖加权 WOE，需后续扩展底层 API。
 
+### WOE 拟合过滤与额外评估集
+
+`woe_fit_query` 和 `extra_eval_datasets` 解决两类常见口径问题：
+
+| 参数 | 作用范围 | 行为 |
+|---|---|---|
+| `woe_fit_query` | WOE **拟合** | 用 pandas `query()` 在 INS 上生成行掩码，仅影响分箱拟合；OOS/OOT 及后续 transform、训练、评估仍保留全量行。默认 `None` 保持历史行为。 |
+| `extra_eval_datasets` | 模型**评估** | 传入 `{"名称": DataFrame}` 的 eval-only 数据集；会走 WOE transform 并并入 `perf_results`，但不参与特征筛选、WOE 拟合、训练、backward 或 Optuna。名称不得与 `ins/oos/oot` 冲突。 |
+
+典型场景：INS 中剔除未成熟样本再拟合 WOE，同时把全量申请月或竞品样本仅用于出分评估。
+
+```python
+cfg = CreditModelPipelineConfig(
+    output_dir="output",
+    feature_cols=["income", "age", "score_b"],
+    target_col="badflag",
+    split_col="model_split",
+    woe_fit_query="mature_flag == 1",          # 仅 mature INS 参与 WOE fit
+    extra_eval_datasets={
+        "full_apply": full_application_df,     # eval-only，不进训练
+        "competitor": competitor_score_df,
+    },
+    train_models=["lr", "lgb"],
+)
+result = CreditModelPipeline(cfg).run(modeling_df)
+
+result.perf_results["lgb"]  # 含 ins/oos/oot + full_apply + competitor
+result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
+```
+
+`woe_fit_query` 引用的列必须在主输入 `DataFrame` 中存在；语法会在 `run()` 入口预检。列名校验失败抛 `KeyError`，语法错误抛 `ValueError`。
+
 ### `CreditModelPipelineConfig` 参数
 
 | 参数 | 默认值 | 说明 |
@@ -416,6 +448,8 @@ result = CreditModelPipeline(cfg).run(modeling_df)
 | `woe_engine` | `"equal_freq"` | WOE 引擎。支持 `"equal_freq"` 和 `"monotone"`。 |
 | `woe_params` | `{"nbins": 10, "equal_freq": True, "min_bin_prop": 0.05}` | `WOE_Master.fit()` 参数和通用 WOE 配置。 |
 | `monotone_woe_params` | `{"n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2}` | `MonotoneWOEBinner` 参数。 |
+| `woe_fit_query` | `None` | pandas `query()` 表达式，仅过滤 INS 上用于 WOE 拟合的行；transform 与评估仍用全量 splits。 |
+| `extra_eval_datasets` | `None` | eval-only 额外评估集 `dict[str, DataFrame]`；WOE transform 后并入 `perf_results`，不参与筛选/训练/backward/Optuna。 |
 | `train_models` | `["lr", "lgb", "xgb", "cat"]` | 要训练的模型列表。 |
 | `model_params` | `{}` | 每个模型的参数字典。 |
 | `gbm_feature_source` | `"woe"` | GBM 入模特征来源。可传全局 `"woe"` / `"raw"`，也可传 `{"lgb": "raw", "xgb": "woe", "cat": "raw"}`。LR 始终使用 WOE 特征。 |
@@ -810,7 +844,7 @@ result.high_corr_pairs
 | CSV 直读与分批 | `batch_metadata`、合并后的各分析表 | `input_type`、`csv_read_kwargs`、`feature_batch_size`、`feature_batches`、`batch_base_cols`、`batch_corr_mode` |
 | 样本切分 | `splits` | `split_col`、`sample_col`、`oot_col`、`split_config`、`random_state` |
 | 分布分析 | `distribution_summary` | `time_dims`、`population_dims`、`group_specs`、`distribution_params` |
-| WOE 分箱 | `woe_artifacts` | `woe_engine`、`woe_params`、`monotone_woe_params`、`categorical_features` |
+| WOE 分箱 | `woe_artifacts` | `woe_engine`、`woe_params`、`monotone_woe_params`、`categorical_features`、`woe_fit_query` |
 | Monotone refine | `woe_artifacts["refine_summary"]` | `monotone_refine_cate_enabled`、`monotone_refine_dtree_enabled`、`monotone_refine_chi2_enabled` 及对应 params |
 | PSI | `psi_summary`、`psi_details` | `psi_reference_dataset`、`psi_reference_data`、`psi_group_dims`、`psi_use_woe_bins`、`psi_params` |
 | IV / KS | `ivks_summary` | `ivks_group_dims`、`ivks_use_woe_bins`、`ivks_params`、`min_group_size` |
@@ -844,6 +878,7 @@ result.high_corr_pairs
 | `group_specs` | `None` | 自定义分组规格；不传时自动组合 global/time/population/time x population。 |
 | `min_group_size` | `100` | PSI/IV/KS 分组最小样本数保护。 |
 | `woe_engine` | `"monotone"` | 默认 `MonotoneWOEBinner`；也支持 `"equal_freq"` 使用 `WOE_Master`。 |
+| `woe_fit_query` | `None` | pandas `query()` 表达式，仅过滤 INS 上用于 WOE 拟合的行；PSI/IV/KS 与 transform 仍基于全量 splits。拟合审计写入 `woe_artifacts["refine_summary"]` 的 `fit_filter` 行。 |
 | `categorical_features` | `None` | 类别特征列表，传给 `MonotoneWOEBinner(cate_feats=...)`。 |
 | `monotone_refine_cate_enabled` | `False` | 是否对类别变量调用 `refine_cate()`。 |
 | `monotone_refine_cate_params` | `{}` | 透传 `refine_cate(features, max_bins, min_bin_size, badrate_tol)`。 |
@@ -937,6 +972,28 @@ cfg = FeatureValidationPipelineConfig(
 ```
 
 默认不执行任何 refine；执行顺序固定为 `refine_cate` -> `refine_dtree` -> `refine_chi2`。
+
+### WOE 拟合过滤示例
+
+当 INS 含未成熟样本、但 OOS/OOT 仍需保留全量行做稳定性与区分度评估时，可用 `woe_fit_query` 仅收紧 WOE 拟合口径：
+
+```python
+cfg = FeatureValidationPipelineConfig(
+    output_dir="output/feature_validation",
+    target_cols=["badflag"],
+    new_feature_cols=["new_score", "new_income"],
+    split_col="model_split",
+    woe_engine="monotone",
+    woe_fit_query="mature_flag == 1",
+    population_dims=["channel"],  # query 引用的列须在输入或 batch_base_cols 中
+)
+result = FeatureValidationPipeline(cfg).run(feature_wide_df)
+
+# refine_summary 含 fit_filter 审计行：n_before / n_after / query
+result.woe_artifacts["refine_summary"]
+```
+
+CSV batch 模式下，`woe_fit_query` 引用的列须包含在自动解析的 `batch_base_cols` 中，或通过 `batch_base_cols` 显式传入。
 
 ### 结果对象
 

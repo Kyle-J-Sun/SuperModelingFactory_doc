@@ -464,6 +464,39 @@ lime_local = explainer.lime_explain_instance(explain_x.iloc[0], X_train=backgrou
 lime_global = explainer.lime_global_importance(explain_x, X_train=background_x, sample_size=50)
 ```
 
+## Pipeline 评估数据入口对比
+
+若使用 [`Modeling_Tool.Pipeline`](pipeline_one_click.md) 高层封装而非手写 Step 1–8，三条主流水线的**额外评估数据**入口如下。设计原则一致：训练/拟合口径与评估口径解耦，默认行为向后兼容。
+
+| Pipeline | 配置参数 | 典型用途 | 参与 WOE 拟合 | 参与模型训练 | 进入 perf 评估 |
+|---|---|---|---|---|---|
+| `RejectInferencePipeline` | `oot_data` | 外部全量 OOT 申请数据（可含未表现样本） | — | RI 后模型用 INS/OOS | ✅ OOT + RI 模型 perf |
+| `FeatureValidationPipeline` | `woe_fit_query` | INS 剔除未成熟等行，仅收紧 WOE 拟合 | ✅ 仅 INS fit 子集 | —（无模型训练） | ✅ PSI/IV/KS 仍用全量 splits |
+| `CreditModelPipeline` | `woe_fit_query` | 同左，收紧 WOE 拟合 | ✅ 仅 INS fit 子集 | ❌ 训练仍用全量 INS | ✅ 全量 ins/oos/oot |
+| `CreditModelPipeline` | `extra_eval_datasets` | 竞品分、全量申请月等 eval-only 集 | ❌ | ❌ | ✅ 仅评估 |
+
+对标关系：
+
+- RI 的 `oot_data` ≈ CM 的「主表之外的独立 OOT 物理表」，但 RI 把它并入 OOT 评估链路；CM 用 `extra_eval_datasets` 挂载**任意命名**的 eval-only 集，且**不**替代 `split_col` 中的 `oot`。
+- FV / CM 的 `woe_fit_query` 是**行掩码**，不是第二张物理表；`woe_fit_data`（第二物理拟合表）当前版本**不做**。
+
+```python
+# RI：外部 OOT 优先于 split_col == "oot"
+RejectInferencePipelineConfig(oot_data=df_oot_full, ...)
+
+# FV：仅 mature INS 参与 WOE fit，评估仍看全量
+FeatureValidationPipelineConfig(woe_fit_query="mature_flag == 1", ...)
+
+# CM：拟合过滤 + 额外 eval-only 集
+CreditModelPipelineConfig(
+    woe_fit_query="mature_flag == 1",
+    extra_eval_datasets={"full_apply": df_apply},
+    ...
+)
+```
+
+详见 [顶层封装流水线 — WOE 拟合过滤与额外评估集](pipeline_one_click.md#woe-拟合过滤与额外评估集)。
+
 ## 下一步
 
 - 模型解释细节：[模型解释](guides/explainability.md)
@@ -471,3 +504,4 @@ lime_global = explainer.lime_global_importance(explain_x, X_train=background_x, 
 - 特征筛选细节：[特征筛选](guides/feature.md)
 - WOE 编码细节：[WOE 编码](guides/woe.md)
 - 样本权重 API 细节：[模型训练](guides/model.md) / [模型评估](guides/eval.md)
+- Pipeline 一键 API：[顶层封装流水线](pipeline_one_click.md)
