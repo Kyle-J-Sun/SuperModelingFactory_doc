@@ -384,13 +384,14 @@ result = CreditModelPipeline(cfg).run(modeling_df)
 
 `weight_col` 会贯通以下阶段：
 
+- **特征筛选**（PSI / IV / 相关性，v0.3.8+ 经 `weighted_feature_screen`）
 - LR / GBM 模型训练（`LRMaster.fit`、`GradientBoostingModel.fit`）
 - LR 参数搜索（`grid_search_params`）与 GBM Optuna/Grid 搜索（`param_search`）
 - Backward 变量剔除（`BackwardVariableEliminator`）
 - 性能评估（`PerformanceEvaluator`）
 
-!!! note "v1 限制"
-    **特征筛选**（PSI / IV / 相关性）与 **WOE 分箱** 当前底层 API 不支持加权，Pipeline 在这两阶段仍按未加权样本执行。若业务强依赖加权 WOE，需后续扩展底层 API。
+!!! note "WOE 加权"
+    **WOE 分箱** 底层 API 暂不支持 `weight_col`；Pipeline WOE 拟合仍按未加权样本执行。特征筛选加权与 WOE 未加权可并存，Fuzzy Augment 等场景优先用加权筛选修正 IV/PSI 口径。
 
 ### WOE 拟合过滤与额外评估集
 
@@ -434,7 +435,7 @@ result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
 | `split_col` | `None` | 推荐的新样本切分字段名。若传入，优先于 `sample_col`，取值支持 `ins/oos/oot`。 |
 | `sample_col` | `"sample_ind"` | 兼容旧版本的已切分样本标识列。未传 `split_col` 时使用。 |
 | `oot_col` | `"oot_flag"` | OOT 标识列。仅在没有有效 `split_col/sample_col` 时使用。 |
-| `weight_col` | `None` | 样本权重列。非空时贯通 LR/GBM 训练、LR/GBM 参数搜索、backward 与性能评估；`None` 时保持未加权行为。 |
+| `weight_col` | `None` | 样本权重列。非空时贯通特征筛选（v0.3.8+）、LR/GBM 训练、LR/GBM 参数搜索、backward 与性能评估；`None` 时保持未加权行为。 |
 | `random_state` | `42` | 随机种子。 |
 | `write_outputs` | `True` | 是否输出 CSV、图表等中间文件。 |
 | `write_excel` | `True` | 是否输出 Excel 报告。 |
@@ -499,10 +500,12 @@ split_config={
 feature_selection={
     "psi_enabled": True,
     "psi_threshold": 0.2,
+    "psi_compare_splits": ["oos"],
     "iv_enabled": True,
     "iv_threshold": 0.02,
     "corr_enabled": True,
     "corr_threshold": 0.75,
+    "corr_max_iterations": 10,
 }
 ```
 
@@ -510,6 +513,7 @@ feature_selection={
 |---|---|---|
 | `psi_enabled` | `True` | 是否运行 PSI 稳定性筛选。 |
 | `psi_threshold` | `0.2` | PSI 小于该阈值的变量保留。 |
+| `psi_compare_splits` | `["oos"]` | PSI 对比切片；传 `["oos", "oot"]` 可同时输出 `psi_ins_oos` 与 `psi_ins_oot`。 |
 | `psi_buckets` | `10` | PSI 分箱数。 |
 | `iv_enabled` | `True` | 是否运行 IV 筛选。 |
 | `iv_threshold` | `0.02` | IV 大于等于该阈值的变量保留。 |

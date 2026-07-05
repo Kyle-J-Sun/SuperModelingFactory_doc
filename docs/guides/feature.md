@@ -110,7 +110,31 @@ keep_vars = CorrelationFilter(
 | `woe_engine` | `master` | 分箱引擎名称 |
 | `woe_binner` | `None` | 已拟合的 `WOE_Master` 或 `MonotoneWOEBinner` |
 
-## 4. 分布偏移分析
+## 4. 加权特征筛选（v0.3.8+）
+
+`weighted_feature_screen` 把 PSI → IV → 相关性去冗余串成一条 API，并支持 `weight_col` 加权分位切点、加权 IV/PSI 与加权 Pearson 相关性（IV 仲裁）。
+
+```python
+from Modeling_Tool import weighted_feature_screen
+
+result = weighted_feature_screen(
+    data=df,                      # 需含 split_col 取值 ins/oos/oot
+    feature_cols=features,
+    target_col="badflag",
+    split_col="sample_ind",
+    weight_col="_weight",         # None 时走 legacy 无权工具，与旧 Pipeline 回归一致
+    psi_compare_splits=["oos", "oot"],  # 独立 API 默认；Pipeline 默认仅 ["oos"]
+)
+selected = result.selected_features
+iv_table = result.iv_table       # iv_weighted / n_bins / missing_rate
+psi_table = result.psi_table     # psi_ins_oos / psi_ins_oot / psi_max
+```
+
+典型场景：Fuzzy Augment 双行样本带 `_weight` 时，用加权 IV 避免未加权计数对冲失真；05E 实验可对 RI 增广样本 + `weight_col` 做加权 top-N 筛选。
+
+`CreditModelPipeline` 的 `_feature_selection` 已委托此 API；配置 `weight_col` 非空时自动走加权路径。
+
+## 5. 分布偏移分析
 
 ```python
 from Modeling_Tool import DistributionShiftAnalyzer

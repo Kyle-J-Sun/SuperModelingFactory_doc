@@ -10,6 +10,10 @@
 
 ::: Modeling_Tool.Feature.Feature_Insights
 
+## 加权特征筛选 — `Weighted_Screen`
+
+::: Modeling_Tool.Feature.Weighted_Screen
+
 ## 分布分析 — `Distribution_Tool`
 
 ::: Modeling_Tool.Feature.Distribution_Tool
