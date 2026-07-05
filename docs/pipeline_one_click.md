@@ -748,7 +748,8 @@ business_prior_groups={
 | `optuna_results` | `{model_name: search_result_df}`。 |
 | `warm_start_summary` | 前置分 warm-start 启用、跳过、score 类型和缺失率汇总；未启用时为空。 |
 | `perf_results` | `{model_name: perf_df}`。 |
-| `explain_outputs` | SHAP/Owen 等解释输出。 |
+| `explain_outputs` | SHAP/Owen 等解释输出（内存对象，含 DataFrame）。 |
+| `explain_paths` | `write_outputs=True` 时各模型解释产物路径索引（含 `explain_manifest`）。 |
 | `model_paths` | `save_models=True` 时每个模型 pkl 的路径。 |
 | `artifact_paths` | `save_models=True` 时 WOE table、WOE engine 等配套 artifact 路径。 |
 | `report_path` | Excel 报告路径；若 `write_excel=False` 则为空。 |
@@ -783,6 +784,9 @@ result.artifact_paths["woe_engine"]
 | `figs/woe/overall/` | `WOE_Master.plot_bivar_graph()` 生成的 equal-freq WOE 图。 | `woe_engine="equal_freq"` |
 | `figs/mono_woe/` | `MonotoneWOEBinner.plot_woe_graph()` 生成的单调分箱 WOE 图。 | `woe_engine="monotone"` |
 | `figs/perf/` | 每个模型的性能评估图，例如 `perf_lr.png`、`perf_lgb.png`。 | 对应模型训练成功 |
+| `explain/{model}/` | `feature_importance.csv`、Owen 重要性表、`shap_summary.png`（`plot_outputs=True`）；根目录 `explain_manifest.csv`。 | `write_outputs=True` 且 `explain_models` 非空或 `owen_enabled=True` |
+
+`write_outputs=False` 时解释结果仅保留在 `result.explain_outputs` 内存中；落盘路径索引见 `result.explain_paths`。
 
 ## 3. 特征验收流水线
 

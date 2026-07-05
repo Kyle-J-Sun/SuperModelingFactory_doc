@@ -238,6 +238,8 @@ explainer = ModelExplainer(gbm, background_data=background_x)
 explainer.explain(explain_x)
 shap_importance = explainer.feature_importance(normalize=True)
 explainer.summary_plot(show=False, save_path="./output/explain/shap_summary.png")
+# CreditModelPipeline 在 write_outputs=True 时会自动将 explain_outputs 落盘到 output/explain/，
+# 并返回 result.explain_paths；下方 PDP/ICE/LIME 等进阶图仍建议手动 save_path。
 local_shap = explainer.explain_instance(explain_x.iloc[[0]])
 
 # 2) Owen Value：先验分组 + 自动聚类兜底，输出模块级 reason code
@@ -294,12 +296,15 @@ ale_curve = explainer.ale(explain_x, feature=focus_feature, bins=20)
 explainer.ale_plot(explain_x, feature=focus_feature, show=False, save_path="./output/explain/ale.png")
 
 # 6) LIME：单样本局部解释 + 采样聚合重要性
+# 特征含空值时默认 missing_strategy="median"（train 列中位数填充）并 warnings.warn 明细；
+# 可选 missing_strategy="drop" 丢弃含空值行。
 lime_local = explainer.lime_explain_instance(
     x_row=explain_x.iloc[0],
     X_train=background_x,
     num_features=10,
     num_samples=3000,
     random_state=42,
+    missing_strategy="median",
 )
 lime_global = explainer.lime_global_importance(
     X=explain_x,
@@ -308,6 +313,7 @@ lime_global = explainer.lime_global_importance(
     num_features=10,
     num_samples=1000,
     random_state=42,
+    missing_strategy="median",
 )
 
 print(shap_importance.head(10))
