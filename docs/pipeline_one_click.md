@@ -952,6 +952,22 @@ cm_result = CreditModelPipeline(
 
 也可直接传 `feature_validation_result=fvp_result`。设 `reuse_screening_woe=False` 时仅复用筛选列表，WOE 按 CM 配置重 fit。
 
+一键编排：
+
+```python
+from Modeling_Tool import (
+    CreditModelPipelineConfig,
+    FeatureValidationPipelineConfig,
+    run_modeling_from_validation,
+)
+
+fvp_result, cm_result = run_modeling_from_validation(
+    data,
+    fvp_config=FeatureValidationPipelineConfig(selection_enabled=True, ...),
+    cm_config=CreditModelPipelineConfig(woe_engine="monotone", ...),
+)
+```
+
 ### CSV 直读与超宽表分批
 
 当新特征很多、一次性读入 pandas 会占用过高内存时，可以直接把本地 CSV 路径传给 `run()`，并通过 `feature_batch_size` 或 `feature_batches` 按列分批。Pipeline 会先读取基础列生成稳定的 INS/OOS/OOT 切分，再逐批读取 `base cols + 当前批特征 + incumbent features`，最后合并分布、WOE、PSI、IV/KS、相关性和 ExcelMaster 报告。
