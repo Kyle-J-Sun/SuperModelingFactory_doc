@@ -21,18 +21,18 @@ jobs:
 
     steps:
       - name: Check out documentation
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: SuperModelingFactory_doc
 
       - name: Check out source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: Kyle-J-Sun/SuperModelingFactory
           path: SuperModelingFactory
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
           cache: pip
@@ -57,7 +57,7 @@ jobs:
           enablement: true
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: SuperModelingFactory_doc/site
 
@@ -72,3 +72,19 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        # GitHub Pages deployments occasionally fail with a transient
+        # "Deployment failed, try again later." from the Pages service
+        # (observed 2026-07-06 on the ChangeLog merge). Retry twice
+        # with a short backoff so a single transient blip does not leave
+        # the site out of sync with main.
+        with:
+          timeout: 600000
+          error_count: 10
+          reporting_interval: 5000
+
+      - name: Retry deploy on transient failure
+        if: failure() && steps.deployment.conclusion == 'failure'
+        id: deployment_retry
+        uses: actions/deploy-pages@v4
+        with:
+          timeout: 600000
