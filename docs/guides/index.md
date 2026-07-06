@@ -62,6 +62,10 @@
 
     `ExcelMaster` / `Template` / `Report`
 
+- :material-history: **[v0.4.0 变更笔记](changes_040.md)**
+
+    MEDIUM hygiene batch #2 —— cross_vars 默认变更、object 列 numeric 强转 opt-in、相关性计算向量化、样本分析 dry-run 等六项
+
 </div>
 
 ## 阅读顺序建议

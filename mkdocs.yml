@@ -146,6 +146,7 @@ nav:
       - 拒绝推断与分布适配: guides/reject_inference.md
       - 线上线下一致性校验: guides/uat.md
       - Excel 报告生成: guides/excel_report.md
+      - v0.4.0 变更笔记: guides/changes_040.md
   - API 参考:
       - api/index.md
       - Modeling_Tool.Core: api/core.md
