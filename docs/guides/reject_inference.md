@@ -216,6 +216,51 @@ RejectInferencePipeline(cfg).run(df)
 同时新增了单独的边界约束：`oot_frac` 必须在 `[0, 1)` 内（`0` 允许，表示禁用
 OOT 切分）。
 
+## 6. Pipeline 层：Pre-score 加固（v0.3.18）
+
+从 **v0.3.18** 起，`RejectInferencePipeline` 对 pre-score 训练路径新增两处显式校验，
+用来在早期暴露过去只能靠观察输出才发现的静默错误。
+
+### 6.1 `score_col` 覆盖警告
+
+当同时满足以下两个条件时：
+
+- `cfg.train_prescore=True`（用户显式要求训练 pre-score）
+- `cfg.score_col` 对应的列已存在于输入 DataFrame 中
+
+Pipeline 会在真正开始训练前触发 `UserWarning`：
+
+```
+train_prescore=True will overwrite existing column 'prescore_prob' in input data.
+Set train_prescore=False to reuse the supplied scores, or rename cfg.score_col to
+a fresh column name to avoid this overwrite.
+```
+
+历史行为（v0.3.17 及以前）：Pipeline 会直接用新训练的模型分数覆盖用户提供的列，
+没有任何提示。想要保留原有分数的调用方通常在下游对比时才发现分数被换过。
+
+处理建议：
+
+- 想复用已有分数 → `train_prescore=False`；
+- 想训练新分数但保留旧列 → 把 `cfg.score_col` 改成一个不存在的新列名（例如 `"prescore_prob_v2"`）；
+- 确认要覆盖 → 忽略警告即可，行为与 0.3.17 一致。
+
+### 6.2 空 approved 样本快速失败
+
+`_fit_prescore` 会先过滤出 `(approved_col==1) & target_col.notna()` 的行。若该子集为空，
+v0.3.17 及以前会一路把空 DataFrame 传给 `SampleSplitter`，最终在 sklearn 内部报一个
+难以定位的 stratify 错误。v0.3.18 起改为在 `_fit_prescore` 入口直接抛出：
+
+```
+ValueError: Cannot train pre-score model: no rows satisfy
+('approved'==1 & 'badflag' not null). Diagnostics: approved=0,
+target-observed=0, total=1200. Check approved_col/target_col semantics or
+supply a pre-computed score_col and set train_prescore=False.
+```
+
+错误信息里同时给出 `approved` 计数、`target-observed` 计数和总行数，方便快速判断是审批标识
+错了、标签缺失、还是批次全部被拒。
+
 ## 常见问题
 
 ??? question "哪种拒绝推断方法最准确"
