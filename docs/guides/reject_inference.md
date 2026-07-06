@@ -148,6 +148,28 @@ sample_weights = adapter.get_weights()
 # sample_weights 可作为下游训练器的样本权重（当前 SMF 无内置加权训练接口）。
 ```
 
+## 4. Pipeline 层：样本权重自动传递
+
+从 **v0.3.16** 起，`RejectInferencePipeline` 内部会把每个 RI 方法生成的 `_weight`
+列自动作为 `sample_weight` 传给下游 `GradientBoostingModel.fit`，无需用户显式配置：
+
+| RI 方法 | 是否生成 `_weight` | 训练时是否加权 |
+|---|---|---|
+| `simple_augment` | ❌（每条拒绝样本被复制成 1 条 good，权重视为 1.0） | ❌ |
+| `hard_cutoff` | ❌ | ❌ |
+| `fuzzy_augment` | ✅（每条拒绝样本被复制成 good + bad 两行，权重分别为 `1-p(bad)` 和 `p(bad)`） | ✅ |
+| `parceling` | ✅（按 score 分段随机赋标签，权重按段内 bad 率） | ✅ |
+
+!!! warning "历史 bug（v0.3.15 及以前）"
+
+    在 v0.3.15 及更早版本中，`RejectInferencePipeline` 将 `_weight` 以 `wgt=`
+    传给 `GradientBoostingModel.fit`。由于 fit 的正确参数名是 `sample_weight`，
+    `wgt` 会被 `**kwargs` 静默吞掉，**样本权重从未真正生效**。
+    v0.3.16 已修复，`fuzzy_augment` / `parceling` 的加权训练现在按预期工作。
+
+    如果你在 v0.3.15 或更早版本训练过 RI 后模型，建议在 v0.3.16 重新训练一次，
+    对比 KS/AUC 差异确认权重是否显著影响模型。
+
 ## 常见问题
 
 ??? question "哪种拒绝推断方法最准确"
