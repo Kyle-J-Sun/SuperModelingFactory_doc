@@ -170,6 +170,52 @@ sample_weights = adapter.get_weights()
     如果你在 v0.3.15 或更早版本训练过 RI 后模型，建议在 v0.3.16 重新训练一次，
     对比 KS/AUC 差异确认权重是否显著影响模型。
 
+## 5. Pipeline 层：输入 & 配置校验（v0.3.17）
+
+v0.3.17 收紧了 `RejectInferencePipeline` 的 fail-fast 校验，把两类此前会在深层
+代码里报错或静默数据泄漏的情况都抬到 `run()` 起始的 `_validate_input` /
+`_validate_ri_approved_config` 阶段。
+
+### 5.1 隐式 prescore 需要 `target_col`
+
+即使 `train_prescore=False`，只要输入 DataFrame 中缺少 `score_col`（默认
+`"prescore_prob"`），Pipeline 仍会走一次隐式 prescore 训练（`_run` 内部逻辑：
+`if cfg.train_prescore or cfg.score_col not in data.columns: _fit_prescore(...)`）。
+
+历史版本上，`_validate_input` 只在 `train_prescore=True` 时才检查 `target_col`
+是否存在，所以上述隐式路径下缺 target 会在 `_fit_prescore` 里报一个位置奇怪的
+`KeyError`。v0.3.17 起，只要 Pipeline 判断出**任何一条 prescore 训练路径会被触发**，
+`_validate_input` 就在最外层显式 `raise KeyError`，报错信息包含 `train_prescore`
+和 `score_col` 的实际状态，便于定位。
+
+对应的合法组合：
+
+| `train_prescore` | `score_col` 是否在数据中 | `target_col` 是否必需 |
+|---|---|---|
+| `True` | 有或无 | ✅ 必需 |
+| `False` | ✅ 已提供 | ❌ 可选（Pipeline 直接使用外部分数） |
+| `False` | ❌ 缺失（隐式训练） | ✅ 必需（v0.3.17 起显式要求） |
+
+### 5.2 `oot_frac + ri_validation_frac` 必须 `< 1.0`
+
+`RejectInferencePipeline._sample_validation_ids` 会在按 `oot_frac` 抽出 OOT 之后，
+从剩余样本里再按 `ri_validation_frac` 抽验证集。如果两者之和 ≥ 1，剩余池会为空，
+历史版本会静默 fallback 到 `pool = approved.copy()`，验证集因此会与 OOT 有交集，
+**造成 OOT 行泄漏进验证指标**。
+
+v0.3.17 起，`_validate_ri_approved_config` 会在 `run()` 起始直接抛
+`ValueError`：
+
+```python
+cfg = RejectInferencePipelineConfig(oot_frac=0.5, ri_validation_frac=0.5)
+RejectInferencePipeline(cfg).run(df)
+# ValueError: oot_frac (0.5) + ri_validation_frac (0.5) = 1.000 must be < 1.0
+# to leave a non-empty training pool disjoint from OOT and validation
+```
+
+同时新增了单独的边界约束：`oot_frac` 必须在 `[0, 1)` 内（`0` 允许，表示禁用
+OOT 切分）。
+
 ## 常见问题
 
 ??? question "哪种拒绝推断方法最准确"

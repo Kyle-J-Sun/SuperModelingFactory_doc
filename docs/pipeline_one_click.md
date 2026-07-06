@@ -434,7 +434,7 @@ result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
 | `feature_cols` | `None` | 原始入模特征列。建议显式传入；不传时从数值列推断。 |
 | `split_col` | `None` | 推荐的新样本切分字段名。若传入，优先于 `sample_col`，取值支持 `ins/oos/oot`。 |
 | `sample_col` | `"sample_ind"` | 兼容旧版本的已切分样本标识列。未传 `split_col` 时使用。 |
-| `oot_col` | `"oot_flag"` | OOT 标识列。仅在没有有效 `split_col/sample_col` 时使用。 |
+| `oot_col` | `"oot_flag"` | OOT 标识列。仅在没有有效 `split_col/sample_col` 时使用。**v0.3.17+ 要求列值可数值化**：`0`（可以是 `int`/`float`/`bool`/字符串 `"0"`）判为 INS+OOS，非 `0` 判为 OOT；非数值内容（如 `"train"`/`"test"`）会在切分阶段抛 `TypeError`，避免历史版本上字符串标志被静默全部路由到 OOT。 |
 | `weight_col` | `None` | 样本权重列。非空时贯通特征筛选（v0.3.8+）、LR/GBM 训练、LR/GBM 参数搜索、backward 与性能评估；`None` 时保持未加权行为。 |
 | `random_state` | `42` | 随机种子。 |
 | `write_outputs` | `True` | 是否输出 CSV、图表等中间文件。 |
