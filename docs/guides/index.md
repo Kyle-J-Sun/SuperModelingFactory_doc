@@ -70,6 +70,10 @@
 
     LOW hygiene batch —— 拒绝推断默认 cutoff NaN 处理、predict_positive shape/长度/finite 校验、feature_validation 混合 Interval+NaN groupby 稳定性
 
+- :material-history: **[v0.4.2 变更笔记](changes_042.md)**
+
+    HIGH hotfix batch —— ODPS 上传原子性、split_df exclude_cols 语义修正、HardCutoffInferrer NaN 守卫、Weighted_Screen 缺失分箱处理、PSI missing_policy 新参数
+
 </div>
 
 ## 阅读顺序建议

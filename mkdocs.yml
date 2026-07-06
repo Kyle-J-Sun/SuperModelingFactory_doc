@@ -148,6 +148,7 @@ nav:
       - Excel 报告生成: guides/excel_report.md
       - v0.4.0 变更笔记: guides/changes_040.md
       - v0.4.1 变更笔记: guides/changes_041.md
+      - v0.4.2 变更笔记: guides/changes_042.md
   - API 参考:
       - api/index.md
       - Modeling_Tool.Core: api/core.md
