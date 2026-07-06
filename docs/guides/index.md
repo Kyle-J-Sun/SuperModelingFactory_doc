@@ -62,19 +62,11 @@
 
     `ExcelMaster` / `Template` / `Report`
 
-- :material-history: **[v0.4.0 变更笔记](changes_040.md)**
-
-    MEDIUM hygiene batch #2 —— cross_vars 默认变更、object 列 numeric 强转 opt-in、相关性计算向量化、样本分析 dry-run 等六项
-
-- :material-history: **[v0.4.1 变更笔记](changes_041.md)**
-
-    LOW hygiene batch —— 拒绝推断默认 cutoff NaN 处理、predict_positive shape/长度/finite 校验、feature_validation 混合 Interval+NaN groupby 稳定性
-
-- :material-history: **[v0.4.2 变更笔记](changes_042.md)**
-
-    HIGH hotfix batch —— ODPS 上传原子性、split_df exclude_cols 语义修正、HardCutoffInferrer NaN 守卫、Weighted_Screen 缺失分箱处理、PSI missing_policy 新参数
-
 </div>
+
+!!! tip "版本变更笔记"
+
+    历史版本的迭代内容已集中到顶级导航的 [ChangeLog](../changelog/index.md) tab 下。
 
 ## 阅读顺序建议
 
