@@ -66,6 +66,10 @@
 
     MEDIUM hygiene batch #2 —— cross_vars 默认变更、object 列 numeric 强转 opt-in、相关性计算向量化、样本分析 dry-run 等六项
 
+- :material-history: **[v0.4.1 变更笔记](changes_041.md)**
+
+    LOW hygiene batch —— 拒绝推断默认 cutoff NaN 处理、predict_positive shape/长度/finite 校验、feature_validation 混合 Interval+NaN groupby 稳定性
+
 </div>
 
 ## 阅读顺序建议
