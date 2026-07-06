@@ -463,7 +463,7 @@ result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
 | `lr_search_params` | `{}` | 覆盖 LR search 的 `objective`、`primary_set`、`gap_ref_sets`、`metric`、`refit`、`verbose` 等参数。 |
 | `use_lr_search_params` | `True` | 是否把 LR best params 合并进最终 LR 训练参数。 |
 | `warm_start_enabled` | `False` | 是否启用 GBM 前置分 warm-start。 |
-| `warm_start_score_col` | `None` | 输入数据中的前置分列。 |
+| `warm_start_score_col` | `None` | 输入数据中的前置分列。该列会以位置对齐方式拷贝到 WOE 变换后的各个 split（v0.3.18 起经 `copy_column_length_checked` 校验长度）；若上游 WOE / `dropna` / fit-query 改变了行数，会在拷贝环节直接 `ValueError`，不会静默杂接错位的分数。 |
 | `warm_start_score_type` | `"probability"` | `"probability"` 会裁剪后转 log-odds；`"log_odds"` 直接作为 init score。 |
 | `warm_start_models` | `["lgb", "xgb"]` | 启用 warm-start 的 GBM 模型。当前底层支持 `lgb/xgb`。 |
 | `warm_start_on_unsupported` | `"skip"` | CatBoost 等不支持 init score 时跳过 warm-start 或抛错。 |
