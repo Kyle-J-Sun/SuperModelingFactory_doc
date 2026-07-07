@@ -35,6 +35,18 @@ psi = PSICalculator(buckets=10, binning_engine=binner)
 psi_table = psi.calculate(train_df, oot_df, features)
 ```
 
+### v0.5.1 PSI one-sided bucket policy
+
+When a bucket appears on only one side of a PSI comparison, SMF now defaults to
+Laplace smoothing instead of flooring the missing side to `1e-6`:
+
+```python
+psi = PSICalculator(psi_missing_bucket_policy="smooth_laplace")  # default
+```
+
+Use `psi_missing_bucket_policy="floor_1e6"` for legacy reports, or
+`psi_missing_bucket_policy="exclude"` to remove one-sided buckets from the PSI sum.
+
 ### PSI 阈值
 
 | PSI 区间 | 含义 |
@@ -61,6 +73,10 @@ insights = VarExtractionInsights(
 report = insights.get_var_analysis_report(train_df, features)
 print(report[["var", "iv", "ks_in_gains", "lift_in_gains"]])
 ```
+
+From v0.5.1, expected per-variable failures are recorded in
+`insights.failed_variables` and summarized with one warning instead of silently
+disappearing from the report.
 
 复用 Monotone 分箱：
 
@@ -170,7 +186,7 @@ print(shift_table)
 === "WOE_Master（默认）"
 
     ```python
-    from Modeling_Tool import WOE_Master, PSICalculator, VarExtractionInsights, CorrelationFilter
+    from Modeling_Tool import WOE_Master, PSICalculator, VarExtractionInsights, CorrelationFilter, SMF_MISSING_BIN
 
     woe = WOE_Master(train_data=train_df, varlist=features, dep="bad_flag")
     woe.fit(nbins=10, equal_freq=True)
