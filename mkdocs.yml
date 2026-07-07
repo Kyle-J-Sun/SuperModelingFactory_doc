@@ -161,6 +161,7 @@ nav:
   - 常见问题: faq.md
   - ChangeLog:
       - changelog/index.md
+      - v0.5.3: changelog/v0.5.3.md
       - v0.5.1: changelog/v0.5.1.md
       - v0.5.0: changelog/v0.5.0.md
       - v0.4.2: changelog/v0.4.2.md
