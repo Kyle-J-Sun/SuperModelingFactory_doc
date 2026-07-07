@@ -1,6 +1,6 @@
 # Pipeline GUI Schema
 
-SMF 0.5.3+ provides a dependency-free schema layer for building a Pipeline configuration GUI.
+SMF 0.5.4+ provides a dependency-free schema layer for building a Pipeline configuration GUI.
 The GUI itself should live outside the modeling package, but it can treat SMF as the source of truth for:
 
 - the 7 public high-level Pipeline cards
@@ -122,7 +122,7 @@ Output shape:
 pipeline: mock_sample
 pipeline_class: MockSamplePipeline
 config_class: MockSamplePipelineConfig
-smf_version: 0.5.3
+smf_version: 0.5.4
 config:
   n_samples: 80000
   applied_sample: 1
