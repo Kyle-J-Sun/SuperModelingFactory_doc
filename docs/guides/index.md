@@ -18,6 +18,10 @@
 
     `ProcCompareEngine` / `proc_compare` / DataFrame 与 CSV 大表一致性校验
 
+- :material-application-brackets: **[Pipeline GUI Schema](pipeline_gui_schema.md)**
+
+    `extract_pipeline_schema` / `config_to_yaml` / `validate_pipeline_config` / GUI 表单元数据
+
 - :material-chart-bell-curve: **[WOE 编码](woe.md)**
 
     `WOE_Master` / `MonotoneWOEBinner` / `is_monotonic`
