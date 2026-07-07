@@ -1,0 +1,229 @@
+{
+  "pipeline": "CreditModelPipeline",
+  "config_class": "CreditModelPipelineConfig",
+  "hierarchy": {
+    "required": [
+      {
+        "level1": "基础输入与输出",
+        "level2": [
+          {
+            "name": "输出与运行控制",
+            "params": {
+              "output_dir": "输出目录，默认 output",
+              "random_state": "全局随机种子",
+              "write_outputs": "是否输出 CSV/图片/解释性文件",
+              "write_excel": "是否输出 Excel 报告",
+              "plot_outputs": "是否输出 WOE/perf/explain 图片"
+            }
+          },
+          {
+            "name": "字段边界",
+            "params": {
+              "target_col": "建模目标字段，默认 badflag",
+              "feature_cols": "原始入模特征；为空时自动选择数值列并排除 target/split/oot/weight",
+              "weight_col": "样本权重字段；会传给 GBM 训练、param_search 和评估",
+              "extra_eval_datasets": "额外评估数据集字典；key 不能与 ins/oos/oot 冲突"
+            }
+          }
+        ]
+      }
+    ],
+    "optional": [
+      {
+        "level1": "样本切分",
+        "level2": [
+          {
+            "name": "已有切分字段",
+            "params": {
+              "split_col": "推荐切分字段；支持 ins/oos/oot，优先级最高",
+              "sample_col": "兼容旧切分字段，默认 sample_ind",
+              "oot_col": "OOT flag 字段；无 split/sample 字段时使用"
+            },
+            "rules": [
+              "split_col 优先于 sample_col",
+              "split_col 必须包含非空 ins 和 oos；若无 oot，则 oot=oos.copy()",
+              "无 split/sample 时，先用 oot_col 拆 OOT，再用 split_config 拆 INS/OOS"
+            ]
+          },
+          {
+            "name": "随机切分配置",
+            "params": {
+              "split_config": {
+                "test_size": "OOS 比例，默认 0.3",
+                "stratify": "是否按 target_col 分层",
+                "random_state": "切分随机种子；为空时继承顶层 random_state"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "level1": "特征筛选与 FeatureValidation 复用",
+        "level2": [
+          {
+            "name": "内置筛选",
+            "params": {
+              "feature_selection": {
+                "psi_enabled": "是否做 PSI 筛选",
+                "psi_threshold": "PSI 阈值",
+                "psi_compare_splits": "PSI 对比样本集，默认 ['oos']",
+                "iv_enabled": "是否做 IV 筛选",
+                "iv_threshold": "IV 阈值",
+                "corr_enabled": "是否做相关性筛选",
+                "corr_threshold": "相关性阈值",
+                "corr_max_iterations": "相关性筛选最大迭代轮数"
+              }
+            }
+          },
+          {
+            "name": "筛选产物复用",
+            "params": {
+              "screening_artifact": "显式传入 FeatureScreeningArtifact",
+              "feature_validation_result": "传入 FeatureValidationPipelineResult 后转成 screening artifact",
+              "feature_selection_mode": "run/from_artifact/skip；控制是重新筛选、复用产物还是跳过筛选",
+              "reuse_screening_woe": "是否复用 screening artifact 中的 WOE artifact"
+            },
+            "rules": [
+              "screening_artifact 优先于 feature_validation_result",
+              "from_artifact 依赖已有筛选产物",
+              "skip 会绕过筛选，直接使用 feature_cols"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "WOE 分箱",
+        "level2": [
+          {
+            "name": "WOE 总配置",
+            "params": {
+              "woe_engine": "equal_freq 或 monotone，默认 equal_freq",
+              "woe_fit_query": "WOE fit 前对 INS 样本的过滤条件",
+              "woe_params": {
+                "nbins": "equal_freq 分箱数",
+                "equal_freq": "是否等频",
+                "min_bin_prop": "最小箱占比",
+                "woe_suffix": "WOE 后缀，可选"
+              },
+              "monotone_woe_params": {
+                "n_init_bins": "monotone 初始箱数",
+                "min_bin_size": "monotone 最小箱占比",
+                "min_n_bins": "monotone 最小箱数"
+              }
+            }
+          },
+          {
+            "name": "WOE 与模型特征来源",
+            "params": {
+              "gbm_feature_source": "woe/raw 或按模型配置的 dict；LR 永远使用 WOE"
+            },
+            "rules": [
+              "默认所有模型使用 WOE 特征，保持旧行为",
+              "gbm_feature_source='raw' 时 lgb/xgb/cat 使用原始特征",
+              "dict key 只允许 lgb/xgb/cat，value 只允许 raw/woe",
+              "raw 模式不自动做类别编码"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "模型训练",
+        "level2": [
+          {
+            "name": "模型集合与参数",
+            "params": {
+              "train_models": "要训练的模型列表，默认 lr/lgb/xgb/cat",
+              "model_params": "各模型参数覆盖，例如 {'lgb': {...}, 'lr': {...}}"
+            }
+          },
+          {
+            "name": "LR 参数搜索",
+            "params": {
+              "lr_search_enabled": "是否对 LR 做 grid_search_params",
+              "lr_search_param_grid": "LR 参数网格，默认 C=[0.01,0.1,1.0,10.0]",
+              "lr_search_params": "LR search 额外参数覆盖",
+              "use_lr_search_params": "是否把搜索到的 best_params 合并进最终 LR 训练"
+            },
+            "rules": [
+              "只有 train_models 包含 lr 且 lr_search_enabled=true 时运行",
+              "搜索在 WOE 特征上进行"
+            ]
+          },
+          {
+            "name": "GBM warm-start",
+            "params": {
+              "warm_start_enabled": "是否启用前置分 warm-start",
+              "warm_start_score_col": "前置分字段",
+              "warm_start_score_type": "probability 或 log_odds",
+              "warm_start_models": "应用 warm-start 的模型，默认 lgb/xgb",
+              "warm_start_on_unsupported": "遇到不支持模型时 skip 或 raise",
+              "warm_start_apply_to_optuna": "warm-start 是否参与 GBM optuna refit/search"
+            },
+            "rules": [
+              "warm_start_enabled=true 时必须提供 warm_start_score_col",
+              "当前只支持 lgb/xgb；cat 默认 skip",
+              "probability 会先裁剪再转 log_odds"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "逐步回归、Optuna 与解释性",
+        "level2": [
+          {
+            "name": "Backward",
+            "params": {
+              "backward_enabled": "是否运行 backward feature selection",
+              "backward_model": "逐步回归使用的模型，默认 lgb",
+              "backward_params": "逐步回归参数覆盖",
+              "use_backward_features": "最终模型是否使用 backward 选择后的特征"
+            },
+            "rules": [
+              "backward 默认在 WOE 特征上运行",
+              "GBM raw 模式且 use_backward_features=true 时，会把选出的 _woe 特征映射回原始列"
+            ]
+          },
+          {
+            "name": "Optuna",
+            "params": {
+              "optuna_models": "需要做 Optuna 的 GBM 模型，默认 lgb/xgb/cat",
+              "optuna_n_trials": "Optuna trial 数",
+              "optuna_params": "Optuna search_spaces/common/fit_kwargs 等覆盖参数"
+            }
+          },
+          {
+            "name": "解释性",
+            "params": {
+              "explain_models": "需要跑 SHAP/LIME/PDP 等解释性的模型列表",
+              "explain_params": "解释性参数，例如 sample_n/background_n/owen_*",
+              "owen_enabled": "是否跑 Owen coalition 解释",
+              "business_prior_groups": "Owen 业务先验分组"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "性能评估与模型落盘",
+        "level2": [
+          {
+            "name": "PerformanceEvaluator",
+            "params": {
+              "perf_pct_bins": "性能评估分箱数",
+              "perf_min_bin_prop": "性能评估最小箱占比"
+            }
+          },
+          {
+            "name": "模型持久化",
+            "params": {
+              "save_models": "是否保存模型 pkl 和 WOE artifact",
+              "model_output_dir": "模型输出目录；为空时使用 output_dir/models",
+              "model_include_metadata": "是否保存 metadata envelope",
+              "save_woe_artifacts": "是否保存 WOE table/engine 等 artifact"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "requirement_note": "必填类别包含运行建模必须确认的数据字段入口；输出路径等虽然有默认值，但保留在原一级类别中。"
+}

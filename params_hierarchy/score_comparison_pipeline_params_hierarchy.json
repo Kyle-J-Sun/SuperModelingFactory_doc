@@ -1,0 +1,114 @@
+{
+  "pipeline": "ScoreComparisonPipeline",
+  "config_class": "ScoreComparisonPipelineConfig",
+  "hierarchy": {
+    "required": [
+      {
+        "level1": "基础输入与输出",
+        "level2": [
+          {
+            "name": "输出控制",
+            "params": {
+              "output_dir": "输出目录，默认 output/score_comparison",
+              "random_state": "随机种子，当前主要保留为配置一致性",
+              "write_outputs": "是否输出 CSV",
+              "write_excel": "是否输出 Excel 报告"
+            }
+          },
+          {
+            "name": "标签、分数与权重",
+            "params": {
+              "target_col": "表现标签字段，默认 badflag",
+              "score_cols": "全部评分字段；若为空则使用 base_score + comp_scores",
+              "base_score": "基准评分字段",
+              "comp_scores": "对比评分字段列表",
+              "weight_col": "可选样本权重字段",
+              "split_col": "可选 ins/oos/oot 字段；不做训练切分，只作为默认 group 维度"
+            },
+            "rules": [
+              "必须提供 score_cols 或 base_score + comp_scores",
+              "split_col 若配置，只支持 ins/oos/oot"
+            ]
+          }
+        ]
+      }
+    ],
+    "optional": [
+      {
+        "level1": "全局性能与 Gains 参数",
+        "level2": [
+          {
+            "name": "分箱与样本量",
+            "params": {
+              "nbins": "评分分箱数",
+              "min_bin_prop": "最小箱占比",
+              "equal_freq": "是否等频分箱",
+              "min_data_size": "分组评估最小样本量",
+              "precision": "报表数值精度"
+            }
+          },
+          {
+            "name": "缺失与分数口径",
+            "params": {
+              "include_missing": "分箱/交叉分析是否包含 missing",
+              "fillna": "缺失填充值",
+              "positive_score_only": "是否按正向分数口径处理"
+            }
+          },
+          {
+            "name": "Gains 附加指标",
+            "params": {
+              "gains_add_func": "自定义 gains 附加指标函数",
+              "custom_metric_cols": "默认附加均值指标列",
+              "gains_display_metric_list": "gains 报告展示指标列表"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "分组评分对比",
+        "level2": [
+          {
+            "name": "时间与人群维度",
+            "params": {
+              "time_dims": "时间维度列表，默认 apply_month",
+              "population_dims": "人群维度列表，默认 channel",
+              "segment_dims": "population_dims 的兼容别名；传入后覆盖 population_dims",
+              "include_time_population_cross": "是否自动生成 population x time 交叉分组",
+              "group_min_size": "分组最小样本量；为空时继承 min_data_size",
+              "group_specs": "显式分组配置；传入后覆盖自动 time/population/split 组合"
+            }
+          },
+          {
+            "name": "分组缺失值规范化",
+            "params": {
+              "group_missing_values": "分组字段中视为缺失的 token",
+              "drop_missing_group_values": "是否把空字符串等 token 转为 NA 并从默认分组中排除"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "Cross Risk 分析",
+        "level2": [
+          {
+            "name": "单评分 x 交叉变量",
+            "params": {
+              "cross_vars": "要做 cross_risk 的变量列表；默认空",
+              "cross_metrics": "cross_risk 聚合指标；为空时使用 target_col bad_rate 和 custom_metric_cols 均值",
+              "cross_binning_numeric": "传给 cross_risk 的 binning_numeric，可为 bool 或列表"
+            }
+          },
+          {
+            "name": "多评分两两交叉",
+            "params": {
+              "pairwise_cross_enabled": "是否调用 get_cross_risk_summary",
+              "pairwise_cross_agg_dict": "pairwise cross 聚合字典；为空时使用默认 bad_rate/custom metrics"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "requirement_note": "必填类别包含评分对比必须确认的数据字段入口；必须提供 score_cols 或 base_score + comp_scores。"
+}

@@ -1,0 +1,100 @@
+{
+  "pipeline": "MockSamplePipeline",
+  "config_class": "MockSamplePipelineConfig",
+  "hierarchy": {
+    "required": [],
+    "optional": [
+      {
+        "level1": "样本规模与输出范围",
+        "level2": [
+          {
+            "name": "样本数量",
+            "params": {
+              "n_samples": "初始全量申请样本量，默认 80000",
+              "applied_sample": "1 输出全量申请；0 只输出通过样本",
+              "approve_rate": "审批通过率，默认 0.25"
+            },
+            "rules": [
+              "applied_sample=0 时最终输出约 n_samples * approve_rate 行",
+              "applied_sample=0 时输出数据 is_approved 全为 1"
+            ]
+          },
+          {
+            "name": "时间窗口",
+            "params": {
+              "observation_timestamp": "观察日；为空时使用今天 00:00",
+              "application_months": "申请时间向前回溯月份数，默认 18"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "模拟字段生成",
+        "level2": [
+          {
+            "name": "线上模型分",
+            "params": {
+              "num_online_scores": "生成 online_model_pb_1 ... online_model_pb_n 的数量，默认 5"
+            }
+          },
+          {
+            "name": "表现标签",
+            "params": {
+              "y_flag_candidates": "生成 y_flag_dpd7_in_{days}d 的 days 列表，默认 [15,30,45]"
+            },
+            "rules": [
+              "只给通过样本生成表现标签，未通过样本为空",
+              "apply_timestamp + days <= observation_timestamp 的样本才成熟",
+              "强制校验短期标签成熟人数大于长期标签成熟人数"
+            ]
+          },
+          {
+            "name": "随机特征",
+            "params": {
+              "num_features": "随机生成特征数量，默认 20",
+              "min_num_feature_business_type": "特征至少覆盖的业务类型数量，默认 5"
+            },
+            "children": {
+              "business_types": [
+                "basic_info",
+                "multi_loan",
+                "credit_report_stats",
+                "historical_limit",
+                "overdue_status",
+                "query_count",
+                "telecom_data",
+                "consumption_data",
+                "income_data",
+                "address_data"
+              ]
+            },
+            "rules": [
+              "num_features=0 时 min_num_feature_business_type 必须为 0",
+              "num_features>0 时 min_num_feature_business_type 必须在 1 到 min(num_features,10) 之间",
+              "feature_metadata 记录字段名、业务类型和分布"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "随机性与落盘",
+        "level2": [
+          {
+            "name": "随机控制",
+            "params": {
+              "random_state": "随机种子，默认 42"
+            }
+          },
+          {
+            "name": "CSV 输出",
+            "params": {
+              "write_csv": "是否输出 CSV",
+              "output_path": "CSV 输出路径，默认 output/mock_sample/mock_sample.csv"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "requirement_note": "MockSamplePipeline 所有配置均有默认值，因此无必填配置；仍建议按业务需要确认样本规模和输出范围。"
+}

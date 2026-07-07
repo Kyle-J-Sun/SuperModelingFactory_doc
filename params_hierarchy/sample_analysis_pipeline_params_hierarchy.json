@@ -1,0 +1,87 @@
+{
+  "pipeline": "SampleAnalysisPipeline",
+  "config_class": "SampleAnalysisPipelineConfig",
+  "hierarchy": {
+    "required": [
+      {
+        "level1": "基础输入与输出",
+        "level2": [
+          {
+            "name": "标签与时间字段",
+            "params": {
+              "target_cols": "待评估的 y 标签列表",
+              "time_col": "申请时间字段，默认 apply_time",
+              "approved_col": "审批通过标识字段；为空时不计算 n_approved_observed"
+            }
+          },
+          {
+            "name": "输出控制",
+            "params": {
+              "output_dir": "输出目录，默认 output/sample_analysis",
+              "write_outputs": "是否输出 CSV",
+              "write_excel": "是否用 ExcelMaster 输出 Excel 报告",
+              "dry_run": "是否只估算 split candidate 数量而不实际运行"
+            }
+          }
+        ]
+      }
+    ],
+    "optional": [
+      {
+        "level1": "分组与画像分析",
+        "level2": [
+          {
+            "name": "时间与人群维度",
+            "params": {
+              "time_dims": "时间维度列表，默认 apply_week/apply_month/apply_quarter",
+              "population_dims": "人群维度列表，默认 channel/strategy_version"
+            },
+            "rules": [
+              "segment_bad_rate_summary 会输出 global、time、population、time x population",
+              "profile_summary 使用同一套分组维度"
+            ]
+          },
+          {
+            "name": "画像字段",
+            "params": {
+              "profile_cols": "画像字段列表，默认 age/income/education/credit_limit"
+            },
+            "rules": [
+              "画像汇总输出每个字段的 mean 和 median"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "OOT/INS/OOS 候选方案",
+        "level2": [
+          {
+            "name": "OOT 窗口",
+            "params": {
+              "oot_time_dim": "用于切 OOT 的时间维度，默认 apply_month",
+              "oot_windows": "候选 OOT 尾部窗口长度列表，默认 [1,2,3,6]"
+            },
+            "rules": [
+              "每个 target_col 只使用该 target 非空的成熟样本",
+              "OOT 取 oot_time_dim 排序后的最后 N 个 period"
+            ]
+          },
+          {
+            "name": "INS/OOS 与随机种子",
+            "params": {
+              "ins_oos_ratios": "INS 比例候选，默认 [0.7,0.75,0.8]",
+              "random_seeds": "随机种子列表，默认 range(3000,3020)",
+              "min_sample_size": "推荐方案样本量过滤阈值"
+            },
+            "rules": [
+              "INS/OOS 使用 SampleSplitter(test_size=1-ins_ratio, stratify=true)",
+              "分层失败时自动退回 stratify=false",
+              "推荐排序优先 max_abs_bad_rate_gap 更小，再看 OOT 样本量和 75/25 接近度"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "requirement_note": "必填类别包含样本分析必须确认的数据字段入口；目标标签、时间字段和 approval 字段口径需要确认。"
+}

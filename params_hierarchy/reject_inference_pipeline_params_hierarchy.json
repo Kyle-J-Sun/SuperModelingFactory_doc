@@ -1,0 +1,155 @@
+{
+  "pipeline": "RejectInferencePipeline",
+  "config_class": "RejectInferencePipelineConfig",
+  "hierarchy": {
+    "required": [
+      {
+        "level1": "基础输入与字段边界",
+        "level2": [
+          {
+            "name": "输出与运行控制",
+            "params": {
+              "output_dir": "输出目录，默认 output/reject_inference",
+              "random_state": "全局随机种子",
+              "write_outputs": "是否输出 CSV/图片等中间产物",
+              "write_excel": "是否输出 Excel 报告"
+            }
+          },
+          {
+            "name": "业务字段",
+            "params": {
+              "approved_col": "审批通过标识字段，默认 approved；1 为通过，0 为拒绝",
+              "target_col": "真实标签字段，默认 badflag",
+              "score_col": "拒绝推断使用的前置分字段，默认 prescore_prob",
+              "feature_cols": "建模特征列表；为空时自动选择数值列并排除 target/approved/score/split 等字段",
+              "split_col": "可选样本切分字段，支持 ins/oos/oot；ins/oos 进入 RI 训练，oot 只做评估"
+            }
+          }
+        ]
+      }
+    ],
+    "optional": [
+      {
+        "level1": "前置分训练",
+        "level2": [
+          {
+            "name": "前置分开关",
+            "params": {
+              "train_prescore": "是否训练 pre-score 模型；true 时会覆盖已有 score_col",
+              "prescore_model_type": "pre-score 模型类型，默认 lgb",
+              "prescore_params": "pre-score 模型参数覆盖",
+              "prescore_test_size": "pre-score 训练验证切分比例"
+            },
+            "rules": [
+              "train_prescore=true 或输入缺少 score_col 时必须存在 target_col",
+              "ri_approved_data 若缺少 score_col，会使用同一个 prescore 模型补分",
+              "train_prescore=false 且不训练补分时，主数据和外部 RI reference 都必须已有 score_col"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "RI 方法与分数方向",
+        "level2": [
+          {
+            "name": "RI 方法选择",
+            "params": {
+              "ri_methods": "RI 方法列表，默认 simple_augment/hard_cutoff/fuzzy_augment/parceling",
+              "ri_method_params": "每个 RI 方法的独立参数字典",
+              "ri_score_direction": "分数方向，high_bad 表示分数越高风险越高，high_good 表示分数越高越好"
+            },
+            "children": {
+              "simple_augment": {
+                "bad_rate": "拒绝件随机伪标签坏账率；为空时基于参考样本估计",
+                "random_state": "继承顶层 random_state"
+              },
+              "hard_cutoff": {
+                "cutoff": "硬切阈值；为空时按 ri_score_direction 从 approved bad score 分位数推导"
+              },
+              "fuzzy_augment": {
+                "weight_factor": "拒绝件 good/bad 双行权重缩放系数，默认 1.0"
+              },
+              "parceling": {
+                "n_parcels": "parcel 分箱数，默认 10"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "level1": "RI Approved 参考样本",
+        "level2": [
+          {
+            "name": "参考样本来源",
+            "params": {
+              "ri_approved_data": "外部 approved DataFrame，仅用于 RI 规则估计",
+              "ri_approved_query": "从主数据 approved 中筛选 RI reference 的 pandas query",
+              "ri_approved_func": "从主数据 approved 中筛选 RI reference 的函数",
+              "ri_approved_frac": "从 reference 中随机抽样比例",
+              "ri_approved_n": "从 reference 中随机抽样条数",
+              "ri_approved_scope": "reference_only 或 output_subset；默认 reference_only"
+            },
+            "rules": [
+              "ri_approved_data 不能与 ri_approved_query/ri_approved_func 同时使用",
+              "ri_approved_frac 和 ri_approved_n 不能同时使用",
+              "ri_approved_scope=output_subset 不能与外部 ri_approved_data 同时使用",
+              "reference_only 下最终增强样本仍输出主数据全量 approved + rejected inferred",
+              "output_subset 下最终增强样本输出筛选后的 approved + rejected inferred"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "RI 后模型训练与评估",
+        "level2": [
+          {
+            "name": "模型训练开关",
+            "params": {
+              "train_ri_models": "是否对每套 RI 增强样本训练后续模型",
+              "ri_model_type": "RI 后模型类型，默认 lgb",
+              "ri_model_params": "RI 后模型参数覆盖",
+              "include_no_ri_benchmark": "是否加入不做 RI 的 approved-only benchmark",
+              "ri_validation_frac": "无 OOS 时从 approved training pool 抽 validation 的比例"
+            }
+          },
+          {
+            "name": "OOT 与性能评估",
+            "params": {
+              "oot_data": "外部 OOT DataFrame；优先级高于 split_col 和 oot_frac",
+              "oot_frac": "没有 oot_data/split_col OOT 时，从 approved 中随机切 OOT 的比例",
+              "perf_pct_bins": "PerformanceEvaluator 分箱数",
+              "min_bin_prop": "PerformanceEvaluator 最小箱占比"
+            },
+            "rules": [
+              "oot_data target_col 为空的未表现样本会自动过滤并 warning",
+              "split_col 存在时 ins/oos 用于训练与验证，oot 只评估",
+              "oot_data 优先级高于 split_col==oot，高于 oot_frac"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "模型与 RI 数据落盘",
+        "level2": [
+          {
+            "name": "模型持久化",
+            "params": {
+              "save_models": "是否保存 prescore 和 RI 后模型 pkl",
+              "model_output_dir": "模型输出目录；为空时使用 output_dir/models",
+              "model_include_metadata": "是否使用 save_model metadata envelope"
+            }
+          },
+          {
+            "name": "RI 数据集输出",
+            "params": {
+              "write_ri_datasets": "是否写出每套 RI 增强样本",
+              "ri_dataset_output_cols": "只输出指定列；为空时输出全量列",
+              "ri_dataset_warn_mb": "增强样本估算内存超过该 MB 时 warning"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "requirement_note": "必填类别包含 RI 必须确认的数据字段入口；feature_cols 可自动推断，但 approved/target/score 口径需要确认。"
+}

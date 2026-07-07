@@ -1,0 +1,350 @@
+{
+  "pipeline": "FeatureValidationPipeline",
+  "config_class": "FeatureValidationPipelineConfig",
+  "hierarchy": {
+    "required": [
+      {
+        "level1": "基础输入与字段边界",
+        "level2": [
+          {
+            "name": "主键与时间字段",
+            "params": {
+              "id_col": "主键字段，默认 flow_id，输入表必须存在",
+              "apply_time_col": "申请时间字段，默认 apply_time，输入表必须存在；time_dims 派生依赖它"
+            }
+          },
+          {
+            "name": "分析对象字段",
+            "params": {
+              "target_cols": "可选 y 标签；为空时跳过 WOE、IV/KS、变量级相关性明细、特征筛选",
+              "new_feature_cols": "新特征列表；为空时自动推断",
+              "incumbent_feature_cols": "老特征列表；主要用于 new vs incumbent 相关性对比"
+            }
+          },
+          {
+            "name": "类别变量声明",
+            "params": {
+              "categorical_features": "类别变量列表；主要影响 monotone WOE 的类别处理和 CSV batch base cols"
+            }
+          }
+        ]
+      }
+    ],
+    "optional": [
+      {
+        "level1": "输入类型与 CSV 分批",
+        "level2": [
+          {
+            "name": "输入类型",
+            "params": {
+              "input_type": "auto/dataframe/csv；auto 会根据 run(data) 类型判断",
+              "csv_read_kwargs": "传给 pandas.read_csv 的参数；不允许包含 usecols 或 chunksize"
+            }
+          },
+          {
+            "name": "是否启用分批",
+            "params": {
+              "enable_batch": "默认 false；只有 true 且输入为 CSV 时才进入 feature batch mode"
+            },
+            "children": {
+              "feature_batch_size": "按 new_feature_cols 每 N 个特征拆一批",
+              "feature_batches": "用户显式指定特征批次；优先级高于 feature_batch_size",
+              "batch_base_cols": "每批强制读取的基础列；为空时自动包含 id/time/split/target/group/incumbent 等必要列",
+              "batch_output_subdir": "批次中间结果输出子目录，默认 feature_batches",
+              "batch_keep_intermediate": "是否保留每批 CSV 输出",
+              "batch_corr_mode": "within_batch/block_pairwise/off；控制 batch 模式相关性口径",
+              "batch_corr_pair_chunk_size": "block_pairwise 时跨批相关性二级分块大小"
+            }
+          },
+          {
+            "name": "分批约束",
+            "rules": [
+              "enable_batch=true 时必须输入 CSV 路径",
+              "enable_batch=true 时必须配置 feature_batch_size 或 feature_batches",
+              "DataFrame 输入不支持 batch",
+              "block_pairwise 只支持 pearson/spearman，不支持 kendall"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "样本切分",
+        "level2": [
+          {
+            "name": "已有切分字段",
+            "params": {
+              "split_col": "推荐字段；支持 ins/oos/oot，优先级最高",
+              "sample_col": "兼容旧参数，默认 sample_ind；split_col 为空时使用",
+              "oot_col": "可选 OOT flag；没有 split/sample 字段时使用"
+            }
+          },
+          {
+            "name": "随机切分配置",
+            "params": {
+              "split_config": {
+                "test_size": "OOS 比例，默认 0.3",
+                "stratify": "是否按 target 分层，默认 true",
+                "random_state": "切分随机种子；为空时使用顶层 random_state"
+              },
+              "random_state": "全局随机种子，默认 42"
+            }
+          },
+          {
+            "name": "切分优先级",
+            "rules": [
+              "优先 split_col",
+              "其次 sample_col",
+              "其次 oot_col",
+              "最后按 split_config 随机切 INS/OOS"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "时间与人群分组",
+        "level2": [
+          {
+            "name": "维度字段",
+            "params": {
+              "time_dims": "时间维度，默认 apply_month；可包含 apply_week/apply_month/apply_quarter",
+              "population_dims": "人群维度，例如 channel、strategy_version",
+              "group_specs": "显式分组配置；传入后覆盖 time_dims/population_dims 自动组合",
+              "min_group_size": "分组最小样本量，低于该阈值的 PSI/IVKS 明细会跳过"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "分布分析",
+        "level2": [
+          {
+            "name": "开关",
+            "params": {
+              "distribution_enabled": "是否计算分布，默认 true"
+            },
+            "children": {
+              "distribution_params": {
+                "q": "分位点列表，默认 [0.05,0.15,0.25,0.5,0.75,0.95,0.99]",
+                "spec_missing_value": "特殊缺失值，可选"
+              }
+            }
+          },
+          {
+            "name": "依赖",
+            "rules": [
+              "默认只分析 new_feature_cols",
+              "分组依赖 time_dims、population_dims、group_specs"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "WOE 分箱与绘图",
+        "level2": [
+          {
+            "name": "WOE 总开关",
+            "params": {
+              "woe_enabled": "是否执行 WOE，默认 true",
+              "woe_fit_query": "WOE fit 前对 INS 训练样本的过滤条件",
+              "woe_engine": "默认 monotone；可选 monotone/equal_freq",
+              "woe_plot_groups": "按哪些 group 输出 WOE by group 图"
+            },
+            "rules": [
+              "必须 target_cols 非空才会执行",
+              "每个 target_col 单独 fit",
+              "只使用 target 非空的 INS 样本 fit"
+            ]
+          },
+          {
+            "name": "equal_freq 引擎",
+            "params": {
+              "woe_params": {
+                "nbins": "分箱数",
+                "equal_freq": "是否等频",
+                "min_bin_prop": "最小箱占比",
+                "woe_suffix": "WOE 字段后缀，可选",
+                "missing_ref_value": "缺失替代值，可选"
+              }
+            }
+          },
+          {
+            "name": "monotone 引擎",
+            "params": {
+              "monotone_woe_params": {
+                "n_init_bins": "初始箱数",
+                "min_bin_size": "最小箱占比",
+                "min_n_bins": "最小箱数",
+                "n_jobs": "并行数",
+                "special_values": "特殊值",
+                "missing_woe": "缺失 WOE",
+                "eps": "平滑项"
+              }
+            },
+            "children": {
+              "monotone_refine_cate_enabled": "是否对 categorical_features 调用 refine_cate",
+              "monotone_refine_cate_params": "refine_cate 参数",
+              "monotone_refine_dtree_enabled": "是否调用 refine_dtree",
+              "monotone_refine_dtree_params": "refine_dtree 参数",
+              "monotone_refine_chi2_enabled": "是否调用 refine_chi2",
+              "monotone_refine_chi2_params": "refine_chi2 参数"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "PSI 稳定性",
+        "level2": [
+          {
+            "name": "PSI 开关与 benchmark",
+            "params": {
+              "psi_enabled": "是否计算 PSI，默认 true",
+              "psi_reference_dataset": "ins/oos/oot/external，默认 ins",
+              "psi_reference_data": "当 psi_reference_dataset=external 时必传"
+            }
+          },
+          {
+            "name": "PSI 分组与分箱",
+            "params": {
+              "psi_group_dims": "sample/time/population，默认三者都算",
+              "psi_use_woe_bins": "是否复用 WOE 分箱边界，默认 true",
+              "psi_params": {
+                "buckets": "重新分箱时的桶数",
+                "equal_freq": "重新分箱是否等频",
+                "min_bin_prop": "最小箱占比"
+              }
+            }
+          },
+          {
+            "name": "依赖",
+            "rules": [
+              "psi_use_woe_bins=true 时依赖 WOE 成功产出的 binning engine",
+              "若没有可复用 WOE engine，则回退到 PSICalculator 自身分箱",
+              "time/population 分组依赖 time_dims/population_dims"
+            ]
+          }
+        ]
+      },
+      {
+        "level1": "IV / KS 区分能力",
+        "level2": [
+          {
+            "name": "IVKS 开关",
+            "params": {
+              "ivks_enabled": "是否计算 IV/KS，默认 true"
+            },
+            "rules": [
+              "必须 target_cols 非空才会执行",
+              "每个 target_col 单独计算",
+              "只使用 target 非空样本"
+            ]
+          },
+          {
+            "name": "IVKS 分组与分箱",
+            "params": {
+              "ivks_group_dims": "global/time/population，默认三者都算",
+              "ivks_use_woe_bins": "是否复用 WOE 分箱边界，默认 true",
+              "ivks_params": {
+                "iv_cut": "IV 过滤阈值"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "level1": "相关性分析",
+        "level2": [
+          {
+            "name": "相关性矩阵",
+            "params": {
+              "corr_enabled": "是否计算相关性，默认 true",
+              "corr_include_incumbent": "是否把 incumbent_feature_cols 加入相关性对比，默认 true",
+              "corr_params": {
+                "corr_cutpoint": "高相关阈值，默认 0.75",
+                "method": "pearson/spearman/kendall；batch block_pairwise 不支持 kendall",
+                "max_iterations": "CorrelationFilter 最大迭代轮数",
+                "base_metric": "相关变量筛选时的主指标，默认 iv"
+              }
+            }
+          },
+          {
+            "name": "相关性明细中的 IV/KS",
+            "params": {
+              "corr_use_woe_bins": "是否复用 WOE 分箱计算相关变量的 IV/KS，默认 true"
+            },
+            "rules": [
+              "corr 矩阵本身按原始数值特征计算",
+              "corr_use_woe_bins 主要影响 correlated_detail 里的变量能力指标",
+              "target_cols 为空时仍可出 corr_matrix/high_corr_pairs，但不会有完整变量级 IV/KS 明细"
+            ]
+          },
+          {
+            "name": "batch 相关性",
+            "params": {
+              "batch_corr_mode": "off 跳过；within_batch 只算批内；block_pairwise 额外算跨批 new-new",
+              "batch_corr_pair_chunk_size": "跨批相关性内部列块大小"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "特征筛选",
+        "level2": [
+          {
+            "name": "筛选开关",
+            "params": {
+              "selection_enabled": "是否运行综合特征筛选，默认 false",
+              "selection_params": "传给 FeatureScreeningConfig 的覆盖参数",
+              "missing_rate_threshold": "缺失率阈值；selection_params 未覆盖时使用",
+              "weight_col": "筛选阶段样本权重字段"
+            },
+            "rules": [
+              "必须 target_cols 非空才会执行",
+              "只使用 target_cols[0] 作为筛选 target",
+              "weight_col 若配置则必须存在于 INS split"
+            ]
+          },
+          {
+            "name": "selection_params 常用三级参数",
+            "params": {
+              "psi_enabled": "默认继承 psi_enabled",
+              "psi_threshold": "默认 0.2",
+              "psi_compare_splits": "默认 ['oos']",
+              "psi_use_woe_bins": "默认继承 psi_use_woe_bins",
+              "iv_enabled": "默认继承 ivks_enabled",
+              "iv_threshold": "默认 0.02",
+              "iv_use_woe_bins": "默认继承 ivks_use_woe_bins",
+              "corr_enabled": "默认继承 corr_enabled",
+              "corr_threshold": "默认继承 corr_params.corr_cutpoint",
+              "corr_max_iterations": "默认继承 corr_params.max_iterations",
+              "corr_use_woe_bins": "默认继承 corr_use_woe_bins"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "输出与报告",
+        "level2": [
+          {
+            "name": "输出路径",
+            "params": {
+              "output_dir": "输出目录，默认 output/feature_validation"
+            }
+          },
+          {
+            "name": "落盘控制",
+            "params": {
+              "write_outputs": "是否输出 CSV、图片和中间产物，默认 true",
+              "write_excel": "是否用 ExcelMaster 输出 Excel 报告，默认 true"
+            },
+            "rules": [
+              "WOE 图片依赖 write_outputs=true",
+              "batch_keep_intermediate 只影响 batch 子目录中间产物",
+              "write_excel=true 时输出 Feature_Validation_Report.xlsx"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "requirement_note": "必填类别包含宽表验收必须确认的数据字段入口；target_cols 可为空，但 id_col/apply_time_col/new_feature_cols 或其自动推断口径需要确认。"
+}

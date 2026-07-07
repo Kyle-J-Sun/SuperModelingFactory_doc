@@ -1,0 +1,110 @@
+{
+  "pipeline": "ScoreConsistencyUATPipeline",
+  "config_class": "ScoreConsistencyUATPipelineConfig",
+  "hierarchy": {
+    "required": [
+      {
+        "level1": "数据来源",
+        "level2": [
+          {
+            "name": "SQL 模式",
+            "params": {
+              "sql_dir": "SQL 文件目录",
+              "offline_sql": "离线数据 SQL 文件名",
+              "online_sql": "线上数据 SQL 文件名",
+              "sqlrunner": "自定义 SQLRunner；为空时默认创建 ODPSRunner",
+              "env_path": "可选 .env 路径；提供时加载环境变量",
+              "n_process": "SQL/检查并行数；auto/null 表示 CPU 核数减一"
+            }
+          },
+          {
+            "name": "DataFrame 模式",
+            "params": {
+              "offline_data": "离线 DataFrame，可通过 config 或 run() 传入",
+              "online_data": "线上 DataFrame，可通过 config 或 run() 传入"
+            },
+            "rules": [
+              "只要 offline_data 或 online_data 任一存在，即进入 DataFrame 模式",
+              "DataFrame 模式必须同时提供 offline_data 和 online_data",
+              "offline_data/online_data 都必须包含 flow_id"
+            ]
+          }
+        ]
+      }
+    ],
+    "optional": [
+      {
+        "level1": "基础运行与输出",
+        "level2": [
+          {
+            "name": "输出控制",
+            "params": {
+              "output_dir": "输出目录，默认 output/score_consistency_uat",
+              "random_state": "随机种子，当前主要保留为配置一致性",
+              "write_outputs": "是否输出 CSV 明细",
+              "write_excel": "是否调用 checker.export_excel 输出 Excel"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "一致性校验规则",
+        "level2": [
+          {
+            "name": "主模型分",
+            "params": {
+              "main_model_score_col": "主模型分字段",
+              "tol_score": "主模型分容忍误差"
+            }
+          },
+          {
+            "name": "特征与时间字段",
+            "params": {
+              "tol_feat": "普通特征数值容忍误差",
+              "time_featlist": "时间字段列表",
+              "tol_time_seconds": "时间字段秒级容忍误差"
+            }
+          },
+          {
+            "name": "子模型",
+            "params": {
+              "include_submodel_scores": "是否检查子模型分",
+              "submodel_pairs": "子模型 offline/online 字段映射"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "报表配置",
+        "level2": [
+          {
+            "name": "Excel 输出",
+            "params": {
+              "excel_output_path": "Excel 输出路径；为空时使用 output_dir/report/Score_Consistency_UAT_Report.xlsx",
+              "excel_font": "Excel 字体",
+              "info_list": "per-flow 报告中额外展示的信息列"
+            }
+          }
+        ]
+      },
+      {
+        "level1": "对象列数值转换",
+        "level2": [
+          {
+            "name": "numeric coercion",
+            "params": {
+              "numeric_coercion_mode": "safe/aggressive/off；默认 safe",
+              "numeric_coercion_min_ratio": "safe 模式下对象列转数值的最小可解析比例"
+            },
+            "rules": [
+              "safe 模式只有可解析比例达到 numeric_coercion_min_ratio 才转换",
+              "aggressive 模式会强制转换，无法解析的值变 NaN 并记录 warning",
+              "off 模式不做对象列数值转换"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "requirement_note": "必填类别包含 UAT 必须选择的数据来源；SQL 模式和 DataFrame 模式二选一。"
+}
