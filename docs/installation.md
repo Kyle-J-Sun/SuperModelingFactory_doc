@@ -35,6 +35,18 @@ brew install libomp
 pip install 'supermodelingfactory[odps]'
 ```
 
+## 开发者 / 测试环境依赖
+
+若你打算在本地运行 [`SuperModelingFactory_pytest`](https://github.com/Kyle-J-Sun/SuperModelingFactory_pytest) 全量套件，需安装其 `requirements-dev.txt`：
+
+```bash
+git clone https://github.com/Kyle-J-Sun/SuperModelingFactory_pytest.git
+cd SuperModelingFactory_pytest
+pip install -r requirements-dev.txt
+```
+
+该文件声明了三个 **不属于主包运行时依赖但测试套件依赖的包**（`pyodps`、`shap`、`lime`）。不安装它们会导致约 74 个测试静默 skip，掩盖真实回归。目标基线：**0 skipped / 0 failed**。
+
 ## 升级
 
 ```bash
