@@ -858,7 +858,7 @@ result.high_corr_pairs
 
 | 步骤 | 产物 | 主要可配置参数 |
 |---|---|---|
-| CSV 直读与分批 | `batch_metadata`、合并后的各分析表 | `input_type`、`csv_read_kwargs`、`feature_batch_size`、`feature_batches`、`batch_base_cols`、`batch_corr_mode` |
+| CSV 直读与分批 | `batch_metadata`、合并后的各分析表 | `input_type`、`csv_read_kwargs`、`enable_batch`、`feature_batch_size`、`feature_batches`、`batch_base_cols`、`batch_corr_mode` |
 | 样本切分 | `splits` | `split_col`、`sample_col`、`oot_col`、`split_config`、`random_state` |
 | 分布分析 | `distribution_summary` | `time_dims`、`population_dims`、`group_specs`、`distribution_params` |
 | WOE 分箱 | `woe_artifacts` | `woe_engine`、`woe_params`、`monotone_woe_params`、`categorical_features`、`woe_fit_query` |
@@ -881,7 +881,8 @@ result.high_corr_pairs
 | `incumbent_feature_cols` | `None` | 现有特征列表，主要用于 new vs incumbent 相关性对比。 |
 | `input_type` | `"auto"` | 输入类型，可选 `auto/dataframe/csv`。`auto` 会按 `run()` 传入对象自动识别 DataFrame 或 CSV 路径。 |
 | `csv_read_kwargs` | `{}` | 透传给 `pd.read_csv()` 的参数；Pipeline 会自己控制 `usecols/chunksize`，因此这两个键不能放在这里。 |
-| `feature_batch_size` | `None` | CSV batch 模式下，每批读取多少个 `new_feature_cols`。 |
+| `enable_batch` | `False` | 是否显式启用 CSV feature batch 模式；默认关闭。关闭时即使配置 `feature_batch_size` / `feature_batches` 也会全量读取 CSV，并给出 warning。 |
+| `feature_batch_size` | `None` | `enable_batch=True` 时，每批读取多少个 `new_feature_cols`。 |
 | `feature_batches` | `None` | 显式指定 feature 分批，优先级高于 `feature_batch_size`；未覆盖的特征会自动追加到最后的批次。 |
 | `batch_base_cols` | `None` | 每批固定读取的基础列；不传时自动包含 id、时间、split、target、time/population 维度、类别列、现有特征等必要列。 |
 | `batch_output_subdir` | `"feature_batches"` | 每批中间结果输出子目录。 |
@@ -970,7 +971,7 @@ fvp_result, cm_result = run_modeling_from_validation(
 
 ### CSV 直读与超宽表分批
 
-当新特征很多、一次性读入 pandas 会占用过高内存时，可以直接把本地 CSV 路径传给 `run()`，并通过 `feature_batch_size` 或 `feature_batches` 按列分批。Pipeline 会先读取基础列生成稳定的 INS/OOS/OOT 切分，再逐批读取 `base cols + 当前批特征 + incumbent features`，最后合并分布、WOE、PSI、IV/KS、相关性和 ExcelMaster 报告。
+当新特征很多、一次性读入 pandas 会占用过高内存时，可以直接把本地 CSV 路径传给 `run()`，并显式设置 `enable_batch=True`，再通过 `feature_batch_size` 或 `feature_batches` 按列分批。Pipeline 会先读取基础列生成稳定的 INS/OOS/OOT 切分，再逐批读取 `base cols + 当前批特征 + incumbent features`，最后合并分布、WOE、PSI、IV/KS、相关性和 ExcelMaster 报告。默认 `enable_batch=False`，因此配置 batch 参数本身不会自动开启分批。
 
 ```python
 cfg = FeatureValidationPipelineConfig(
@@ -979,6 +980,7 @@ cfg = FeatureValidationPipelineConfig(
     incumbent_feature_cols=["old_score", "old_income"],
     target_cols=["badflag"],
     split_col="model_split",
+    enable_batch=True,
     feature_batch_size=100,
     batch_corr_mode="within_batch",
 )
@@ -993,6 +995,7 @@ result.output_paths["batch_metadata"]
 
 ```python
 cfg = FeatureValidationPipelineConfig(
+    enable_batch=True,
     feature_batches=[
         ["telco_days_active", "telco_bill_amt"],
         ["income_level", "income_stability"],
