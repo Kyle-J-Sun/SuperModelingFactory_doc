@@ -106,5 +106,71 @@
       }
     ]
   },
-  "requirement_note": "必填类别包含 UAT 必须选择的数据来源；SQL 模式和 DataFrame 模式二选一。"
+  "requirement_note": "必填类别包含 UAT 必须选择的数据来源；SQL 模式和 DataFrame 模式二选一。",
+  "underlying_method_params": {
+    "UATConfig": {
+      "passes_to": "Modeling_Tool.UAT.UAT_Consistency_Checker.UATConfig",
+      "accepted_params": {
+        "main_model_score_col": {
+          "config_key": "main_model_score_col"
+        },
+        "include_submodel_scores": {
+          "config_key": "include_submodel_scores"
+        },
+        "excel_output_path": {
+          "config_key": "excel_output_path resolved under output_dir/report if empty"
+        },
+        "sql_dir": {
+          "config_key": "sql_dir resolved to absolute path"
+        },
+        "offline_sql": {
+          "config_key": "offline_sql"
+        },
+        "online_sql": {
+          "config_key": "online_sql"
+        },
+        "tol_score": {
+          "config_key": "tol_score"
+        },
+        "tol_feat": {
+          "config_key": "tol_feat"
+        },
+        "n_process": {
+          "config_key": "n_process resolved from auto/null/int"
+        },
+        "submodel_pairs": {
+          "config_key": "submodel_pairs"
+        },
+        "excel_font": {
+          "config_key": "excel_font"
+        },
+        "info_list": {
+          "config_key": "info_list"
+        },
+        "time_featlist": {
+          "config_key": "time_featlist"
+        },
+        "tol_time_seconds": {
+          "config_key": "tol_time_seconds"
+        }
+      }
+    },
+    "numeric_coercion": {
+      "pipeline_internal": true,
+      "accepted_params": {
+        "numeric_coercion_mode": {
+          "allowed": [
+            "safe",
+            "aggressive",
+            "off"
+          ],
+          "default": "safe"
+        },
+        "numeric_coercion_min_ratio": {
+          "default": 0.99,
+          "meaning": "safe 模式下对象列转数值的最低可解析比例"
+        }
+      }
+    }
+  }
 }

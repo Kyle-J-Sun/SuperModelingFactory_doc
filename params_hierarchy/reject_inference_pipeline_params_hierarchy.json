@@ -151,5 +151,69 @@
       }
     ]
   },
-  "requirement_note": "必填类别包含 RI 必须确认的数据字段入口；feature_cols 可自动推断，但 approved/target/score 口径需要确认。"
+  "requirement_note": "必填类别包含 RI 必须确认的数据字段入口；feature_cols 可自动推断，但 approved/target/score 口径需要确认。",
+  "underlying_method_params": {
+    "prescore_params": {
+      "passes_to": "GradientBoostingModel(prescore_model_type, params).fit",
+      "accepted_params": "同 CreditModelPipeline.model_params 中对应 GBM 类型；默认会补 random_state/n_jobs/early_stopping_rounds/eval_metric 等"
+    },
+    "ri_model_params": {
+      "passes_to": "GradientBoostingModel(ri_model_type, params).fit",
+      "accepted_params": "同 CreditModelPipeline.model_params 中对应 GBM 类型；fuzzy_augment 会额外传 sample_weight"
+    },
+    "ri_method_params": {
+      "passes_to": "Modeling_Tool.Sample.Reject_Infer inferrer constructors",
+      "accepted_params": {
+        "simple_augment": {
+          "bad_rate": {
+            "default": null,
+            "meaning": "拒绝件伪标签坏账率；None 使用 approved 平均坏账率"
+          }
+        },
+        "hard_cutoff": {
+          "cutoff": {
+            "default": "Pipeline 按 ri_score_direction 自动估计",
+            "meaning": "high_bad 时 score>=cutoff 判 bad；high_good 时 score<=cutoff 判 bad"
+          }
+        },
+        "fuzzy_augment": {
+          "weight_factor": {
+            "default": 1.0,
+            "meaning": "拒绝件 good/bad 双行权重缩放"
+          }
+        },
+        "parceling": {
+          "n_parcels": {
+            "default": 10,
+            "meaning": "approved 分箱数，用同一边界给 rejected 分箱"
+          }
+        }
+      },
+      "common_constructor_params": {
+        "target_col": "Pipeline target_col",
+        "score_col": "Pipeline score_col",
+        "score_direction": "Pipeline ri_score_direction",
+        "random_state": "Pipeline random_state"
+      }
+    },
+    "PerformanceEvaluator": {
+      "passes_to": "Modeling_Tool.Eval.Model_Eval_Tool.PerformanceEvaluator",
+      "accepted_params": {
+        "pct_bins": {
+          "config_key": "perf_pct_bins",
+          "default": 10
+        },
+        "min_bin_prop": {
+          "config_key": "min_bin_prop",
+          "default": 0.03
+        },
+        "equal_freq": {
+          "pipeline_value": true
+        },
+        "weight_col": {
+          "pipeline_value": "_weight only when true RI weight exists"
+        }
+      }
+    }
+  }
 }

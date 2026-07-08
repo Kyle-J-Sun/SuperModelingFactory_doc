@@ -346,5 +346,649 @@
       }
     ]
   },
-  "requirement_note": "必填类别包含宽表验收必须确认的数据字段入口；target_cols 可为空，但 id_col/apply_time_col/new_feature_cols 或其自动推断口径需要确认。"
+  "requirement_note": "必填类别包含宽表验收必须确认的数据字段入口；target_cols 可为空，但 id_col/apply_time_col/new_feature_cols 或其自动推断口径需要确认。",
+  "underlying_method_params": {
+    "distribution_params": {
+      "passes_to": "Modeling_Tool.Feature.Distribution_Tool.proc_means_by_grp",
+      "accepted_params": {
+        "q": {
+          "default": null,
+          "meaning": "分位点列表"
+        },
+        "spec_missing_value": {
+          "default": null,
+          "meaning": "特殊缺失值标记"
+        }
+      },
+      "full_signature": {
+        "data": "Pipeline 控制",
+        "varlist": "new_feature_cols 中的数值列",
+        "groupby": "由 group_specs/time_dims/population_dims 解析",
+        "spec_missing_value": "distribution_params.spec_missing_value",
+        "q": "distribution_params.q"
+      }
+    },
+    "split_config": {
+      "source": "Modeling_Tool.Sample.Sample_Split.SampleSplitter",
+      "constructor": {
+        "test_size": {
+          "default": 0.3,
+          "meaning": "测试/OOS 样本比例"
+        },
+        "random_state": {
+          "default": null,
+          "meaning": "随机种子"
+        },
+        "stratify": {
+          "default": true,
+          "meaning": "是否按 target 分层抽样"
+        }
+      },
+      "methods": {
+        "split_df": {
+          "target": {
+            "required": true,
+            "meaning": "分层目标字段"
+          },
+          "exclude_cols": {
+            "default": null,
+            "meaning": "不参与切分策略的列，不会从输出 DataFrame 删除"
+          },
+          "test_size": {
+            "default": null,
+            "meaning": "覆盖 constructor test_size"
+          }
+        }
+      }
+    },
+    "woe_params": {
+      "source": "Modeling_Tool.WOE.WOE_Master.WOE_Master",
+      "constructor": {
+        "train_data": {
+          "controlled_by_pipeline": true
+        },
+        "varlist": {
+          "controlled_by_pipeline": true
+        },
+        "dep": {
+          "controlled_by_pipeline": true
+        },
+        "graph_save_dir": {
+          "controlled_by_pipeline": true
+        },
+        "woe_suffix": {
+          "default": "_woe",
+          "config_key": "woe_params.woe_suffix"
+        },
+        "missing_ref_value": {
+          "default": "SMF_MISSING_BIN / -999999 by pipeline",
+          "config_key": "woe_params.missing_ref_value"
+        },
+        "remove_exist_dir": {
+          "default": false,
+          "meaning": "初始化时是否删除已有图目录"
+        }
+      },
+      "fit": {
+        "nbins": {
+          "default": 10,
+          "meaning": "分箱数"
+        },
+        "equal_freq": {
+          "default": true,
+          "meaning": "是否等频"
+        },
+        "tree_binning_seed": {
+          "default": null,
+          "meaning": "传入整数时启用树分箱并指定随机种子"
+        },
+        "chi2_config": {
+          "default": null,
+          "meaning": "卡方分箱配置，通常为 (init_equi_bins, chi2_p)"
+        },
+        "precision": {
+          "default": 5,
+          "meaning": "边界/报表精度"
+        },
+        "min_bin_prop": {
+          "default": 0.05,
+          "meaning": "最小箱占比"
+        },
+        "include_missing": {
+          "default": true,
+          "meaning": "是否单独包含缺失箱"
+        },
+        "fillna": {
+          "default": null,
+          "meaning": "缺失填充值；None 时使用 missing_ref_value"
+        },
+        "spec_values": {
+          "default": [],
+          "meaning": "特殊值列表"
+        }
+      }
+    },
+    "monotone_woe_params": {
+      "source": "Modeling_Tool.WOE.WOE_Monotone_Binner.MonotoneWOEBinner",
+      "constructor": {
+        "feature_cols": {
+          "controlled_by_pipeline": true,
+          "meaning": "数值特征；categorical_features 会从中剔除"
+        },
+        "target_col": {
+          "controlled_by_pipeline": true
+        },
+        "n_init_bins": {
+          "default": 20,
+          "meaning": "初始等频箱数"
+        },
+        "min_bin_size": {
+          "default": 0.03,
+          "meaning": "每箱最小样本占比"
+        },
+        "min_n_bins": {
+          "default": 2,
+          "meaning": "最终普通箱数下限"
+        },
+        "eps": {
+          "default": 1e-06,
+          "meaning": "WOE 平滑项，防止 log(0)"
+        },
+        "missing_woe": {
+          "default": 0.0,
+          "meaning": "未作为 special_values 的 NaN 对应 WOE"
+        },
+        "special_values": {
+          "default": null,
+          "meaning": "需要单独成箱的特殊值"
+        },
+        "cate_feats": {
+          "default": null,
+          "meaning": "类别特征；Pipeline 由 categorical_features 映射"
+        },
+        "bin_label_decimals": {
+          "default": null,
+          "meaning": "分箱边界展示小数位"
+        }
+      },
+      "fit": {
+        "chi2_binning": {
+          "default": false,
+          "meaning": "贪婪单调分箱后是否再做卡方合并"
+        },
+        "chi2_p": {
+          "default": 0.99,
+          "meaning": "卡方检验置信度阈值"
+        },
+        "chi2_init_size": {
+          "default": 1000,
+          "meaning": "卡方计算时分层抽样上限"
+        },
+        "n_jobs": {
+          "default": 1,
+          "meaning": "并行数；-1 表示所有可用 CPU"
+        }
+      },
+      "refine_cate": {
+        "features": {
+          "default": null,
+          "pipeline_default": "categorical_features 中存在于 fit_features 的列",
+          "meaning": "要聚类的类别特征"
+        },
+        "max_bins": {
+          "default": 5,
+          "meaning": "类别聚类后的最大箱数"
+        },
+        "min_bin_size": {
+          "default": 0.0,
+          "meaning": "低于该样本占比的小箱会优先合并"
+        },
+        "badrate_tol": {
+          "default": null,
+          "meaning": "相邻类别坏账率差阈值；None 表示不启用"
+        }
+      },
+      "refine_dtree": {
+        "df": {
+          "controlled_by_pipeline": true,
+          "meaning": "WOE fit 使用的训练数据"
+        },
+        "features": {
+          "default": null,
+          "pipeline_default": "数值特征列表",
+          "meaning": "要重分箱的数值特征"
+        },
+        "max_bins": {
+          "default": 6,
+          "meaning": "决策树最大叶子数，即分箱上限"
+        },
+        "min_samples_leaf": {
+          "default": 0.05,
+          "meaning": "叶子最小样本占比或绝对样本量"
+        },
+        "monotone": {
+          "default": true,
+          "meaning": "树分箱后是否强制 WOE 单调"
+        },
+        "n_jobs": {
+          "default": 1,
+          "meaning": "并行进程数；-1 表示所有可用 CPU"
+        }
+      },
+      "refine_chi2": {
+        "df": {
+          "controlled_by_pipeline": true,
+          "meaning": "WOE fit 使用的训练数据"
+        },
+        "features": {
+          "default": null,
+          "pipeline_default": "数值特征列表",
+          "meaning": "要做卡方后合并的数值特征"
+        },
+        "chi2_p": {
+          "default": 0.99,
+          "meaning": "卡方检验置信度阈值"
+        },
+        "chi2_init_size": {
+          "default": 1000,
+          "meaning": "卡方计算时分层抽样上限"
+        },
+        "n_jobs": {
+          "default": 1,
+          "meaning": "并行数；-1 表示所有可用 CPU"
+        }
+      }
+    },
+    "monotone_refine_cate_params": {
+      "passes_to": "MonotoneWOEBinner.refine_cate(**monotone_refine_cate_params)",
+      "accepted_params": {
+        "features": {
+          "default": null,
+          "pipeline_default": "categorical_features 中存在于 fit_features 的列",
+          "meaning": "要聚类的类别特征"
+        },
+        "max_bins": {
+          "default": 5,
+          "meaning": "类别聚类后的最大箱数"
+        },
+        "min_bin_size": {
+          "default": 0.0,
+          "meaning": "低于该样本占比的小箱会优先合并"
+        },
+        "badrate_tol": {
+          "default": null,
+          "meaning": "相邻类别坏账率差阈值；None 表示不启用"
+        }
+      }
+    },
+    "monotone_refine_dtree_params": {
+      "passes_to": "MonotoneWOEBinner.refine_dtree(train, **monotone_refine_dtree_params)",
+      "accepted_params": {
+        "df": {
+          "controlled_by_pipeline": true,
+          "meaning": "WOE fit 使用的训练数据"
+        },
+        "features": {
+          "default": null,
+          "pipeline_default": "数值特征列表",
+          "meaning": "要重分箱的数值特征"
+        },
+        "max_bins": {
+          "default": 6,
+          "meaning": "决策树最大叶子数，即分箱上限"
+        },
+        "min_samples_leaf": {
+          "default": 0.05,
+          "meaning": "叶子最小样本占比或绝对样本量"
+        },
+        "monotone": {
+          "default": true,
+          "meaning": "树分箱后是否强制 WOE 单调"
+        },
+        "n_jobs": {
+          "default": 1,
+          "meaning": "并行进程数；-1 表示所有可用 CPU"
+        }
+      }
+    },
+    "monotone_refine_chi2_params": {
+      "passes_to": "MonotoneWOEBinner.refine_chi2(train, **monotone_refine_chi2_params)",
+      "accepted_params": {
+        "df": {
+          "controlled_by_pipeline": true,
+          "meaning": "WOE fit 使用的训练数据"
+        },
+        "features": {
+          "default": null,
+          "pipeline_default": "数值特征列表",
+          "meaning": "要做卡方后合并的数值特征"
+        },
+        "chi2_p": {
+          "default": 0.99,
+          "meaning": "卡方检验置信度阈值"
+        },
+        "chi2_init_size": {
+          "default": 1000,
+          "meaning": "卡方计算时分层抽样上限"
+        },
+        "n_jobs": {
+          "default": 1,
+          "meaning": "并行数；-1 表示所有可用 CPU"
+        }
+      }
+    },
+    "psi_params": {
+      "source": "Modeling_Tool.Feature.WOE_Engine_Feature_Patch.PSICalculator",
+      "constructor": {
+        "buckets": {
+          "default": 10,
+          "meaning": "PSI 重新分箱桶数"
+        },
+        "equal_freq": {
+          "default": true,
+          "meaning": "重新分箱时是否等频"
+        },
+        "min_bin_prop": {
+          "default": 0.05,
+          "meaning": "最小箱占比"
+        },
+        "content": {
+          "default": 1e-06,
+          "meaning": "避免除零的小平滑值"
+        },
+        "precision": {
+          "default": 5,
+          "meaning": "结果精度"
+        },
+        "binning_engine": {
+          "controlled_by_pipeline": true,
+          "meaning": "psi_use_woe_bins=true 时由 WOE engine 注入"
+        },
+        "missing_policy": {
+          "default": "include",
+          "allowed": [
+            "include",
+            "drop",
+            "warn_and_drop"
+          ],
+          "meaning": "NaN 是否进入 PSI 缺失箱"
+        },
+        "psi_missing_bucket_policy": {
+          "default": "smooth_laplace",
+          "meaning": "缺失箱 PSI 平滑策略"
+        }
+      },
+      "calculate": {
+        "expected_df": {
+          "controlled_by_pipeline": true,
+          "meaning": "psi_reference_dataset/psi_reference_data"
+        },
+        "current_data": {
+          "controlled_by_pipeline": true,
+          "meaning": "合并后的 ins/oos/oot 数据"
+        },
+        "varlist": {
+          "controlled_by_pipeline": true,
+          "meaning": "new_feature_cols"
+        },
+        "group_by": {
+          "default": null,
+          "pipeline_value": null
+        },
+        "group_name": {
+          "default": null,
+          "pipeline_value": "psi_group_dims 解析出的单个分组列"
+        },
+        "return_details": {
+          "default": false,
+          "pipeline_value": true
+        },
+        "missing_policy": {
+          "default": null,
+          "meaning": "覆盖 constructor missing_policy"
+        },
+        "psi_missing_bucket_policy": {
+          "default": null,
+          "meaning": "覆盖 constructor psi_missing_bucket_policy"
+        }
+      }
+    },
+    "ivks_params": {
+      "source": "Modeling_Tool.Feature.WOE_Engine_Feature_Patch.VarExtractionInsights",
+      "constructor": {
+        "nbins": {
+          "default": 10,
+          "meaning": "原生分箱数"
+        },
+        "equal_freq": {
+          "default": true,
+          "meaning": "是否等频"
+        },
+        "min_bin_prop": {
+          "default": 0.05,
+          "meaning": "最小箱占比"
+        },
+        "precision": {
+          "default": 5,
+          "meaning": "精度"
+        },
+        "chi2_method": {
+          "default": false,
+          "meaning": "是否使用卡方分箱"
+        },
+        "chi2_p": {
+          "default": 0.9,
+          "meaning": "卡方 p 阈值"
+        },
+        "init_equi_bins": {
+          "default": 5000,
+          "meaning": "初始等频箱数"
+        },
+        "tree_binning": {
+          "default": true,
+          "meaning": "是否使用树分箱"
+        },
+        "include_missing": {
+          "default": true,
+          "meaning": "是否单独包含缺失箱"
+        },
+        "seed": {
+          "default": 3407,
+          "meaning": "随机种子"
+        },
+        "missing_rate_ref": {
+          "default": -999999,
+          "meaning": "缺失填充值"
+        },
+        "spec_values": {
+          "default": null,
+          "meaning": "特殊值列表"
+        },
+        "woe_engine": {
+          "default": "master",
+          "meaning": "master/monotone；Pipeline 复用 WOE 时传 monotone"
+        },
+        "woe_binner": {
+          "default": null,
+          "meaning": "ivks_use_woe_bins=true 时注入已 fit 的 WOE engine"
+        },
+        "woe_engine_params": {
+          "default": null,
+          "meaning": "构造临时 WOE engine 的额外参数"
+        }
+      },
+      "get_var_analysis_report": {
+        "iv_cut": {
+          "default": 0.01,
+          "pipeline_config_key": "ivks_params.iv_cut"
+        },
+        "data": {
+          "controlled_by_pipeline": true
+        },
+        "varlist": {
+          "controlled_by_pipeline": true
+        },
+        "dep": {
+          "controlled_by_pipeline": true
+        }
+      }
+    },
+    "corr_params": {
+      "source": "Modeling_Tool.Feature.WOE_Engine_Feature_Patch.CorrelationFilter",
+      "constructor": {
+        "corr_cutpoint": {
+          "default": 0.8,
+          "meaning": "高相关阈值"
+        },
+        "method": {
+          "default": "pearson",
+          "allowed": [
+            "pearson",
+            "spearman",
+            "kendall"
+          ],
+          "meaning": "相关性计算方法"
+        },
+        "tree_binning": {
+          "default": false,
+          "meaning": "变量能力对比时是否用树分箱"
+        },
+        "chi2_method": {
+          "default": false,
+          "meaning": "变量能力对比时是否用卡方分箱"
+        },
+        "seed": {
+          "default": 42,
+          "meaning": "随机种子"
+        },
+        "chi2_p": {
+          "default": 0.999,
+          "meaning": "卡方 p 阈值"
+        },
+        "init_equi_bins": {
+          "default": 1000,
+          "meaning": "初始等频箱数"
+        },
+        "missing_rate_ref": {
+          "default": -9999999,
+          "meaning": "缺失填充值"
+        },
+        "spec_values": {
+          "default": [],
+          "meaning": "特殊值列表"
+        },
+        "base_metric": {
+          "default": "iv",
+          "allowed": [
+            "iv",
+            "ks"
+          ],
+          "meaning": "高相关变量组中保留变量的排序指标"
+        },
+        "woe_engine": {
+          "default": "master",
+          "meaning": "master/monotone"
+        },
+        "woe_binner": {
+          "default": null,
+          "meaning": "corr_use_woe_bins=true 时注入已 fit 的 WOE engine"
+        },
+        "woe_engine_params": {
+          "default": null,
+          "meaning": "构造临时 WOE engine 的额外参数"
+        }
+      },
+      "remove_highly_correlated": {
+        "varlist": {
+          "controlled_by_pipeline": true
+        },
+        "max_iterations": {
+          "default": 10,
+          "pipeline_config_key": "corr_params.max_iterations"
+        }
+      }
+    },
+    "selection_params": {
+      "passes_to": "Modeling_Tool.Feature.Feature_Screen.FeatureScreenConfig via screen_config_from_mapping",
+      "accepted_params": {
+        "psi_enabled": {
+          "default": "继承 psi_enabled"
+        },
+        "psi_threshold": {
+          "default": 0.2
+        },
+        "psi_compare_splits": {
+          "default": [
+            "oos"
+          ]
+        },
+        "psi_buckets": {
+          "default": "psi_params.buckets 或 10"
+        },
+        "psi_use_woe_bins": {
+          "default": "继承 psi_use_woe_bins"
+        },
+        "iv_enabled": {
+          "default": "继承 ivks_enabled"
+        },
+        "iv_threshold": {
+          "default": 0.02
+        },
+        "iv_nbins": {
+          "default": "psi_params.buckets 或 10"
+        },
+        "iv_min_bin_prop": {
+          "default": "psi_params.min_bin_prop 或 0.05"
+        },
+        "iv_equal_freq": {
+          "default": "psi_params.equal_freq 或 true"
+        },
+        "iv_use_woe_bins": {
+          "default": "继承 ivks_use_woe_bins"
+        },
+        "corr_enabled": {
+          "default": "继承 corr_enabled"
+        },
+        "corr_threshold": {
+          "default": "corr_params.corr_cutpoint 或 0.75"
+        },
+        "corr_max_iterations": {
+          "default": "corr_params.max_iterations 或 10"
+        },
+        "corr_use_woe_bins": {
+          "default": "继承 corr_use_woe_bins"
+        },
+        "corr_nan_policy": {
+          "default": "pairwise",
+          "allowed": [
+            "pairwise",
+            "median_fill",
+            "raise"
+          ]
+        },
+        "on_empty_stage": {
+          "default": "keep_all_warn",
+          "allowed": [
+            "keep_all_warn",
+            "raise"
+          ]
+        },
+        "missing_rate_threshold": {
+          "default": "顶层 missing_rate_threshold"
+        },
+        "missing_rate_ref": {
+          "default": "woe_params.missing_ref_value 或 -999999"
+        },
+        "content": {
+          "default": 1e-06
+        },
+        "precision": {
+          "default": 5
+        },
+        "min_bin_prop": {
+          "default": "iv_min_bin_prop 或 0.05"
+        }
+      }
+    }
+  }
 }

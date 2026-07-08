@@ -110,5 +110,78 @@
       }
     ]
   },
-  "requirement_note": "必填类别包含评分对比必须确认的数据字段入口；必须提供 score_cols 或 base_score + comp_scores。"
+  "requirement_note": "必填类别包含评分对比必须确认的数据字段入口；必须提供 score_cols 或 base_score + comp_scores。",
+  "underlying_method_params": {
+    "Model_Evaluation_Tool": {
+      "passes_to": "Modeling_Tool.Eval.Evaluation_Tool.Model_Evaluation_Tool",
+      "accepted_params": {
+        "nbins": {
+          "config_key": "nbins"
+        },
+        "min_bin_prop": {
+          "config_key": "min_bin_prop"
+        },
+        "equal_freq": {
+          "config_key": "equal_freq"
+        },
+        "min_data_size": {
+          "config_key": "min_data_size"
+        },
+        "precision": {
+          "config_key": "precision"
+        },
+        "include_missing": {
+          "config_key": "include_missing"
+        },
+        "fillna": {
+          "config_key": "fillna"
+        },
+        "weight_col": {
+          "config_key": "weight_col"
+        },
+        "positive_score_only": {
+          "config_key": "positive_score_only"
+        },
+        "cross_agg_dict": {
+          "config_key": "pairwise_cross_agg_dict or default"
+        },
+        "gains_display_metric_list": {
+          "config_key": "gains_display_metric_list"
+        }
+      }
+    },
+    "group_specs": {
+      "pipeline_schema": {
+        "name": {
+          "required": false,
+          "meaning": "输出 group_perf 的 key"
+        },
+        "columns": {
+          "required": true,
+          "meaning": "分组字段列表"
+        },
+        "min_size": {
+          "required": false,
+          "default": "group_min_size or min_data_size"
+        }
+      }
+    },
+    "cross_metrics": {
+      "schema": "{metric_name: [agg_col, agg_func]}",
+      "example": {
+        "bad_rate": [
+          "badflag",
+          "mean"
+        ],
+        "credit_limit": [
+          "credit_limit",
+          "mean"
+        ]
+      }
+    },
+    "pairwise_cross_agg_dict": {
+      "passes_to": "Model_Evaluation_Tool.get_cross_risk_summary(cross_agg_dict=...)",
+      "schema": "{column: list[agg functions] 或 {column: agg}}"
+    }
+  }
 }

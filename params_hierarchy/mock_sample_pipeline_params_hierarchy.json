@@ -96,5 +96,40 @@
       }
     ]
   },
-  "requirement_note": "MockSamplePipeline 所有配置均有默认值，因此无必填配置；仍建议按业务需要确认样本规模和输出范围。"
+  "requirement_note": "MockSamplePipeline 所有配置均有默认值，因此无必填配置；仍建议按业务需要确认样本规模和输出范围。",
+  "underlying_method_params": {
+    "generation_functions": {
+      "pipeline_internal": true,
+      "accepted_params": {
+        "approval_flag": {
+          "controlled_by": [
+            "approve_rate",
+            "random_state"
+          ],
+          "meaning": "按 latent risk 低风险排序取通过样本"
+        },
+        "online_scores": {
+          "controlled_by": [
+            "num_online_scores",
+            "random_state"
+          ],
+          "meaning": "生成 online_model_pb_i 概率值"
+        },
+        "y_flags": {
+          "controlled_by": [
+            "y_flag_candidates",
+            "observation_timestamp"
+          ],
+          "meaning": "仅通过且已成熟样本有 0/1 标签"
+        },
+        "features": {
+          "controlled_by": [
+            "num_features",
+            "min_num_feature_business_type"
+          ],
+          "meaning": "按业务类型生成随机特征并输出 feature_metadata"
+        }
+      }
+    }
+  }
 }

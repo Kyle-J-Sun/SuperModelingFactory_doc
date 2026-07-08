@@ -83,5 +83,50 @@
       }
     ]
   },
-  "requirement_note": "必填类别包含样本分析必须确认的数据字段入口；目标标签、时间字段和 approval 字段口径需要确认。"
+  "requirement_note": "必填类别包含样本分析必须确认的数据字段入口；目标标签、时间字段和 approval 字段口径需要确认。",
+  "underlying_method_params": {
+    "SampleSplitter": {
+      "source": "Modeling_Tool.Sample.Sample_Split.SampleSplitter",
+      "constructor": {
+        "test_size": {
+          "default": 0.3,
+          "meaning": "测试/OOS 样本比例"
+        },
+        "random_state": {
+          "default": null,
+          "meaning": "随机种子"
+        },
+        "stratify": {
+          "default": true,
+          "meaning": "是否按 target 分层抽样"
+        }
+      },
+      "methods": {
+        "split_df": {
+          "target": {
+            "required": true,
+            "meaning": "分层目标字段"
+          },
+          "exclude_cols": {
+            "default": null,
+            "meaning": "不参与切分策略的列，不会从输出 DataFrame 删除"
+          },
+          "test_size": {
+            "default": null,
+            "meaning": "覆盖 constructor test_size"
+          }
+        }
+      }
+    },
+    "split_grid": {
+      "pipeline_internal": true,
+      "accepted_params": {
+        "oot_time_dim": "按该字段排序取尾部 oot_windows period 作为 OOT",
+        "oot_windows": "候选 OOT 窗口列表",
+        "ins_oos_ratios": "候选 INS 比例；OOS=1-INS",
+        "random_seeds": "每个候选比例重复切分的随机种子列表",
+        "min_sample_size": "推荐候选过滤阈值"
+      }
+    }
+  }
 }
