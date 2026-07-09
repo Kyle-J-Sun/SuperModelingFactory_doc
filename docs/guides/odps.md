@@ -122,12 +122,12 @@ print(f"样本已抽取: {csv_path}")
 
 `ParallelODPSManager` 是 `ODPSRunner + ParallelApplyEngine` 的高层封装，适合把大表按 chunk 并发处理：
 
-- `pull()`：按 `unique_key` 哈希分桶，并发执行 SQL 拉数，合并成本地 CSV。
-- `push()`：接受 pandas DataFrame 或本地 CSV，按行拆 chunk 上传为 ODPS 临时表，再 `UNION ALL` 写入目标表，并清理临时表。
+- `pull()`：按 `unique_key` 哈希分桶，或在没有 `unique_key` 时自动物化 ROW_NUMBER 临时表再分桶，并发执行 SQL 拉数，合并成本地 CSV。
+- `push()`：接收 pandas DataFrame 或本地 CSV，按行拆 chunk 上传到 ODPS 临时表，再 `UNION ALL` 写入目标表，并清理临时表。
 
 ### 5.1 并发 pull
 
-SQL 模板必须包含 `{chunk_filter}`，并放在希望切分的基础表 `WHERE` 子句里：
+SQL 模板必须包含 `{chunk_filter}`，并放在希望切分的基础表 `WHERE` 子句里。若模板里没有这个占位符，`pull()` 会在任何 ODPS 查询前直接抛 `ValueError`，避免每个 chunk 都重复拉全量数据：
 
 ```sql
 SELECT flow_id, score, apply_time
@@ -135,6 +135,10 @@ FROM mex_anls.source_table
 WHERE 1 = 1
   AND {chunk_filter}
 ```
+
+#### Hash 分桶：推荐有稳定 key 时使用
+
+当配置了 `unique_key`，`pull_split_strategy="auto"` 会走 hash 分桶。执行并发 chunk 前，SMF 会先跑一次 probe SQL，校验 `unique_key` 在当前 SQL 作用域里可用；校验失败会抛 `ValueError`，不会进入并发拉取。
 
 Python 调用：
 
@@ -144,6 +148,7 @@ from Modeling_Tool import ParallelODPSConfig, ParallelODPSManager
 manager = ParallelODPSManager(
     ParallelODPSConfig(
         unique_key="flow_id",
+        pull_split_strategy="auto",  # auto + unique_key => hash
         n_chunks=20,
         n_jobs=5,
         backend="thread",
@@ -164,6 +169,53 @@ ABS(HASH(flow_id)) % 20 = <chunk_id>
 ```
 
 如果不直接传 `n_chunks`，可以传 `chunk_size`；此时 `pull()` 会先跑 `count_query` 推导分块数。对复杂宽表 join，建议手写更轻量的 `count_query`。
+
+#### ROW_NUMBER 分桶：没有 unique_key 时自动使用
+
+当 `unique_key=None` 且 `pull_split_strategy="auto"`，SMF 会自动走 ROW_NUMBER 分桶：
+
+1. 先用 `{chunk_filter}=1=1` 渲染原 SQL。
+2. 将结果物化为 ODPS 临时表，并新增内部行号列。
+3. 并发执行 `WHERE (row_number_col - 1) % n_chunks = chunk_id` 拉取各 chunk。
+4. 本地输出 CSV 前删除内部行号列。
+5. 根据 `cleanup_tmp` / `keep_tmp_on_error` 清理临时表。
+
+```python
+manager = ParallelODPSManager(
+    ParallelODPSConfig(
+        unique_key=None,
+        pull_split_strategy="auto",  # auto + no unique_key => row_number
+        n_chunks=20,
+        n_jobs=5,
+        backend="thread",
+        tmp_table_prefix="tmp_parallel_odps",
+    )
+)
+
+summary = manager.pull(
+    sql_path="sql/pull_sample.sql",
+    out_path="data/sample.csv",
+)
+```
+
+默认行号表达式是：
+
+```sql
+ROW_NUMBER() OVER (ORDER BY 1)
+```
+
+如果希望行号顺序更稳定，可传 `row_number_order_by`：
+
+```python
+ParallelODPSConfig(
+    unique_key=None,
+    pull_split_strategy="row_number",
+    row_number_order_by="apply_time, flow_id",
+    chunk_size=500000,
+)
+```
+
+ROW_NUMBER 模式会创建一张 ODPS 临时 staging 表，性能和存储成本高于 hash 模式；只要能提供稳定且分布较均匀的 key，仍推荐优先使用 `unique_key` hash 分桶。
 
 ### 5.2 并发 push
 
