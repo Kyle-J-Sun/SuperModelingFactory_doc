@@ -122,7 +122,7 @@ Output shape:
 pipeline: mock_sample
 pipeline_class: MockSamplePipeline
 config_class: MockSamplePipelineConfig
-smf_version: 0.5.4
+smf_version: 0.5.5
 config:
   n_samples: 80000
   applied_sample: 1
