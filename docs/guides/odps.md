@@ -236,6 +236,8 @@ summary = manager.push(
 3. 所有 tmp 表通过 `UNION ALL` 写入最终目标表。
 4. 成功后清理 tmp 表；失败时默认也清理，除非 `keep_tmp_on_error=True`。
 
+每个 chunk 的 `upload_df()` 会等待临时表原子 rename 完成后才返回，因此最终 `UNION ALL` 不会抢在 tmp 表可见之前执行。调用方无需额外添加 `sleep` 或轮询。
+
 写入模式：
 
 | `write_mode` | 行为 |
@@ -338,6 +340,8 @@ schema = ODPSRunner.cre_table_schema(df, partition_name="dt")
 odps.upload_df(df, "mex_anls.my_table", table_schema=schema, partition="dt=2025-08-18")
 ```
 
+上传时先按原始 pandas dtype 推断 schema，再在 records 副本中把 `np.nan`、`pd.NA` 和 `NaT` 转成 ODPS `NULL`；不会修改调用方传入的 DataFrame，也不需要预先调用 `npnan2none()`。默认原子替换使用阻塞 DDL：目标表备份、tmp 表 rename 和失败恢复都会等待 ODPS Instance 成功后再进入下一步。
+
 ### `insert_df(df, table_name, overwrite=True, partition=None)`
 
 追加写入**已存在**的表:
@@ -352,8 +356,11 @@ odps.insert_df(df, "mex_anls.my_table", overwrite=False, partition="dt=2025-08-1
 
 ```python
 schema = ODPSRunner.cre_table_schema(df, partition_name="dt")
-# int64 → bigint, float64 → double, object → string
+# integer → bigint, float32 → float, float64 → double
+# boolean → boolean, datetime → datetime, object/string/category → string
 ```
+
+复数和 timedelta 等当前不支持的 dtype 会抛出清晰的 `TypeError`，不会静默降型。
 
 ## 8. 相关工具函数
 
