@@ -76,7 +76,7 @@
               "segment_dims": "population_dims 的兼容别名；传入后覆盖 population_dims",
               "include_time_population_cross": "是否自动生成 population x time 交叉分组",
               "group_min_size": "分组最小样本量；为空时继承 min_data_size",
-              "group_specs": "显式分组配置；传入后覆盖自动 time/population/split 组合"
+              "group_specs": "显式分组配置；支持命名字典或 name/columns/min_size 列表，传入后覆盖自动 time/population/split 组合"
             }
           },
           {
@@ -151,6 +151,10 @@
       }
     },
     "group_specs": {
+      "accepted_forms": [
+        "{group_name: [column1, column2]}",
+        "[{name: group_name, columns: [column1, column2], min_size: 100}]"
+      ],
       "pipeline_schema": {
         "name": {
           "required": false,
@@ -168,6 +172,7 @@
     },
     "cross_metrics": {
       "schema": "{metric_name: [agg_col, agg_func]}",
+      "validation": "每个 value 必须是二元组/二元列表；agg_col 必须存在；agg_func 必须是字符串或 callable",
       "example": {
         "bad_rate": [
           "badflag",
@@ -181,7 +186,8 @@
     },
     "pairwise_cross_agg_dict": {
       "passes_to": "Model_Evaluation_Tool.get_cross_risk_summary(cross_agg_dict=...)",
-      "schema": "{column: list[agg functions] 或 {column: agg}}"
+      "schema": "{column: agg function 或 list[agg functions]}",
+      "validation": "column 必须存在；aggregation 必须是字符串或 callable"
     }
   }
 }

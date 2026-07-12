@@ -154,15 +154,15 @@ result.oot_summary        # 外部 OOT 成熟样本过滤摘要
 | `write_outputs` | `True` | 是否写 CSV、图片等中间产物。 |
 | `write_excel` | `True` | 是否输出 Excel 报告。 |
 | `train_prescore` | `True` | 是否在通过样本上训练 pre-score 模型并给全量样本打分。 |
-| `prescore_model_type` | `"lgb"` | pre-score 模型类型，传给 `GradientBoostingModel`，常用 `"lgb"`、`"xgb"`、`"cat"`。 |
-| `prescore_params` | `{}` | pre-score 模型参数，会覆盖默认 LightGBM 参数。 |
+| `prescore_model_type` | `"lgb"` | pre-score 模型类型，支持 `"lgb"`、`"xgb"`、`"cat"`、`"lr"`。GBM 使用 `GradientBoostingModel`，LR 使用 `LRMaster`。 |
+| `prescore_params` | `{}` | pre-score 模型参数覆盖；Pipeline 会先按模型类型选择对应默认参数，不会把 LightGBM 参数传给 XGBoost/CatBoost/LR。 |
 | `prescore_test_size` | `0.3` | 在通过样本内部切分 pre-score validation 的比例。 |
 | `ri_methods` | `["simple_augment", "hard_cutoff", "fuzzy_augment", "parceling"]` | 要尝试的拒绝推断方法。支持别名：`simple`、`hard`、`fuzzy`、`parcel`。 |
 | `ri_method_params` | `{}` | 各 RI 方法的独立参数。 |
 | `ri_score_direction` | `"high_bad"` | RI 分数方向。Pipeline 默认的 `prescore_prob` 是 P(bad)，因此默认高分=高风险；底层 inferrer 仍兼容 `"high_good"` 信用分语义。 |
 | `train_ri_models` | `True` | 是否基于每个 RI 增强数据集训练后续模型并比较 OOT 表现。 |
-| `ri_model_type` | `"lgb"` | RI 后建模使用的模型类型。 |
-| `ri_model_params` | `{}` | RI 后模型参数，会覆盖默认 LightGBM 参数。 |
+| `ri_model_type` | `"lgb"` | RI 后建模使用的模型类型，支持 `"lgb"`、`"xgb"`、`"cat"`、`"lr"`。Fuzzy Augment 的 `_weight` 会同时传给四种模型。 |
+| `ri_model_params` | `{}` | RI 后模型参数覆盖；默认参数按 `ri_model_type` 独立选择。 |
 | `include_no_ri_benchmark` | `True` | 是否额外训练 approved-only benchmark 模型，方法名为 `no_ri_benchmark`。 |
 | `ri_validation_frac` | `0.2` | 没有显式 OOS 时，从 approved training pool 中切 validation 的比例；训练会排除 validation/OOT row。 |
 | `save_models` | `False` | 是否保存 pre-score 和 RI 后模型 pkl。 |
@@ -241,6 +241,8 @@ cfg = RejectInferencePipelineConfig(
 ### 结果对象
 
 `RejectInferencePipeline.run()` 返回 `RejectInferencePipelineResult`。
+
+`ri_summary.prescore_AUC` 始终按“高值=高风险”方向展示：`high_bad` 使用原分数，`high_good` 使用反向分数。原始未调方向 AUC 保留在 `prescore_AUC_raw`，实际方向记录在 `prescore_score_direction`。
 
 | 字段 | 说明 |
 |---|---|
@@ -460,7 +462,7 @@ result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
 | `gbm_feature_source` | `"woe"` | GBM 入模特征来源。可传全局 `"woe"` / `"raw"`，也可传 `{"lgb": "raw", "xgb": "woe", "cat": "raw"}`。LR 始终使用 WOE 特征。 |
 | `lr_search_enabled` | `False` | 是否为 LR 运行 `LRMaster.grid_search_params()` 参数筛选。 |
 | `lr_search_param_grid` | `{"C": [0.01, 0.1, 1.0, 10.0]}` | LR 参数网格；会做笛卡尔积搜索。 |
-| `lr_search_params` | `{}` | 覆盖 LR search 的 `objective`、`primary_set`、`gap_ref_sets`、`metric`、`refit`、`verbose` 等参数。 |
+| `lr_search_params` | `{}` | 覆盖 LR search 的 `objective`、`primary_set`、`gap_ref_sets`、`metric`、`refit`、`verbose`。这是 holdout 搜索，不接受 `cv`；非法键会在搜索前抛出列明允许参数的 `ValueError`。 |
 | `use_lr_search_params` | `True` | 是否把 LR best params 合并进最终 LR 训练参数。 |
 | `warm_start_enabled` | `False` | 是否启用 GBM 前置分 warm-start。 |
 | `warm_start_score_col` | `None` | 输入数据中的前置分列。该列会以位置对齐方式拷贝到 WOE 变换后的各个 split（v0.3.18 起经 `copy_column_length_checked` 校验长度）；若上游 WOE / `dropna` / fit-query 改变了行数，会在拷贝环节直接 `ValueError`，不会静默杂接错位的分数。 |
@@ -894,7 +896,7 @@ result.high_corr_pairs
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS 切分配置。 |
 | `time_dims` | `["apply_month"]` | 时间维度。 |
 | `population_dims` | `[]` | 人群维度，如渠道、产品、策略版本。 |
-| `group_specs` | `None` | 自定义分组规格；不传时自动组合 global/time/population/time x population。 |
+| `group_specs` | `None` | 自定义分组规格；支持 `{"monthly": ["apply_month"]}` 或 `[ {"name": "monthly", "columns": ["apply_month"]} ]`，不传时自动组合 global/time/population/time x population。 |
 | `min_group_size` | `100` | PSI/IV/KS 分组最小样本数保护。 |
 | `woe_engine` | `"monotone"` | 默认 `MonotoneWOEBinner`；也支持 `"equal_freq"` 使用 `WOE_Master`。 |
 | `woe_fit_query` | `None` | pandas `query()` 表达式，仅过滤 INS 上用于 WOE 拟合的行；PSI/IV/KS 与 transform 仍基于全量 splits。拟合审计写入 `woe_artifacts["refine_summary"]` 的 `fit_filter` 行。 |
@@ -915,6 +917,8 @@ result.high_corr_pairs
 | `selection_params` | `{}` | 筛选阈值与开关，键名与 CM `feature_selection` 对齐（如 `psi_threshold`、`iv_threshold`、`corr_threshold`、`*_use_woe_bins`）。 |
 | `weight_col` | `None` | 加权筛选权重列；与 CM `weight_col` 一致。 |
 | `write_outputs` / `write_excel` | `True` / `True` | 是否输出 CSV/图片和 ExcelMaster 报告。 |
+
+声明在 `categorical_features` 中的类别变量可直接参与加权筛选；缺失率阶段按非空状态和样本权重计算，不会把字符串类别强制转换为浮点数。WOE 分箱拟合本身仍按未加权样本执行，`weight_col` 用于后续筛选和评估口径。
 
 ### FVP → CM 衔接
 
@@ -1203,15 +1207,15 @@ result.pairwise_cross
 | `segment_dims` | `None` | `population_dims` 的别名。传入后会覆盖 `population_dims`。 |
 | `include_time_population_cross` | `True` | 是否自动跑人群 x 时间交叉维度。 |
 | `group_min_size` | `None` | 分组评估最小样本量；不传时使用 `min_data_size`。 |
-| `group_specs` | `None` | 高级自定义分组配置。传入后会覆盖 `time_dims/population_dims` 自动生成逻辑。 |
+| `group_specs` | `None` | 高级自定义分组配置。支持命名字典或 `name/columns/min_size` 列表；传入后覆盖 `time_dims/population_dims` 自动生成逻辑。 |
 | `gains_add_func` | `None` | 自定义 Gains 分箱附加指标函数。 |
 | `custom_metric_cols` | `["credit_limit", "age", "apr"]` | 默认自定义业务指标列，会自动计算均值。 |
 | `gains_display_metric_list` | 标准 Gains 指标列表 | `add_func=None` 时用于控制 Gains 展示列。 |
-| `cross_vars` | `["rating"]` | cross risk 的第二维变量列表。 |
-| `cross_metrics` | `{}` | cross risk 指标配置；不传时使用 bad rate 和 `custom_metric_cols` 均值。 |
+| `cross_vars` | `[]` | cross risk 的第二维变量列表；默认不隐式要求 `rating` 字段。 |
+| `cross_metrics` | `{}` | cross risk 指标配置，格式为 `{metric_name: (column, aggregation)}`；不传时使用 bad rate 和输入中实际存在的 `custom_metric_cols` 均值。 |
 | `cross_binning_numeric` | `[True, False]` | cross risk 两个维度是否数值分箱。支持 bool 或二元列表。 |
 | `pairwise_cross_enabled` | `True` | 是否计算 compare score x base score 的 pairwise cross risk。 |
-| `pairwise_cross_agg_dict` | `None` | pairwise cross risk 的聚合配置。 |
+| `pairwise_cross_agg_dict` | `None` | pairwise cross risk 聚合配置，格式为 `{column: aggregation 或 [aggregations]}`。缺列或格式错误会在执行前给出明确错误。 |
 
 ### 时间维度与人群维度
 
@@ -1270,6 +1274,17 @@ cfg = ScoreComparisonPipelineConfig(
         {"name": "channel_x_month", "columns": ["channel", "apply_month"], "min_size": 100},
         {"name": "channel_x_product_x_month", "columns": ["channel", "product_type", "apply_month"], "min_size": 80},
     ],
+)
+```
+
+同一配置也可以使用命名字典简写：
+
+```python
+cfg = ScoreComparisonPipelineConfig(
+    group_specs={
+        "month": ["apply_month"],
+        "channel_x_month": ["channel", "apply_month"],
+    },
 )
 ```
 
@@ -1730,7 +1745,7 @@ result.split_recommendation
 | `target_cols` | 是 | 多个候选建模标签。每个标签只使用 `notna()` 的成熟样本进入分析和切分。 |
 | `time_dims` | 是 | 时间维度列，例如 `apply_week`、`apply_month`、`apply_quarter`。 |
 | `population_dims` | 是 | 人群维度列，例如渠道、策略版本、产品、人群分层。 |
-| `profile_cols` | 是 | 画像字段，默认计算均值和中位数。 |
+| `profile_cols` | 是 | 画像字段；数值列计算均值/中位数，类别列计算唯一值数、众数、众数样本数与占比。 |
 | `oot_time_dim` | 是 | OOT 尾段切分使用的时间维度，默认 `apply_month`。 |
 | `approved_col` | 否 | 默认对应 `is_approved`。若存在，会在标签覆盖率表里输出成熟且通过样本数；若业务字段名不是 `is_approved`，需在 Config 中配置 `approved_col`。 |
 
@@ -1742,7 +1757,7 @@ result.split_recommendation
 | `time_col` | `"apply_time"` | 原始申请时间列。 |
 | `time_dims` | `["apply_week", "apply_month", "apply_quarter"]` | 坏账率与画像分析的时间维度，可替换或追加自定义时间列。 |
 | `population_dims` | `["channel", "strategy_version"]` | 坏账率与画像分析的人群维度，可传渠道、产品、城市层级、策略版本等。 |
-| `profile_cols` | `["age", "income", "education", "credit_limit"]` | 画像字段，输出每个维度下的 mean/median。 |
+| `profile_cols` | `["age", "income", "education", "credit_limit"]` | 画像字段。数值列输出 mean/median；字符串或 category 列输出 nunique/top/top_count/top_rate；所有列输出 missing_rate。 |
 | `oot_time_dim` | `"apply_month"` | OOT 候选窗口按该字段排序后取尾段。可以设为 `apply_week` 或 `apply_quarter`。 |
 | `oot_windows` | `[1, 2, 3, 6]` | 候选 OOT 尾段窗口长度；含义取决于 `oot_time_dim`，默认是最后 N 个月。 |
 | `ins_oos_ratios` | `[0.7, 0.75, 0.8]` | 候选 INS 占比，OOS 占比自动为 `1 - ins_ratio`。 |

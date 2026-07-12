@@ -47,7 +47,8 @@
               "profile_cols": "画像字段列表，默认 age/income/education/credit_limit"
             },
             "rules": [
-              "画像汇总输出每个字段的 mean 和 median"
+              "数值画像输出 mean/median/missing_rate",
+              "类别画像输出 nunique/top/top_count/top_rate/missing_rate"
             ]
           }
         ]

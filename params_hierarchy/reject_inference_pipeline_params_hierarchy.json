@@ -36,7 +36,7 @@
             "name": "前置分开关",
             "params": {
               "train_prescore": "是否训练 pre-score 模型；true 时会覆盖已有 score_col",
-              "prescore_model_type": "pre-score 模型类型，默认 lgb",
+              "prescore_model_type": "pre-score 模型类型，支持 lgb/xgb/cat/lr，默认 lgb",
               "prescore_params": "pre-score 模型参数覆盖",
               "prescore_test_size": "pre-score 训练验证切分比例"
             },
@@ -106,7 +106,7 @@
             "name": "模型训练开关",
             "params": {
               "train_ri_models": "是否对每套 RI 增强样本训练后续模型",
-              "ri_model_type": "RI 后模型类型，默认 lgb",
+              "ri_model_type": "RI 后模型类型，支持 lgb/xgb/cat/lr，默认 lgb",
               "ri_model_params": "RI 后模型参数覆盖",
               "include_no_ri_benchmark": "是否加入不做 RI 的 approved-only benchmark",
               "ri_validation_frac": "无 OOS 时从 approved training pool 抽 validation 的比例"
@@ -154,12 +154,12 @@
   "requirement_note": "必填类别包含 RI 必须确认的数据字段入口；feature_cols 可自动推断，但 approved/target/score 口径需要确认。",
   "underlying_method_params": {
     "prescore_params": {
-      "passes_to": "GradientBoostingModel(prescore_model_type, params).fit",
-      "accepted_params": "同 CreditModelPipeline.model_params 中对应 GBM 类型；默认会补 random_state/n_jobs/early_stopping_rounds/eval_metric 等"
+      "passes_to": "lgb/xgb/cat 使用 GradientBoostingModel.fit；lr 使用 LRMaster.fit",
+      "accepted_params": "按 prescore_model_type 使用对应模型参数；默认参数按模型隔离，并补对应随机种子"
     },
     "ri_model_params": {
-      "passes_to": "GradientBoostingModel(ri_model_type, params).fit",
-      "accepted_params": "同 CreditModelPipeline.model_params 中对应 GBM 类型；fuzzy_augment 会额外传 sample_weight"
+      "passes_to": "lgb/xgb/cat 使用 GradientBoostingModel.fit；lr 使用 LRMaster.fit",
+      "accepted_params": "按 ri_model_type 使用对应模型参数；fuzzy_augment 的 _weight 对 GBM 传 sample_weight，对 LR 传 weight_col"
     },
     "ri_method_params": {
       "passes_to": "Modeling_Tool.Sample.Reject_Infer inferrer constructors",

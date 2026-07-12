@@ -562,6 +562,7 @@
     },
     "lr_search_params": {
       "passes_to": "LRMaster.grid_search_params",
+      "validation": "仅接受 objective/primary_set/gap_ref_sets/metric/refit/verbose；这是 holdout 搜索，不接受 cv",
       "accepted_params": {
         "objective": {
           "default": "oot_gap_penalized",

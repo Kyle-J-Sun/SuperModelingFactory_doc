@@ -108,7 +108,7 @@
             "params": {
               "time_dims": "时间维度，默认 apply_month；可包含 apply_week/apply_month/apply_quarter",
               "population_dims": "人群维度，例如 channel、strategy_version",
-              "group_specs": "显式分组配置；传入后覆盖 time_dims/population_dims 自动组合",
+              "group_specs": "显式分组配置；支持命名字典或 name/columns 列表，传入后覆盖 time_dims/population_dims 自动组合",
               "min_group_size": "分组最小样本量，低于该阈值的 PSI/IVKS 明细会跳过"
             }
           }
@@ -300,7 +300,9 @@
             "rules": [
               "必须 target_cols 非空才会执行",
               "只使用 target_cols[0] 作为筛选 target",
-              "weight_col 若配置则必须存在于 INS split"
+              "weight_col 若配置则必须存在于 INS split",
+              "categorical_features 中的字符串类别按非空状态计算加权缺失率，不强制转换为 float",
+              "weight_col 用于筛选与评估；WOE fit 本身仍按未加权样本执行"
             ]
           },
           {
