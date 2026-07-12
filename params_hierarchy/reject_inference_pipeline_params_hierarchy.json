@@ -108,6 +108,7 @@
               "train_ri_models": "是否对每套 RI 增强样本训练后续模型",
               "ri_model_type": "RI 后模型类型，支持 lgb/xgb/cat/lr，默认 lgb",
               "ri_model_params": "RI 后模型参数覆盖",
+              "lr_nan_handling": "lr 模型（prescore/RI 后模型）特征缺失值处理：fillna_median（默认）/fillna_mean/fillna_0 用 train 侧统计量填充并随模型保存、打分时复用；raise 表示禁止填充、遇 NaN/Inf 直接报错。GBM 系不受影响（天然支持 NaN）",
               "include_no_ri_benchmark": "是否加入不做 RI 的 approved-only benchmark",
               "ri_validation_frac": "无 OOS 时从 approved training pool 抽 validation 的比例"
             }
