@@ -891,7 +891,7 @@ result.high_corr_pairs
 | `batch_keep_intermediate` | `True` | CSV batch 模式下是否保留每批独立输出；最终合并报告不受影响。 |
 | `batch_corr_mode` | `"within_batch"` | CSV batch 相关性模式：`within_batch` 只算批内相关，`block_pairwise` 额外两两读取 batch 捕捉跨批高相关，`off` 跳过相关性。 |
 | `batch_corr_pair_chunk_size` | `None` | `block_pairwise` 时，每次跨批相关性计算的变量子块大小，用于进一步控制内存峰值。 |
-| `split_col` | `None` | 推荐的新样本切分字段名，取值大小写不敏感，支持 `ins/oos/oot`。优先于 `sample_col`。 |
+| `split_col` | `None` | 推荐的新样本切分字段名，取值会执行 `strip().lower()`。必须包含非空 `ins/oos`；`oot` 可选，其他值（如 `ft_oot`）作为额外评估集保留。优先于 `sample_col`。 |
 | `sample_col` / `oot_col` | `"sample_ind"` / `"oot_flag"` | 与 `CreditModelPipeline` 一致的兼容切分字段；未传 `split_col` 时使用 `sample_col`。 |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS 切分配置。 |
 | `time_dims` | `["apply_month"]` | 时间维度。 |
@@ -919,6 +919,8 @@ result.high_corr_pairs
 | `write_outputs` / `write_excel` | `True` / `True` | 是否输出 CSV/图片和 ExcelMaster 报告。 |
 
 声明在 `categorical_features` 中的类别变量可直接参与加权筛选；缺失率阶段按非空状态和样本权重计算，不会把字符串类别强制转换为浮点数。WOE 分箱拟合本身仍按未加权样本执行，`weight_col` 用于后续筛选和评估口径。
+
+当 `split_col` 含 `ft_oot` 等自定义评估集时，FVP 只使用 `ins` 拟合 WOE，并只使用标准 `ins/oos/oot` 执行特征筛选；自定义评估集会参与 WOE transform、分布与按 `_smf_split` 的 PSI 等验证输出。DataFrame 与 CSV batch 模式采用相同语义。
 
 ### FVP → CM 衔接
 
@@ -956,6 +958,8 @@ cm_result = CreditModelPipeline(
 ```
 
 也可直接传 `feature_validation_result=fvp_result`。设 `reuse_screening_woe=False` 时仅复用筛选列表，WOE 按 CM 配置重 fit。
+
+`selection_enabled=False` 的纯 WOE 场景也可直接交给 CM。FVP Result 会始终携带 `config_snapshot`，其中包括 `weight_col`、target、WOE 引擎和特征列表；`FeatureScreeningArtifact.from_fvp_result()` 会把未筛选的新特征按原列表透传。这里的 `weight_col` 是 FVP/CM 之间的样本权重契约，WOE 分箱本身仍按未加权样本拟合。
 
 一键编排：
 
@@ -1129,7 +1133,7 @@ flowchart LR
 |---|---|---|
 | 输入校验与分数角色定义 | 标准化后的 score 数据 | `target_col`、`score_cols`、`base_score`、`comp_scores`、`weight_col` |
 | 全局表现评估 | `global_perf` | `nbins`、`min_data_size`、`weight_col` |
-| 分 INS/OOS/OOT 评估 | `group_perf[split_col]` | `split_col`；仅作为分组维度，不做训练切分 |
+| 分评估集对比 | `group_perf[split_col]` | `split_col`；支持 INS/OOS/OOT 和 `ft_oot` 等自定义名称，仅作为分组维度，不做训练切分 |
 | 分时间维度评估 | `group_perf[time_dim]` | `time_dims`、`group_min_size`、`group_specs` |
 | 分人群维度评估 | `group_perf[population_dim]` | `population_dims`、`segment_dims`、`group_min_size`、`group_specs` |
 | 时间 x 人群交叉评估 | `group_perf[population_x_time]` | `include_time_population_cross`、`time_dims`、`population_dims`、`group_min_size` |
@@ -1188,7 +1192,7 @@ result.pairwise_cross
 | `base_score` | `None` | 基准分数列。未传时使用 `score_cols[0]`。 |
 | `comp_scores` | `None` | 待比较分数列。未传时使用 `score_cols` 中除 `base_score` 以外的列。 |
 | `weight_col` | `None` | 样本权重列。 |
-| `split_col` | `None` | 已切分样本标识列，取值支持 `ins/oos/oot`。在本 Pipeline 中作为默认分组维度输出，不改变 global/cross 全量评估。 |
+| `split_col` | `None` | 评估集标识列，接受任意非空名称，如 `ins/oos/oot/ft_oot`；取值会执行 `strip().lower()`。在本 Pipeline 中只作为默认分组维度，不改变 global/cross 全量评估。 |
 | `random_state` | `42` | 随机种子，保留给后续需要抽样的扩展逻辑。 |
 | `write_outputs` | `True` | 是否输出 CSV。 |
 | `write_excel` | `True` | 是否输出 Excel 报告。 |
@@ -1234,7 +1238,7 @@ Pipeline 会自动生成：
 
 | 输出 key | 维度 |
 |---|---|
-| `split_col` 字段名 | INS/OOS/OOT 分组；仅在配置 `split_col` 时生成 |
+| `split_col` 字段名 | INS/OOS/OOT 及 `ft_oot` 等自定义评估集分组；仅在配置 `split_col` 时生成 |
 | `apply_month` | 单时间维度 |
 | `vintage` | 单时间维度 |
 | `channel` | 单人群维度 |

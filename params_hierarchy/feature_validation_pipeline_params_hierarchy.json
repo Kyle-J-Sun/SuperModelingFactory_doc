@@ -73,7 +73,7 @@
           {
             "name": "已有切分字段",
             "params": {
-              "split_col": "推荐字段；支持 ins/oos/oot，优先级最高",
+              "split_col": "推荐字段；必须含 ins/oos，oot 可选，ft_oot 等其他值作为额外评估集保留；优先级最高",
               "sample_col": "兼容旧参数，默认 sample_ind；split_col 为空时使用",
               "oot_col": "可选 OOT flag；没有 split/sample 字段时使用"
             }
@@ -93,6 +93,7 @@
             "name": "切分优先级",
             "rules": [
               "优先 split_col",
+              "split_col 值会 strip 并转为小写；自定义评估集不参与 WOE 拟合或特征筛选",
               "其次 sample_col",
               "其次 oot_col",
               "最后按 split_config 随机切 INS/OOS"

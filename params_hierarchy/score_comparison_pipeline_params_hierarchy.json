@@ -23,11 +23,11 @@
               "base_score": "基准评分字段",
               "comp_scores": "对比评分字段列表",
               "weight_col": "可选样本权重字段",
-              "split_col": "可选 ins/oos/oot 字段；不做训练切分，只作为默认 group 维度"
+              "split_col": "可选评估集字段；接受 ins/oos/oot/ft_oot 等任意非空名称，不做训练切分，只作为默认 group 维度"
             },
             "rules": [
               "必须提供 score_cols 或 base_score + comp_scores",
-              "split_col 若配置，只支持 ins/oos/oot"
+              "split_col 若配置，值会 strip 并转为小写，且必须至少包含一个非空枚举值"
             ]
           }
         ]
