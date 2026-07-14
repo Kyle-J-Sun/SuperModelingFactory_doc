@@ -339,11 +339,12 @@
           {
             "name": "落盘控制",
             "params": {
-              "write_outputs": "是否输出 CSV、图片和中间产物，默认 true",
-              "write_excel": "是否用 ExcelMaster 输出 Excel 报告，默认 true"
+              "write_outputs": "是否输出 CSV 和中间产物，并作为图片落盘总开关，默认 true",
+              "write_excel": "是否用 ExcelMaster 输出 Excel 报告，默认 true",
+              "plot_outputs": "是否输出 WOE 分析图片，默认 true；关闭后不影响 CSV 和 Excel"
             },
             "rules": [
-              "WOE 图片依赖 write_outputs=true",
+              "WOE 图片仅在 write_outputs=true 且 plot_outputs=true 时生成",
               "batch_keep_intermediate 只影响 batch 子目录中间产物",
               "write_excel=true 时输出 Feature_Validation_Report.xlsx"
             ]

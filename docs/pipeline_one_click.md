@@ -871,7 +871,7 @@ result.high_corr_pairs
 | IV / KS | `ivks_summary` | `ivks_group_dims`、`ivks_use_woe_bins`、`ivks_params`、`min_group_size` |
 | 相关性 | `corr_matrix`、`high_corr_pairs`、`correlated_detail` | `corr_include_incumbent`、`corr_use_woe_bins`、`corr_params` |
 | 变量筛选（可选） | `selected_features`、`screening_artifact`、`selection_summary` | `selection_enabled`、`selection_params`、`weight_col` |
-| 报告输出 | `output_paths`、`report_path` | `output_dir`、`write_outputs`、`write_excel` |
+| 报告输出 | `output_paths`、`report_path` | `output_dir`、`write_outputs`、`write_excel`、`plot_outputs` |
 
 ### `FeatureValidationPipelineConfig` 参数
 
@@ -921,7 +921,9 @@ result.high_corr_pairs
 | `selection_enabled` | `False` | 是否在验证后执行 PSI/IV/相关性剔除，产出 `selected_features` 与 `FeatureScreeningArtifact` 供 CM 承接。 |
 | `selection_params` | `{}` | 筛选阈值与开关，键名与 CM `feature_selection` 对齐（如 `psi_threshold`、`iv_threshold`、`corr_threshold`、`*_use_woe_bins`）。 |
 | `weight_col` | `None` | 加权筛选权重列；与 CM `weight_col` 一致。 |
-| `write_outputs` / `write_excel` | `True` / `True` | 是否输出 CSV/图片和 ExcelMaster 报告。 |
+| `write_outputs` | `True` | 是否输出 CSV 和中间产物；也是图片落盘的总开关。 |
+| `write_excel` | `True` | 是否输出 ExcelMaster 报告。 |
+| `plot_outputs` | `True` | 是否输出 WOE 分析图。设为 `False` 时仍可通过 `write_outputs=True`、`write_excel=True` 保留 CSV/Excel；只有 `write_outputs=True` 且 `plot_outputs=True` 时才写图片。 |
 
 声明在 `categorical_features` 中的类别变量可直接参与加权筛选；缺失率阶段按非空状态和样本权重计算，不会把字符串类别强制转换为浮点数。WOE 分箱拟合本身仍按未加权样本执行，`weight_col` 用于后续筛选和评估口径。
 
