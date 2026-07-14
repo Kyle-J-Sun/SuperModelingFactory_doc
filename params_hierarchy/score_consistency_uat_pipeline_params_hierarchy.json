@@ -62,7 +62,8 @@
             "params": {
               "tol_feat": "普通特征数值容忍误差",
               "time_featlist": "时间字段列表",
-              "tol_time_seconds": "时间字段秒级容忍误差"
+              "tol_time_seconds": "时间字段秒级容忍误差",
+              "comparison_block_size": "宽表逐 flow 一致性比较的特征列块大小，默认 128"
             }
           },
           {
@@ -152,6 +153,11 @@
         },
         "tol_time_seconds": {
           "config_key": "tol_time_seconds"
+        },
+        "comparison_block_size": {
+          "config_key": "comparison_block_size",
+          "default": 128,
+          "meaning": "向量化比较每个列块的字段数"
         }
       }
     },

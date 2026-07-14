@@ -97,7 +97,7 @@ edges = binner.get_bin_edges()
 |------|------|
 | `fit(df, chi2_binning, chi2_p, n_jobs)` | 训练拟合 |
 | `refine_cate(max_bins)` | 类别特征按坏率聚类合并 |
-| `apply_woe(df)` | WOE 转换 |
+| `apply_woe(df, varlist=None)` | WOE 转换；`varlist` 可限制只转换指定变量，适合宽表分块 |
 | `get_final_bins()` | 导出分箱结果（含 WOE/IV） |
 | `load_woe_bins(bins_dict)` | 加载已有分箱 |
 | `get_bin_edges()` | 取分箱边界列表 |

@@ -23,7 +23,12 @@ flowchart LR
 ```python
 from Modeling_Tool import PSICalculator
 
-psi = PSICalculator(buckets=10, equal_freq=True, min_bin_prop=0.05)
+psi = PSICalculator(
+    buckets=10,
+    equal_freq=True,
+    min_bin_prop=0.05,
+    feature_block_size=64,
+)
 psi_table = psi.calculate(train_df, oot_df, features)
 stable_features = psi_table.loc[psi_table["psi"] < 0.1, "var"].tolist()
 ```
@@ -140,12 +145,28 @@ config = FeatureScreenConfig(
     psi_use_woe_bins=True,
     iv_use_woe_bins=True,
     corr_use_woe_bins=True,
+    corr_block_size=256,
 )
 result = feature_screen(splits, features, "badflag", config=config, prefit_woe_engine=binner)
 selected = result.selected_features
 ```
 
 `feature_selection` 字典可通过 `screen_config_from_mapping()` 转为 `FeatureScreenConfig`。`weight_col` 非空时默认走加权等频路径；设置 `*_use_woe_bins=True` 且提供（或自动 fit）WOE 引擎后，加权 PSI/IV 复用相同分箱边界。
+
+`feature_block_size` 控制 PSI/WOE 适配器一次转换多少列，`corr_block_size` 控制加权相关性矩阵块大小。两者只用于限制超宽表峰值内存，不改变指标口径。
+
+分组分布统计也支持列块：
+
+```python
+from Modeling_Tool import proc_means_by_grp
+
+summary = proc_means_by_grp(
+    data,
+    features,
+    groupby=["apply_month", "channel"],
+    feature_block_size=128,
+)
+```
 
 ## 5. 加权特征筛选（v0.3.8+）
 

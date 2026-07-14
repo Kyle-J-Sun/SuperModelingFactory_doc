@@ -71,7 +71,8 @@
                 "iv_threshold": "IV 阈值",
                 "corr_enabled": "是否做相关性筛选",
                 "corr_threshold": "相关性阈值",
-                "corr_max_iterations": "相关性筛选最大迭代轮数"
+                "corr_max_iterations": "相关性筛选最大迭代轮数",
+                "corr_block_size": "加权相关性矩阵的特征列块大小，默认 256"
               }
             }
           },
@@ -318,6 +319,10 @@
             "median_fill",
             "raise"
           ]
+        },
+        "corr_block_size": {
+          "default": 256,
+          "meaning": "加权 pairwise Pearson 每个矩阵块包含的特征列数"
         },
         "on_empty_stage": {
           "default": "keep_all_warn",

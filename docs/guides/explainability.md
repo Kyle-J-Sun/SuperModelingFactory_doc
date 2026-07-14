@@ -161,6 +161,7 @@ pdp = exp.partial_dependence(
     grid_resolution=50,
     sample_size=2000,
     random_state=42,
+    prediction_batch_size=100000,
 )
 print(pdp.head())
 
@@ -176,6 +177,7 @@ ice = exp.ice(
     grid_resolution=50,
     sample_size=200,
     random_state=42,
+    prediction_batch_size=100000,
 )
 print(ice.head())
 
@@ -185,7 +187,12 @@ exp.ice_plot(test_woe[woe_features], feature="age_woe", centered=True, show=Fals
 ## 6. ALE：累计局部效应
 
 ```python
-ale = exp.ale(X=test_woe[woe_features], feature="income_woe", bins=20)
+ale = exp.ale(
+    X=test_woe[woe_features],
+    feature="income_woe",
+    bins=20,
+    prediction_batch_size=100000,
+)
 print(ale.head())
 
 exp.ale_plot(test_woe[woe_features], feature="income_woe", bins=20, show=False, save_path="ale_income.png")
@@ -216,7 +223,7 @@ print(lime_global)
 
 !!! warning "性能建议"
 
-    PDP / ICE / ALE / LIME / Owen Value 都会反复调用模型预测。生产数据较大时，建议使用 `sample_size`、`background_data.sample(...)` 或 `max_evals` 控制解释成本。
+    PDP / ICE / ALE / LIME / Owen Value 都会反复调用模型预测。PDP、ICE、ALE 会先堆叠网格样本，再按 `prediction_batch_size` 分批预测；默认 `100000`，可调小以降低峰值内存。生产数据较大时，也建议使用 `sample_size`、`background_data.sample(...)` 或 `max_evals` 控制解释成本。
 
 ## 常见问题
 

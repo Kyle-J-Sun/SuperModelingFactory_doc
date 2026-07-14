@@ -126,7 +126,8 @@
             "children": {
               "distribution_params": {
                 "q": "分位点列表，默认 [0.05,0.15,0.25,0.5,0.75,0.95,0.99]",
-                "spec_missing_value": "特殊缺失值，可选"
+                "spec_missing_value": "特殊缺失值，可选",
+                "feature_block_size": "宽表分布统计的特征列块大小，默认 128"
               }
             }
           },
@@ -211,7 +212,8 @@
               "psi_params": {
                 "buckets": "重新分箱时的桶数",
                 "equal_freq": "重新分箱是否等频",
-                "min_bin_prop": "最小箱占比"
+                "min_bin_prop": "最小箱占比",
+                "feature_block_size": "WOE 分箱和分组 PSI 聚合的特征列块大小，默认 64"
               }
             }
           },
@@ -245,7 +247,8 @@
               "ivks_group_dims": "global/time/population，默认三者都算",
               "ivks_use_woe_bins": "是否复用 WOE 分箱边界，默认 true",
               "ivks_params": {
-                "iv_cut": "IV 过滤阈值"
+                "iv_cut": "IV 过滤阈值",
+                "feature_block_size": "复用 WOE 分箱时的特征列块大小，默认 64"
               }
             }
           }
@@ -361,6 +364,10 @@
         "spec_missing_value": {
           "default": null,
           "meaning": "特殊缺失值标记"
+        },
+        "feature_block_size": {
+          "default": 128,
+          "meaning": "proc_means_by_grp 每个宽表特征块的列数"
         }
       },
       "full_signature": {
@@ -368,7 +375,8 @@
         "varlist": "new_feature_cols 中的数值列",
         "groupby": "由 group_specs/time_dims/population_dims 解析",
         "spec_missing_value": "distribution_params.spec_missing_value",
-        "q": "distribution_params.q"
+        "q": "distribution_params.q",
+        "feature_block_size": "distribution_params.feature_block_size"
       }
     },
     "split_config": {
@@ -719,6 +727,10 @@
         "psi_missing_bucket_policy": {
           "default": "smooth_laplace",
           "meaning": "缺失箱 PSI 平滑策略"
+        },
+        "feature_block_size": {
+          "default": 64,
+          "meaning": "WOE assign_bins_frame 与分组计数每个特征块的列数"
         }
       },
       "calculate": {
@@ -758,6 +770,12 @@
     },
     "ivks_params": {
       "source": "Modeling_Tool.Feature.WOE_Engine_Feature_Patch.VarExtractionInsights",
+      "pipeline_orchestration": {
+        "feature_block_size": {
+          "default": 64,
+          "meaning": "ivks_use_woe_bins=true 时批量分箱的特征列块大小；不会透传给 VarExtractionInsights constructor"
+        }
+      },
       "constructor": {
         "nbins": {
           "default": 10,

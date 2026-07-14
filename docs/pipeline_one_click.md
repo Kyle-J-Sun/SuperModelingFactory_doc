@@ -512,6 +512,7 @@ feature_selection={
     "corr_enabled": True,
     "corr_threshold": 0.75,
     "corr_max_iterations": 10,
+    "corr_block_size": 256,
 }
 ```
 
@@ -529,6 +530,7 @@ feature_selection={
 | `corr_enabled` | `True` | 是否运行高相关剔除。 |
 | `corr_threshold` | `0.75` | 相关性阈值。 |
 | `corr_max_iterations` | `10` | 相关性剔除最大迭代次数。 |
+| `corr_block_size` | `256` | 加权 pairwise Pearson 的特征列块大小；减小可降低超宽表峰值内存。 |
 | `psi_use_woe_bins` | `False` | 是否复用 WOE 分箱边界计算 PSI（需 `woe_engine="monotone"` 或传入 prefit binner）。 |
 | `iv_use_woe_bins` | `False` | 是否复用 WOE 分箱边界计算 IV。 |
 | `corr_use_woe_bins` | `False` | 相关性 IV/KS 仲裁是否复用 WOE 分箱。 |
@@ -898,6 +900,7 @@ result.high_corr_pairs
 | `population_dims` | `[]` | 人群维度，如渠道、产品、策略版本。 |
 | `group_specs` | `None` | 自定义分组规格；支持 `{"monthly": ["apply_month"]}` 或 `[ {"name": "monthly", "columns": ["apply_month"]} ]`，不传时自动组合 global/time/population/time x population。 |
 | `min_group_size` | `100` | PSI/IV/KS 分组最小样本数保护。 |
+| `distribution_params.feature_block_size` | `128` | 分布统计每个宽表特征块的列数。 |
 | `woe_engine` | `"monotone"` | 默认 `MonotoneWOEBinner`；也支持 `"equal_freq"` 使用 `WOE_Master`。 |
 | `woe_fit_query` | `None` | pandas `query()` 表达式，仅过滤 INS 上用于 WOE 拟合的行；PSI/IV/KS 与 transform 仍基于全量 splits。拟合审计写入 `woe_artifacts["refine_summary"]` 的 `fit_filter` 行。 |
 | `categorical_features` | `None` | 类别特征列表，传给 `MonotoneWOEBinner(cate_feats=...)`。 |
@@ -910,7 +913,9 @@ result.high_corr_pairs
 | `psi_reference_dataset` | `"ins"` | PSI benchmark，可选 `ins/oos/oot/external`。 |
 | `psi_reference_data` | `None` | 外部 PSI benchmark；`psi_reference_dataset="external"` 时必传。 |
 | `psi_use_woe_bins` | `True` | 是否复用 step 3 WOE 分箱边界。 |
+| `psi_params.feature_block_size` | `64` | WOE 分箱与分组 PSI 计数每个特征块的列数。 |
 | `ivks_use_woe_bins` | `True` | 是否复用 step 3 WOE 分箱边界计算 IV/KS。 |
+| `ivks_params.feature_block_size` | `64` | 复用 WOE 分箱计算 IV/KS 时每个特征块的列数。 |
 | `corr_include_incumbent` | `True` | 相关性是否纳入现有特征。 |
 | `corr_use_woe_bins` | `True` | 相关性对比中的 IV/KS 是否复用 step 3 WOE 分箱。 |
 | `selection_enabled` | `False` | 是否在验证后执行 PSI/IV/相关性剔除，产出 `selected_features` 与 `FeatureScreeningArtifact` 供 CM 承接。 |
@@ -1496,6 +1501,7 @@ result = ScoreConsistencyUATPipeline(cfg).run(
 | `tol_feat` | `1e-2` | 普通数值特征容忍度。 |
 | `time_featlist` | `[]` | 需要按时间语义比较的字段。 |
 | `tol_time_seconds` | `60.0` | 时间字段秒级容忍度。 |
+| `comparison_block_size` | `128` | per-flow 宽表一致性比较的列块大小；减小可降低峰值内存。 |
 | `excel_output_path` | `None` | Excel 报告路径；为空时写到 `output_dir/report/Score_Consistency_UAT_Report.xlsx`。 |
 | `excel_font` | `"Arial"` | Excel 报告字体。 |
 | `info_list` | `[]` | 明细报表附带字段，也会从自动特征对比中排除。 |

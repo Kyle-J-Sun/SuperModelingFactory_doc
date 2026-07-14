@@ -95,6 +95,17 @@ train_woe = binner.apply_woe(train_df)
 oot_woe = binner.apply_woe(oot_df)
 ```
 
+超宽表或单变量分析可通过 `varlist` 限制转换范围，避免每次重复转换全部已拟合变量：
+
+```python
+age_income_woe = binner.apply_woe(train_df, varlist=["age", "income"])
+bins = as_woe_engine(binner).assign_bins_frame(
+    train_df,
+    features,
+    feature_block_size=64,
+)
+```
+
 ## WOE_Master 路径示例
 
 ```python
