@@ -168,6 +168,25 @@ summary = proc_means_by_grp(
 )
 ```
 
+如果源数据位于 MaxCompute，不需要先把全量宽表拉到 pandas。`proc_means_odps()`
+会在 ODPS 端按特征批次完成聚合，只下载最终统计结果：
+
+```python
+from Modeling_Tool import proc_means_odps
+
+summary = proc_means_odps(
+    input_table_name="mex_anls.feature_wide_table",
+    select_cols=features,
+    group=["apply_month", "channel"],
+    batch_size=50,
+    where_clause="dt >= '2026-01-01'",
+)
+```
+
+返回字段与数值型 `proc_means_by_grp()` 对齐，包括 `N_ALL/N/MEAN/STD/MIN/分位数/MAX/MISSING_RATE`。
+`batch_size` 表示一条聚合 SQL 中的特征数量，不会按行下载源数据。完整参数、分位数模式和 ODPS 写回规则见
+[ODPS 数据抽取：`proc_means_odps`](odps.md#5-proc_means_odps-odps-端描述性统计)。
+
 ## 5. 加权特征筛选（v0.3.8+）
 
 `weighted_feature_screen` 把 PSI → IV → 相关性去冗余串成一条 API，并支持 `weight_col` 加权分位切点、加权 IV/PSI 与加权 Pearson 相关性（IV 仲裁）。

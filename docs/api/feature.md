@@ -21,3 +21,7 @@
 ## 分布分析 — `Distribution_Tool`
 
 ::: Modeling_Tool.Feature.Distribution_Tool
+
+## ODPS 端分布分析 — `ODPS_Distribution_Tool`
+
+::: Modeling_Tool.Feature.ODPS_Distribution_Tool
