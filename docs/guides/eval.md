@@ -35,6 +35,13 @@ Gains 表与分箱聚合输出中，样本量有两套计数：
 | `Top10%_Lift` | Top 10% 分数段的**加权**提升倍数 |
 | Gains 坏样本率 / WOE / IV | 按 `N`（权重和）聚合 |
 
+### 加权评估图片
+
+设置 `fig_save_path` 时，图片与汇总表使用完全相同的权重口径。每个数据集会读取
+自己通过 `add_dataset(..., weight_col=...)` 注册的权重，ROC、分数分布/KDE、
+Percentile 和 Gain 四个面板均按该权重计算，并在标题中标记 `Weighted`。
+如果某个 OOS/OOT 数据集的权重全为 1，加权图片与未加权图片数值相同。
+
 ## 1. 多数据集评估 —— `PerformanceEvaluator`
 
 ```python

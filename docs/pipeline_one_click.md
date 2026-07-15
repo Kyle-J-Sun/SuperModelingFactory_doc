@@ -392,6 +392,10 @@ result = CreditModelPipeline(cfg).run(modeling_df)
 - Backward 变量剔除（`BackwardVariableEliminator`）
 - 性能评估（`PerformanceEvaluator`）
 
+当 `write_outputs=True` 且 `plot_outputs=True` 时，`figs/perf/` 中的 ROC、KDE、
+Percentile 和 Gain 面板也会使用各 split 自己的 `weight_col`；不会出现 CSV 指标加权、
+INS 图片却按未加权样本绘制的口径差异。
+
 !!! note "WOE 加权"
     **WOE 分箱** 底层 API 暂不支持 `weight_col`；Pipeline WOE 拟合仍按未加权样本执行。特征筛选加权与 WOE 未加权可并存，Fuzzy Augment 等场景优先用加权筛选修正 IV/PSI 口径。
 
