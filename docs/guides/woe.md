@@ -104,6 +104,11 @@ edges = binner.get_bin_edges()
 | `export_woe_report(path)` | 导出 Excel 报告 |
 | `plot_woe_graph(dir, group_name=)` | 输出 WOE 图 PNG |
 
+!!! note "Clustered by-group 图片规格"
+    当 `group_name` 非空且 `bar_mode="clustered"` 时，by-group WOE 图固定使用
+    `figsize=(16, 6)` 和 `dpi=200`，以容纳并排柱、分组 WOE 曲线和右侧图例。
+    其他模式仍使用调用方传入的 `figsize` 与 `dpi`。
+
 ## 3. 统一分箱引擎 —— `as_woe_engine`
 
 `WOE_Master` 与 `MonotoneWOEBinner` 的内部产物格式不同。`as_woe_engine()` 会把它们转成统一接口，供 PSI、IV、相关性筛选复用。
