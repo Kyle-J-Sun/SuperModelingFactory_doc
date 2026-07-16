@@ -191,6 +191,26 @@
         ]
       },
       {
+        "level1": "评估治理（多标签 / 特殊分 / 方向 / 权重）",
+        "level2": [
+          {
+            "name": "Evaluation governance",
+            "params": {
+              "eval_target_cols": "额外评估标签列表；有效标签集=[target_col]+eval_target_cols 去重。同一份模型分数只计算一次、复用于所有标签；perf 表纵向拼接并新增 tgt_name 列（未设置时输出结构与旧版完全一致）",
+              "all_missing_score_value": "全部入模原始特征缺失的行分数覆写值（如 -1）；判定口径与 Core.scoring 的 all_missing_spec_value 完全一致，并连同判定用原始特征清单写入模型 artifact metadata；生产侧用 Core.scoring(all_missing_spec_value=metadata值) 即可对齐",
+              "special_score_values": "特殊分数（如 [-1]）独立成评估箱：不参与分位边界，gains 表单独成行，AUC/KS/avgScore 等排序指标基于非特殊行；unweighted/weighted 同口径",
+              "gains_ascending": "None=各路径维持旧默认（summary 降序、部分图升序、weighted 降序）；显式 true/false 时 summary/gains/weighted 全链路统一方向（true=分数升序，bin 1=低分低风险）。下一 minor 版本默认翻为 true",
+              "eval_weight_col": "评估阶段权重列：inherit（默认）=沿用 weight_col；null=评估不加权（训练加权不再隐式影响评估、search/backward 的 eval 权重同步）；其他字符串=显式指定评估权重列"
+            },
+            "rules": [
+              "所有评估标签必须存在于输入数据与每个 extra_eval_datasets 帧",
+              "all_missing_score_value 与 special_score_values 配套使用时，-1 覆写行自动落入 special 独立箱",
+              "gains_ascending 暂不控制 evaluate_performance 的分布图方向（已知限制，翻默认版本一并处理）"
+            ]
+          }
+        ]
+      },
+      {
         "level1": "逐步回归、Optuna 与解释性",
         "level2": [
           {
