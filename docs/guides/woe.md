@@ -174,3 +174,33 @@ batch_result = woe_transformation(train_df, varlist=features, dep="bad_flag", nb
 ??? question "为什么要在筛选阶段传入 binner？"
 
     因为 PSI / IV / KS 应该基于最终上线的同一套分箱计算，否则筛选指标和建模输入可能不一致。
+
+## 分箱治理（0.6.7+，G08/G09/G17）
+
+`MonotoneWOEBinner` 新增三组治理参数，默认全部关闭（`None`/`"auto"`）、行为与旧版逐字节一致：
+
+```python
+binner = MonotoneWOEBinner(
+    feature_cols=feats, target_col="y",
+    # G08 小箱治理：坏/好样本数下限 + 三态策略
+    min_bad_count=50, min_good_count=50, small_bin_policy="merge",  # merge/warn/raise
+    # G09 方向治理：固定方向 或 参考标签推导；冲突三态
+    monotone_direction={"util_rate": "increasing"},   # 或 "increasing"/"decreasing"/"auto"
+    reference_target="y",                              # 与 monotone_direction 二选一
+    direction_conflict_policy="raise",                 # warn/raise/keep
+    # 缺失箱语义：empirical_special / fixed_woe / fail
+    missing_bin_strategy="fail",
+    # G17 refine 治理：refine 结果箱数低于 min_n_bins 时 warn/enforce/raise
+    refine_min_n_bins_policy="enforce",
+)
+binner.fit(train)
+binner.refine_dtree(train, max_depth=3)   # 0.6.7+：可限制树深
+binner.get_direction_summary()            # feat / direction / direction_basis / is_monotonic
+```
+
+要点：
+
+- `small_bin_policy="merge"` 向 WOE 更接近的邻箱合并，合并轨迹记录在结果的 `merge_trace`；`raise` 抛 `BinningPolicyViolation`（穿透逐特征容错，不会被吞进日志）。
+- 方向在 `fit` 前解析：串行与并行 worker 使用同一份 `_expected_direction`，杜绝串并行漂移。
+- 这些参数可经 `monotone_woe_params` 从 FVP / CMP / feature_screen 直通底层 binner。
+- 0.7.0 翻转承诺：`refine_min_n_bins_policy` 的默认将从 `None` 变为 `"warn"`。

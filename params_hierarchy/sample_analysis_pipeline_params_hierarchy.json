@@ -81,6 +81,21 @@
             ]
           }
         ]
+      },
+      {
+        "level1": "行级切分物化（G01）",
+        "level2": [
+          {
+            "name": "物化与落盘",
+            "params": {
+              "materialize_split": "True 时按推荐 (窗口, 比例, 种子) 重放出行级 INS/OOS/OOT 归属长表(默认 False)",
+              "id_col": "行级主键；物化必填，成熟行内必须唯一（重复即报错并给计数）",
+              "oot_cutoff": "设置后 OOT=oot_time_dim>=cutoff 覆盖推荐窗口；artifact 记 oot_basis=cutoff|window",
+              "split_col_name": "输出切分列名，默认 sample_split，可直接回灌 CMP/FVP 的 split_col",
+              "persist_split_map": "True 时落盘 row_level_split.csv + split_artifact.json（含 ins/oos/oot/full 四段 sha256 ID 哈希）"
+            }
+          }
+        ]
       }
     ]
   },

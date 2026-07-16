@@ -276,3 +276,37 @@ print(shift_table)
 ??? question "Monotone 分箱后，相关性过滤传 raw 数据还是 WOE 数据？"
 
     推荐传 raw 数据，并同时传入 `woe_binner`。这样相关性过滤仍基于原始变量相关性，变量保留决策则基于同一套 WOE 分箱的 IV/KS。
+
+## 后置选择门（0.6.7+，G02–G06）
+
+经典 缺失率 → PSI → IV → 相关性 之后，`feature_screen` 新增一组默认关闭的后置门，
+按 **VIF → 组稳 → 多标签 → 截断** 顺序执行；证据帧与淘汰明细统一进
+`result.stage_tables` / `result.dropped_detail`（列：var/stage/metric/value/threshold/reason）：
+
+```python
+FeatureValidationPipelineConfig(
+    selection_enabled=True,
+    selection_group_dims=["apply_month"],       # G03 证据分组维度
+    selection_params={
+        "iv_upper_threshold": 2.0,               # G02 IV 上限（疑似泄漏淘汰）
+        "monthly_iv_min": 0.02,                  # G03 分组 IV 下限
+        "monthly_iv_cv_max": 1.0,                #     分组 IV 变异系数上限
+        "direction_consistency_min": 0.9,        #     方向一致组占比下限
+        "insufficient_group_policy": "keep_warn",#     合格组<2：keep_warn/drop/raise
+        "target_rules": "all",                   # G04 多标签联合门：all/any/min_pass_count
+        "per_target_iv_range": {"y": (0.02, None)},
+        "direction_reference_target": "y",
+        "max_selected_features": 30,             # G05 硬截断（IV 排序，名字破平）
+        "vif_enabled": True, "vif_threshold": 10.0,  # G06 需 pip install "SuperModelingFactory[stats]"
+    },
+)
+```
+
+要点：
+
+- G03/G04 的证据（分组/分标签 IV 与方向）由 FVP 以 **lazy 闭包**构建，只对 post-corr 幸存集计价；
+  CMP 路径没有证据来源——配置了组稳/多标签阈值但无证据会在 `feature_screen` 入口报错。
+- 方向的统一定义是 point-biserial 符号（`Screen_Gates.point_biserial_direction`）。
+- G05 截断不足 `min_selected_features` 时只告警不回填，保住每个门的因果可审计性。
+- 筛选自拟合的 monotone 引擎会挂到 `result.woe_engine` 并随 `FeatureScreeningArtifact`
+  进入 CM 复用契约（G00）；`WOE_Master` 只附 woe_table + 警告（它持有训练帧，不宜序列化）。

@@ -89,6 +89,12 @@
               "from_artifact 依赖已有筛选产物",
               "skip 会绕过筛选，直接使用 feature_cols"
             ]
+          },
+          {
+            "name": "筛选期 WOE 引擎复用（G00）",
+            "params": {
+              "screening_artifact": "FVP/独立筛选产物；筛选自拟合的 monotone 引擎会随 artifact 附带，CM 侧 _reuse_screening_woe 直接复用不再重拟合（WOE_Master 只附表+警告）"
+            }
           }
         ]
       },
@@ -165,6 +171,13 @@
               "当前只支持 lgb/xgb；cat 默认 skip",
               "probability 会先裁剪再转 log_odds"
             ]
+          },
+          {
+            "name": "LR p 值淘汰（G07）",
+            "params": {
+              "lr_elimination_mode": "None(默认关) 或 \"pvalue\"：拟合后按系数 p 值逐个剔除并重拟合",
+              "lr_elimination_params": "pvalue_threshold=0.05 / min_features=1 / max_iterations=20 / tie_breaker=\"pvalue\"；trace 落 feature_selection_summary['lr_elimination'] 与 lr_pvalue_elimination.csv"
+            }
           }
         ]
       },

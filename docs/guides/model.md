@@ -546,3 +546,21 @@ for name, perf in results.items():
     按时间衰减加权等。`weight_col` 从 DataFrame 列解析（推荐，与评估侧一致）；
     `sample_weight` 直接传 numpy 数组。二者不可同时传入。
     评估侧统一用 `weight_col`；底层绘图函数用 `sample_weight` 键（见 [模型评估](eval.md)）。
+
+## LR p 值后向淘汰（0.6.7+，G07）
+
+```python
+CreditModelPipelineConfig(
+    train_models=["lr"],
+    lr_elimination_mode="pvalue",     # None(默认) 关闭
+    lr_elimination_params={
+        "pvalue_threshold": 0.05, "min_features": 1,
+        "max_iterations": 20, "tie_breaker": "pvalue",
+    },
+)
+```
+
+初次拟合后循环：取最大系数 p 值（scipy Fisher 信息，与最终 sklearn LR 完全同口径），
+超阈值则剔除该特征重拟合，直到全部达标或触到 `min_features`/`max_iterations`。
+轨迹进 `result.feature_selection_summary["lr_elimination"]` 并落 `lr_pvalue_elimination.csv`；
+`models["lr"]` 的特征列表即缩减后的终版，评估/解释自动跟随。

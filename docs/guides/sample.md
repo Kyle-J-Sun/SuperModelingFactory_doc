@@ -117,3 +117,20 @@ df_combined = inferrer.infer(approved_df, rejected_df, score_col="prob")
     ```bash
     pip install imbalanced-learn>=0.10.0
     ```
+
+## 行级切分物化（0.6.7+，G01）
+
+样本分析的推荐切分现在可以直接物化成行级归属，避免"统计口径与实际建模切分对不上"：
+
+```python
+SampleAnalysisPipelineConfig(
+    materialize_split=True, id_col="loan_id",
+    oot_cutoff="2025-04",          # 可选：覆盖推荐窗口，OOT = oot_time_dim >= cutoff
+    split_col_name="sample_split", # 输出列名，可直接回灌 CMP/FVP 的 split_col
+    persist_split_map=True,        # 落盘 row_level_split.csv + split_artifact.json
+)
+```
+
+- 物化按推荐 (窗口, 比例, 种子) 经同一个 `SampleSplitter` 重放，保证与统计阶段完全同索引。
+- 响亮断言：`id_col` 成熟行内唯一（重复即报计数）、三段两两互斥、覆盖全部成熟行。
+- `split_artifact` 携带每段的 sha256 ID 哈希（ins/oos/oot/full），两次运行可直接比对哈希验证一致性。

@@ -190,6 +190,25 @@
               "monotone_refine_chi2_enabled": "是否调用 refine_chi2",
               "monotone_refine_chi2_params": "refine_chi2 参数"
             }
+          },
+          {
+            "name": "WOE 拟合范围（G00）",
+            "params": {
+              "woe_fit_scope": "\"all\"(默认，旧行为) 或 \"post_missing_gate\"：先跑 missing_rate_threshold 缺失门再拟合顶层 WOE，防止单个高缺失特征拖垮整个 target 的 WOE 产物；0.7.0 将翻转默认为 post_missing_gate"
+            }
+          },
+          {
+            "name": "monotone 分箱治理（G08/G09/G17，经 monotone_woe_params 透传）",
+            "params": {
+              "min_bad_count": "普通箱最小坏样本数；None(默认)不校验",
+              "min_good_count": "普通箱最小好样本数；None(默认)不校验",
+              "small_bin_policy": "merge/warn/raise；None(默认)关闭小箱治理",
+              "monotone_direction": "\"auto\"(默认)/increasing/decreasing 或 {feat: 方向} 字典",
+              "reference_target": "以参考标签的 point-biserial 符号推导每个特征的期望方向",
+              "direction_conflict_policy": "warn/raise/keep；方向被固定后实际 WOE 违背时的处理",
+              "missing_bin_strategy": "empirical_special/fixed_woe/fail；None(默认)按 special_values 推导",
+              "refine_min_n_bins_policy": "warn/enforce/raise；refine_dtree 结果箱数低于 min_n_bins 时的处理，0.7.0 将默认 warn"
+            }
           }
         ]
       },
@@ -324,6 +343,32 @@
               "corr_threshold": "默认继承 corr_params.corr_cutpoint",
               "corr_max_iterations": "默认继承 corr_params.max_iterations",
               "corr_use_woe_bins": "默认继承 corr_use_woe_bins"
+            }
+          },
+          {
+            "name": "后置选择门（G02–G06，selection_params 三级参数）",
+            "params": {
+              "iv_upper_threshold": "IV 上限；超过视为疑似标签泄漏并淘汰(reason=iv_above_upper)",
+              "monthly_iv_min": "分组(如月度) IV 下限；需 selection_group_dims",
+              "monthly_iv_cv_max": "分组 IV 变异系数上限；需 selection_group_dims",
+              "direction_consistency_min": "与众数方向一致的组占比下限；需 selection_group_dims",
+              "min_group_n": "参与组稳门的组最小样本数；缺省回落 min_group_size",
+              "insufficient_group_policy": "keep_warn(默认)/drop/raise；合格组不足 2 个时的处理",
+              "target_rules": "all/any/min_pass_count；多标签联合门",
+              "min_pass_count": "target_rules=min_pass_count 时的最少通过标签数",
+              "per_target_iv_range": "(low, high) 或 {target: (low, high)}；分标签 IV 区间",
+              "direction_reference_target": "方向基准标签；其余标签方向须与之一致",
+              "max_selected_features": "入选特征数硬上限；按 IV 排序截断，同分按名字破平",
+              "min_selected_features": "下限；不足只 warn 不回填（保门因果可审计）",
+              "vif_enabled": "VIF 门开关(默认 False)；需要可选依赖 SuperModelingFactory[stats]",
+              "vif_threshold": "VIF 阈值(默认 10.0)，迭代剔除最大 VIF 特征",
+              "vif_min_features": "VIF 迭代保留特征下限(默认 2)"
+            }
+          },
+          {
+            "name": "选择门证据维度（G03/G04）",
+            "params": {
+              "selection_group_dims": "组稳门证据的分组维度(如 ['apply_month'])；配置了组稳阈值但未给维度会响亮报错"
             }
           }
         ]
