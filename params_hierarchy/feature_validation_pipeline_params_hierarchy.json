@@ -299,7 +299,8 @@
               "selection_enabled": "是否运行综合特征筛选，默认 false",
               "selection_params": "传给 FeatureScreeningConfig 的覆盖参数",
               "missing_rate_threshold": "缺失率阈值；selection_params 未覆盖时使用",
-              "weight_col": "筛选阶段样本权重字段"
+              "weight_col": "筛选阶段样本权重字段",
+              "synthesize_missing_oot": "缺 OOT 时是否用 OOS 副本代替；None=沿用旧行为 true（合成时发 UserWarning），false 时 OOT 保持空、相关输出缺省；下一 minor 版本默认翻为 false"
             },
             "rules": [
               "必须 target_cols 非空才会执行",

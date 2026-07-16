@@ -169,6 +169,28 @@
         ]
       },
       {
+        "level1": "OOT 治理（候选阶段防泄漏）",
+        "level2": [
+          {
+            "name": "OOT governance",
+            "params": {
+              "candidate_mode": "候选模式一键收紧：禁 OOT（forbidden_splits 并入 oot）、不合成 OOT、评估只留 ins/oos、search 只用 oos、backward 不读 OOT；与显式相反配置冲突时直接报错",
+              "synthesize_missing_oot": "缺 OOT 时是否用 OOS 副本代替；None=沿用旧行为 true（合成时发 UserWarning），false 时 splits 不含 oot、全部下游自动跳过；下一 minor 版本默认翻为 false",
+              "evaluation_splits": "评估 split 白名单；None=有什么评什么；显式列表则 perf/图/Excel 只含这些 split（extra_eval_datasets 不受限）",
+              "forbidden_splits": "硬闸：任何组件（search/backward/评估，含 optuna_params/backward_params 里带入的）将要消费被禁 split 时抛 ValueError",
+              "search_eval_splits": "LR search 与 Optuna 的 eval_sets 来源；None=旧默认 oos+oot（缺失时自动降级），显式列表严格校验存在性",
+              "search_objective_when_no_oot": "search eval 集不含 oot 且未显式设 objective 时的回退目标，默认 max_primary",
+              "backward_validation_split": "backward 的 validation 来源，默认 oos",
+              "backward_report_splits": "backward test_data_dict 来源；None=旧默认 [oot]；下一 minor 版本默认翻为 []"
+            },
+            "rules": [
+              "run 产物（Result.split_governance 与模型 metadata）记录 candidate_mode/oot_synthesized/oot_withheld，验收时据此分辨 OOT 真伪",
+              "candidate_mode 下数据里的真实 OOT 会被切出但全程不消费（oot_withheld=true）"
+            ]
+          }
+        ]
+      },
+      {
         "level1": "逐步回归、Optuna 与解释性",
         "level2": [
           {
