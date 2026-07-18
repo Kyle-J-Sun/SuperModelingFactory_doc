@@ -211,6 +211,12 @@ psi_table = result.psi_table     # psi_ins_oos / psi_ins_oot / psi_max
 
 `CreditModelPipeline` 的 `_feature_selection` 已委托 `feature_screen`；配置 `weight_col` 非空时自动走加权路径。
 
+### 0.7.2 加权 VIF / corr 边界
+
+- G06 VIF 会把 `weight_col` 传给 `FeatureSelectionAnalyzer.compute_vif(..., sample_weight=...)`。非恒定权重使用 WLS 辅助回归；未传权重或正常数恒定权重继续走原有 OLS 计算，保持严格 legacy parity。
+- `corr_nan_policy="pairwise"` 下，正常数恒定权重复用无权重 corr 的实际迭代决策，同时保留 `corr_dropped` 加权审计。`corr_nan_policy="raise"` 仍先执行 NaN 硬闸，不会被恒定权重路径绕过。
+- 加权 WOE corr 会识别 adapter 的自定义后缀。若只有部分特征成功编码，可用数值子矩阵仍会计算；未编码特征以告警和 NaN 行/列留在完整矩阵中，不会被静默剔除。
+
 ## 6. 分布偏移分析
 
 ```python
@@ -313,3 +319,7 @@ FeatureValidationPipelineConfig(
   进入 CM 复用契约（G00）；`WOE_Master` 只附 woe_table + 警告（它持有训练帧，不宜序列化）。
 - G06 默认 `vif_use_woe_bins=False`，只在 raw 数值列上计算 VIF：非数值幸存变量会被保留、发出 warning，并在 `selection_summary` / `stage_tables["vif"]` 中留下排除审计；数值列不足时该门以 `skipped_insufficient_numeric` 跳过。bool 与 pandas nullable 数值列只在 VIF 矩阵内转换为浮点。
 - 将 `vif_use_woe_bins=True` 后，VIF 使用 INS 的 WOE 编码矩阵，分类变量也可参与共线性判断。声明了 `categorical_features` 时必须使用 `woe_engine="monotone"`；`equal_freq` 会在拟合前明确拒绝该组合。预拟合 WOE engine 必须覆盖全部幸存变量，且自定义 WOE 后缀会被自动识别。
+
+### FVP 类别转换审计（0.7.2）
+
+FVP 会在每个 split 转换后立即冻结类别覆盖率与 unseen 统计，避免 engine 的“最近一次 transform”状态覆盖先前结果。完整结果可从 `woe_artifacts["by_target"][target]["categorical_transform_stats_by_split"]` 与 `unseen_category_stats_by_split` 查看；batch/slim 汇总则保留在 `woe_artifacts["categorical_transform_stats_by_target"]` / `woe_artifacts["unseen_category_stats_by_target"]`。批次合并若发现同一 target/split/feature 的统计冲突会抛错，不会静默覆盖。
