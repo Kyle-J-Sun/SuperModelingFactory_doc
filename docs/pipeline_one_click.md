@@ -277,7 +277,7 @@ flowchart LR
     B -->|有 ins/oos/oot| C["读取样本切分"]
     B -->|无| D{"oot_col"}
     D -->|有| E["按 oot_col 拆 OOT"]
-    D -->|无| F["随机切 INS / OOS / OOT"]
+    D -->|无| F["随机切 INS / OOS"]
     E --> G["INS / OOS 切分"]
     F --> G
     C --> H["特征筛选<br/>PSI / IV / Corr"]
@@ -319,7 +319,7 @@ flowchart LR
 
 | 步骤 | 产物 | 主要可配置参数 |
 |---|---|---|
-| 样本切分 | `splits`，包含 `ins/oos/oot` | `split_col`、`sample_col`、`oot_col`、`split_config`、`random_state` |
+| 样本切分 | `splits`，包含 `ins/oos` 与可选真实 `oot` | `split_col`、`sample_col`、`oot_col`、`split_config`、`random_state`、`synthesize_missing_oot` |
 | 特征筛选 | `feature_selection_summary`、候选特征列表 | `feature_cols`、`feature_selection.psi_enabled`、`feature_selection.iv_enabled`、`feature_selection.corr_enabled` 及各阈值 |
 | WOE 分箱与转换 | `woe_artifacts`、WOE 特征 | `woe_engine`、`woe_params`、`monotone_woe_params`、`woe_fit_query` |
 | Backward 变量剔除 | `backward_summary`、`selected_features` | `backward_enabled`、`backward_model`、`backward_params`、`use_backward_features`、`weight_col` |
@@ -328,7 +328,7 @@ flowchart LR
 | 前置分 warm-start | `warm_start_summary`、GBM 增量模型 | `warm_start_enabled`、`warm_start_score_col`、`warm_start_score_type`、`warm_start_models` |
 | 候选模型训练 | `models`、初始模型表现 | `train_models`、`model_params`、`target_col`、`weight_col` |
 | Optuna 调参 | `optuna_results`、调参后模型 | `optuna_models`、`optuna_n_trials`、`optuna_params`、`weight_col` |
-| 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop`、`weight_col`、`extra_eval_datasets` |
+| 模型评估 | `perf_results` | `perf_pct_bins`、`perf_min_bin_prop`、`weight_col`、`extra_eval_datasets`、`evaluation_splits`、`gains_ascending` |
 | 解释性与 Owen | `explain_outputs` | `explain_models`、`explain_params`、`owen_enabled`、`business_prior_groups` |
 | 报告输出 | `report_path` | `output_dir`、`write_outputs`、`write_excel`、`plot_outputs` |
 
@@ -367,7 +367,7 @@ result.perf_results["lgb"]
 |---|---|---|
 | 已切好样本 | `split_col` 或 `sample_col` | 推荐使用 `split_col` 指定字段名；`sample_col` 保留兼容。取值大小写不敏感，支持 `ins/oos/oot`。 |
 | 只标记 OOT | `oot_col` | 默认 `oot_flag`，`0` 为 INS+OOS，非 `0` 为 OOT；Pipeline 再随机切 INS/OOS。 |
-| 未标记样本 | 无 | 会从全量数据随机切 INS/OOS，并用 OOS 作为 OOT 的兜底。 |
+| 未标记样本 | 无 | 会从全量数据随机切 INS/OOS；0.7.0 起默认不再用 OOS 合成 OOT。 |
 | 加权样本 | `weight_col` 指定列 | 权重须为非负有限值；各 split（`ins/oos/oot`）中均保留该列。 |
 
 ### 样本权重
@@ -425,11 +425,26 @@ cfg = CreditModelPipelineConfig(
 )
 result = CreditModelPipeline(cfg).run(modeling_df)
 
-result.perf_results["lgb"]  # 含 ins/oos/oot + full_apply + competitor
+result.perf_results["lgb"]  # 默认含 ins/oos + full_apply + competitor；真实 OOT 需显式纳入 evaluation_splits
 result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
 ```
 
 `woe_fit_query` 引用的列必须在主输入 `DataFrame` 中存在；语法会在 `run()` 入口预检。列名校验失败抛 `KeyError`，语法错误抛 `ValueError`。
+
+### OOT 治理与评估方向（0.7.0）
+
+0.7.0 将候选阶段与最终 OOT 验收分开：默认只评估 `ins/oos`，调参只使用 `oos`，backward 不再把 OOT 放进逐轮报告；没有真实 OOT 时也不再以 OOS 副本伪造 OOT。这样 `result.split_governance` 和保存的模型 metadata 可以直接说明 OOT 是否真实、是否被候选阶段保留。
+
+```python
+cfg = CreditModelPipelineConfig(
+    evaluation_splits=["ins", "oos"],
+    search_eval_splits=["oos"],
+    backward_report_splits=[],
+    gains_ascending=True,
+)
+```
+
+如业务流程已完成候选选择、需要对真实 OOT 出正式验收，可显式传 `evaluation_splits=["ins", "oos", "oot"]`。若希望把 OOT 用于搜索或 backward，必须同样显式配置相应列表；`forbidden_splits` 会阻止任何通过嵌套参数绕过该边界的消费请求。
 
 ### `CreditModelPipelineConfig` 参数
 
@@ -451,6 +466,12 @@ result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
 | `model_include_metadata` | `True` | 是否使用 SMF `save_model()` artifact envelope 保存模型 metadata。 |
 | `save_woe_artifacts` | `True` | `save_models=True` 时是否同时保存 WOE table 和 WOE engine，便于模型复用。 |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS 切分配置。 |
+| `synthesize_missing_oot` | `False` | 缺少真实 OOT 时是否以 OOS 副本合成；默认关闭，显式 `True` 才会合成并发出 warning。 |
+| `evaluation_splits` | `["ins", "oos"]` | 默认模型评估、图表和 Excel 的 split 白名单；真实 OOT 需显式纳入，`extra_eval_datasets` 不受此项限制。 |
+| `forbidden_splits` | `[]` | 被禁止 split 的硬闸；search、backward 与评估的所有消费点都会校验。 |
+| `search_eval_splits` | `["oos"]` | LR search 与 Optuna 的默认 eval sets；默认不使用 OOT 做候选调参。 |
+| `backward_validation_split` | `"oos"` | backward 的 validation 来源。 |
+| `backward_report_splits` | `[]` | backward 每轮 `test_data_dict` 的默认来源；默认不读取 OOT。 |
 | `feature_selection` | 见下表 | PSI、IV、相关性筛选开关和阈值。 |
 | `screening_artifact` | `None` | FVP 产出的 `FeatureScreeningArtifact`；传入后跳过 CM 内部筛选。 |
 | `feature_validation_result` | `None` | 便捷字段：直接传 FVP 结果，内部转为 `screening_artifact`。 |
@@ -487,6 +508,8 @@ result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
 | `business_prior_groups` | `None` | Owen value 的业务先验分组。 |
 | `perf_pct_bins` | `10` | 性能评估分箱数量。 |
 | `perf_min_bin_prop` | `0.03` | 性能评估最小分箱占比。 |
+| `gains_ascending` | `True` | 0.7.0 起默认分数升序，bin 1 为低分低风险；Gains 表、加权路径与评估图使用同一方向。 |
+| `eval_weight_col` | `"inherit"` | `"inherit"` 沿用训练 `weight_col`；`None` 强制评估不加权；字符串可指定独立评估权重列。 |
 
 ### `split_config`
 
@@ -622,7 +645,7 @@ cfg = CreditModelPipelineConfig(
 )
 ```
 
-默认搜索训练集为 `ins`，评估集为 `oos/oot`。搜索结果返回在 `result.lr_search_results`，并可落盘为 `lr_param_search.csv`。
+默认搜索训练集为 `ins`，评估集为 `oos`。如显式把真实 OOT 放入 `search_eval_splits` 或 `gap_ref_sets`，该配置会成为有意的 OOT 消费，并须满足相应 split 存在性与硬闸校验。搜索结果返回在 `result.lr_search_results`，并可落盘为 `lr_param_search.csv`。
 
 ### GBM 原始 / WOE 特征开关
 
@@ -719,6 +742,8 @@ optuna_params={
 }
 ```
 
+上例的 `oot_gap_penalized` / `gap_ref_sets=["oot"]` 是显式使用真实 OOT 的高级配置；默认 0.7.0 搜索仅使用 `oos`，未提供真实 OOT 时应使用默认 `max_primary` 目标或显式选择不依赖 OOT 的目标。
+
 ### Explain / Owen 参数
 
 ```python
@@ -755,7 +780,7 @@ business_prior_groups={
 
 | 字段 | 说明 |
 |---|---|
-| `splits` | `{"ins": df, "oos": df, "oot": df}`。 |
+| `splits` | `{"ins": df, "oos": df}`，并在输入存在真实 OOT 或显式合成时附带 `"oot"`。 |
 | `feature_selection_summary` | PSI、IV、相关性筛选结果和最终变量列表。 |
 | `woe_artifacts` | WOE 引擎、WOE 后数据、WOE 特征名、WOE 表。 |
 | `models` | `{model_name: (wrapper, raw_model, feature_cols)}`。 |
@@ -808,6 +833,8 @@ result.artifact_paths["woe_engine"]
 | `explain/{model}/` | `feature_importance.csv`、Owen 重要性表、`shap_summary.png`（`plot_outputs=True`）；根目录 `explain_manifest.csv`。 | `write_outputs=True` 且 `explain_models` 非空或 `owen_enabled=True` |
 
 `write_outputs=False` 时解释结果仅保留在 `result.explain_outputs` 内存中；落盘路径索引见 `result.explain_paths`。
+
+0.7.0 起，性能图与 Gains 表共用 `gains_ascending` 的方向参数：默认均按分数升序展示，避免同一模型的表格、加权表与分布图出现相反的 bin 顺序。
 
 ## 3. 特征验收流水线
 
@@ -907,6 +934,7 @@ result.high_corr_pairs
 | `distribution_params.feature_block_size` | `128` | 分布统计每个宽表特征块的列数。 |
 | `woe_engine` | `"monotone"` | 默认 `MonotoneWOEBinner`；也支持 `"equal_freq"` 使用 `WOE_Master`。 |
 | `woe_fit_query` | `None` | pandas `query()` 表达式，仅过滤 INS 上用于 WOE 拟合的行；PSI/IV/KS 与 transform 仍基于全量 splits。拟合审计写入 `woe_artifacts["refine_summary"]` 的 `fit_filter` 行。 |
+| `woe_fit_scope` | `"post_missing_gate"` | 0.7.0 起先按 `missing_rate_threshold` 运行 selection-grade 缺失门，再以幸存变量拟合顶层 WOE；显式 `"all"` 可复现旧口径。 |
 | `categorical_features` | `None` | 类别特征列表，传给 `MonotoneWOEBinner(cate_feats=...)`。 |
 | `monotone_refine_cate_enabled` | `False` | 是否对类别变量调用 `refine_cate()`。 |
 | `monotone_refine_cate_params` | `{}` | 透传 `refine_cate(features, max_bins, min_bin_size, badrate_tol)`。 |
@@ -923,13 +951,15 @@ result.high_corr_pairs
 | `corr_include_incumbent` | `True` | 相关性是否纳入现有特征。 |
 | `corr_use_woe_bins` | `True` | 相关性对比中的 IV/KS 是否复用 step 3 WOE 分箱。 |
 | `selection_enabled` | `False` | 是否在验证后执行 PSI/IV/相关性剔除，产出 `selected_features` 与 `FeatureScreeningArtifact` 供 CM 承接。 |
-| `selection_params` | `{}` | 筛选阈值与开关，键名与 CM `feature_selection` 对齐（如 `psi_threshold`、`iv_threshold`、`corr_threshold`、`*_use_woe_bins`）。 |
+| `selection_params` | `{}` | 筛选阈值与开关，键名与 CM `feature_selection` 对齐（如 `psi_threshold`、`iv_threshold`、`corr_threshold`、`*_use_woe_bins`）；G06 可设置 `vif_use_woe_bins`。 |
 | `weight_col` | `None` | 加权筛选权重列；与 CM `weight_col` 一致。 |
 | `write_outputs` | `True` | 是否输出 CSV 和中间产物；也是图片落盘的总开关。 |
 | `write_excel` | `True` | 是否输出 ExcelMaster 报告。 |
 | `plot_outputs` | `True` | 是否输出 WOE 分析图。设为 `False` 时仍可通过 `write_outputs=True`、`write_excel=True` 保留 CSV/Excel；只有 `write_outputs=True` 且 `plot_outputs=True` 时才写图片。 |
 
 声明在 `categorical_features` 中的类别变量可直接参与加权筛选；缺失率阶段按非空状态和样本权重计算，不会把字符串类别强制转换为浮点数。WOE 分箱拟合本身仍按未加权样本执行，`weight_col` 用于后续筛选和评估口径。
+
+`selection_params={"vif_enabled": True, "vif_use_woe_bins": True}` 时，FVP 将 VIF 建在 INS 的 WOE 编码矩阵上；分类变量需搭配 `woe_engine="monotone"`。保留默认 `False` 时，raw VIF 仅计算数值列，非数值列会被保留并在 selection audit 中记录，而不会让 statsmodels 崩溃。
 
 当 `split_col` 含 `ft_oot` 等自定义评估集时，FVP 只使用 `ins` 拟合 WOE，并只使用标准 `ins/oos/oot` 执行特征筛选；自定义评估集会参与 WOE transform、分布与按 `_smf_split` 的 PSI 等验证输出。DataFrame 与 CSV batch 模式采用相同语义。
 

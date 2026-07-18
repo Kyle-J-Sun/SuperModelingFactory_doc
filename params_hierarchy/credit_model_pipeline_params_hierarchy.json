@@ -41,7 +41,7 @@
             },
             "rules": [
               "split_col 优先于 sample_col",
-              "split_col 必须包含非空 ins 和 oos；若无 oot，则 oot=oos.copy()",
+              "split_col 必须包含非空 ins 和 oos；0.7.0 默认缺少真实 oot 时不合成，显式 synthesize_missing_oot=true 才使用 oos 副本",
               "无 split/sample 时，先用 oot_col 拆 OOT，再用 split_config 拆 INS/OOS"
             ]
           },
@@ -188,13 +188,13 @@
             "name": "OOT governance",
             "params": {
               "candidate_mode": "候选模式一键收紧：禁 OOT（forbidden_splits 并入 oot）、不合成 OOT、评估只留 ins/oos、search 只用 oos、backward 不读 OOT；与显式相反配置冲突时直接报错",
-              "synthesize_missing_oot": "缺 OOT 时是否用 OOS 副本代替；None=沿用旧行为 true（合成时发 UserWarning），false 时 splits 不含 oot、全部下游自动跳过；下一 minor 版本默认翻为 false",
-              "evaluation_splits": "评估 split 白名单；None=有什么评什么；显式列表则 perf/图/Excel 只含这些 split（extra_eval_datasets 不受限）",
+              "synthesize_missing_oot": "缺 OOT 时是否用 OOS 副本代替；0.7.0 默认 false，splits 不含 oot、全部下游自动跳过；显式 true 才合成并发 UserWarning",
+              "evaluation_splits": "评估 split 白名单；0.7.0 默认 [ins, oos]，perf/图/Excel 不默认消费 OOT（extra_eval_datasets 不受限）；显式列表可覆盖",
               "forbidden_splits": "硬闸：任何组件（search/backward/评估，含 optuna_params/backward_params 里带入的）将要消费被禁 split 时抛 ValueError",
-              "search_eval_splits": "LR search 与 Optuna 的 eval_sets 来源；None=旧默认 oos+oot（缺失时自动降级），显式列表严格校验存在性",
+              "search_eval_splits": "LR search 与 Optuna 的 eval_sets 来源；0.7.0 默认 [oos]，不默认将 OOT 用于候选调参；显式列表严格校验存在性",
               "search_objective_when_no_oot": "search eval 集不含 oot 且未显式设 objective 时的回退目标，默认 max_primary",
               "backward_validation_split": "backward 的 validation 来源，默认 oos",
-              "backward_report_splits": "backward test_data_dict 来源；None=旧默认 [oot]；下一 minor 版本默认翻为 []"
+              "backward_report_splits": "backward test_data_dict 来源；0.7.0 默认 []，避免逐轮报告读取 OOT；显式列表可覆盖"
             },
             "rules": [
               "run 产物（Result.split_governance 与模型 metadata）记录 candidate_mode/oot_synthesized/oot_withheld，验收时据此分辨 OOT 真伪",
@@ -212,13 +212,13 @@
               "eval_target_cols": "额外评估标签列表；有效标签集=[target_col]+eval_target_cols 去重。同一份模型分数只计算一次、复用于所有标签；perf 表纵向拼接并新增 tgt_name 列（未设置时输出结构与旧版完全一致）",
               "all_missing_score_value": "全部入模原始特征缺失的行分数覆写值（如 -1）；判定口径与 Core.scoring 的 all_missing_spec_value 完全一致，并连同判定用原始特征清单写入模型 artifact metadata；生产侧用 Core.scoring(all_missing_spec_value=metadata值) 即可对齐",
               "special_score_values": "特殊分数（如 [-1]）独立成评估箱：不参与分位边界，gains 表单独成行，AUC/KS/avgScore 等排序指标基于非特殊行；unweighted/weighted 同口径",
-              "gains_ascending": "None=各路径维持旧默认（summary 降序、部分图升序、weighted 降序）；显式 true/false 时 summary/gains/weighted 全链路统一方向（true=分数升序，bin 1=低分低风险）。下一 minor 版本默认翻为 true",
+              "gains_ascending": "0.7.0 默认 true：summary、Gains、weighted Gains 与评估图统一分数升序（bin 1=低分低风险）；显式 false 可保留降序口径",
               "eval_weight_col": "评估阶段权重列：inherit（默认）=沿用 weight_col；null=评估不加权（训练加权不再隐式影响评估、search/backward 的 eval 权重同步）；其他字符串=显式指定评估权重列"
             },
             "rules": [
               "所有评估标签必须存在于输入数据与每个 extra_eval_datasets 帧",
               "all_missing_score_value 与 special_score_values 配套使用时，-1 覆写行自动落入 special 独立箱",
-              "gains_ascending 暂不控制 evaluate_performance 的分布图方向（已知限制，翻默认版本一并处理）"
+              "gains_ascending 同时控制表格与 evaluate_performance 分布图方向，避免同一 run 的图表口径漂移"
             ]
           }
         ]

@@ -194,7 +194,7 @@
           {
             "name": "WOE 拟合范围（G00）",
             "params": {
-              "woe_fit_scope": "\"all\"(默认，旧行为) 或 \"post_missing_gate\"：先跑 missing_rate_threshold 缺失门再拟合顶层 WOE，防止单个高缺失特征拖垮整个 target 的 WOE 产物；0.7.0 将翻转默认为 post_missing_gate"
+              "woe_fit_scope": "\"post_missing_gate\"（0.7.0 默认）或 \"all\"：先跑 missing_rate_threshold 缺失门再拟合顶层 WOE，防止单个高缺失特征拖垮整个 target 的 WOE 产物；显式 all 可保留旧口径"
             }
           },
           {
@@ -207,7 +207,7 @@
               "reference_target": "以参考标签的 point-biserial 符号推导每个特征的期望方向",
               "direction_conflict_policy": "warn/raise/keep；方向被固定后实际 WOE 违背时的处理",
               "missing_bin_strategy": "empirical_special/fixed_woe/fail；None(默认)按 special_values 推导",
-              "refine_min_n_bins_policy": "warn/enforce/raise；refine_dtree 结果箱数低于 min_n_bins 时的处理，0.7.0 将默认 warn"
+              "refine_min_n_bins_policy": "warn/enforce/raise；refine_dtree 结果箱数低于 min_n_bins 时的处理，0.7.0 默认 warn；显式 null 可关闭该治理"
             }
           }
         ]
@@ -319,7 +319,7 @@
               "selection_params": "传给 FeatureScreeningConfig 的覆盖参数",
               "missing_rate_threshold": "缺失率阈值；selection_params 未覆盖时使用",
               "weight_col": "筛选阶段样本权重字段",
-              "synthesize_missing_oot": "缺 OOT 时是否用 OOS 副本代替；None=沿用旧行为 true（合成时发 UserWarning），false 时 OOT 保持空、相关输出缺省；下一 minor 版本默认翻为 false"
+              "synthesize_missing_oot": "缺 OOT 时是否用 OOS 副本代替；0.7.0 默认 false，OOT 保持空、相关输出缺省；显式 true 才合成并发 UserWarning"
             },
             "rules": [
               "必须 target_cols 非空才会执行",
@@ -362,7 +362,8 @@
               "min_selected_features": "下限；不足只 warn 不回填（保门因果可审计）",
               "vif_enabled": "VIF 门开关(默认 False)；需要可选依赖 SuperModelingFactory[stats]",
               "vif_threshold": "VIF 阈值(默认 10.0)，迭代剔除最大 VIF 特征",
-              "vif_min_features": "VIF 迭代保留特征下限(默认 2)"
+              "vif_min_features": "VIF 迭代保留特征下限(默认 2)",
+              "vif_use_woe_bins": "默认 false：仅原始数值列进入 VIF，非数值列保留并写入审计；true：使用 WOE 编码 INS 矩阵。声明 categorical_features 时需 woe_engine=monotone，equal_freq 会明确报错"
             }
           },
           {
@@ -1055,6 +1056,19 @@
         },
         "min_bin_prop": {
           "default": "iv_min_bin_prop 或 0.05"
+        },
+        "vif_enabled": {
+          "default": false
+        },
+        "vif_threshold": {
+          "default": 10.0
+        },
+        "vif_min_features": {
+          "default": 2
+        },
+        "vif_use_woe_bins": {
+          "default": false,
+          "meaning": "true 时按 WOE 编码 INS 矩阵计算 VIF；分类变量需 monotone WOE engine"
         }
       }
     }

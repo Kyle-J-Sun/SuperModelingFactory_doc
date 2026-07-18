@@ -472,13 +472,13 @@ lime_global = explainer.lime_global_importance(explain_x, X_train=background_x, 
 
 ## Pipeline 评估数据入口对比
 
-若使用 [`Modeling_Tool.Pipeline`](pipeline_one_click.md) 高层封装而非手写 Step 1–8，三条主流水线的**额外评估数据**入口如下。设计原则一致：训练/拟合口径与评估口径解耦，默认行为向后兼容。
+若使用 [`Modeling_Tool.Pipeline`](pipeline_one_click.md) 高层封装而非手写 Step 1–8，三条主流水线的**额外评估数据**入口如下。设计原则一致：训练/拟合口径与评估口径解耦、消费范围显式可审计；0.7.0 起 CM 默认只评估 `ins/oos`，真实 OOT 需显式纳入。
 
 | Pipeline | 配置参数 | 典型用途 | 参与 WOE 拟合 | 参与模型训练 | 进入 perf 评估 |
 |---|---|---|---|---|---|
 | `RejectInferencePipeline` | `oot_data` | 外部全量 OOT 申请数据（可含未表现样本） | — | RI 后模型用 INS/OOS | ✅ OOT + RI 模型 perf |
 | `FeatureValidationPipeline` | `woe_fit_query` | INS 剔除未成熟等行，仅收紧 WOE 拟合 | ✅ 仅 INS fit 子集 | —（无模型训练） | ✅ PSI/IV/KS 仍用全量 splits |
-| `CreditModelPipeline` | `woe_fit_query` | 同左，收紧 WOE 拟合 | ✅ 仅 INS fit 子集 | ❌ 训练仍用全量 INS | ✅ 全量 ins/oos/oot |
+| `CreditModelPipeline` | `woe_fit_query` | 同左，收紧 WOE 拟合 | ✅ 仅 INS fit 子集 | ❌ 训练仍用全量 INS | ✅ 默认 ins/oos；真实 oot 需显式列入 `evaluation_splits` |
 | `CreditModelPipeline` | `extra_eval_datasets` | 竞品分、全量申请月等 eval-only 集 | ❌ | ❌ | ✅ 仅评估 |
 
 对标关系：

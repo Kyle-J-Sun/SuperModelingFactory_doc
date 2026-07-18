@@ -298,6 +298,7 @@ FeatureValidationPipelineConfig(
         "direction_reference_target": "y",
         "max_selected_features": 30,             # G05 硬截断（IV 排序，名字破平）
         "vif_enabled": True, "vif_threshold": 10.0,  # G06 需 pip install "SuperModelingFactory[stats]"
+        "vif_use_woe_bins": True,                      # 0.7.0+：按 WOE 矩阵计算 VIF
     },
 )
 ```
@@ -310,3 +311,5 @@ FeatureValidationPipelineConfig(
 - G05 截断不足 `min_selected_features` 时只告警不回填，保住每个门的因果可审计性。
 - 筛选自拟合的 monotone 引擎会挂到 `result.woe_engine` 并随 `FeatureScreeningArtifact`
   进入 CM 复用契约（G00）；`WOE_Master` 只附 woe_table + 警告（它持有训练帧，不宜序列化）。
+- G06 默认 `vif_use_woe_bins=False`，只在 raw 数值列上计算 VIF：非数值幸存变量会被保留、发出 warning，并在 `selection_summary` / `stage_tables["vif"]` 中留下排除审计；数值列不足时该门以 `skipped_insufficient_numeric` 跳过。bool 与 pandas nullable 数值列只在 VIF 矩阵内转换为浮点。
+- 将 `vif_use_woe_bins=True` 后，VIF 使用 INS 的 WOE 编码矩阵，分类变量也可参与共线性判断。声明了 `categorical_features` 时必须使用 `woe_engine="monotone"`；`equal_freq` 会在拟合前明确拒绝该组合。预拟合 WOE engine 必须覆盖全部幸存变量，且自定义 WOE 后缀会被自动识别。
