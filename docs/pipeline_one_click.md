@@ -367,7 +367,7 @@ result.perf_results["lgb"]
 |---|---|---|
 | 已切好样本 | `split_col` 或 `sample_col` | 推荐使用 `split_col` 指定字段名；`sample_col` 保留兼容。取值大小写不敏感，支持 `ins/oos/oot`。 |
 | 只标记 OOT | `oot_col` | 默认 `oot_flag`，`0` 为 INS+OOS，非 `0` 为 OOT；Pipeline 再随机切 INS/OOS。 |
-| 未标记样本 | 无 | 会从全量数据随机切 INS/OOS；0.7.0 起默认不再用 OOS 合成 OOT。 |
+| 未标记样本 | 无 | 会从全量数据随机切 INS/OOS；0.7.1 起默认不再用 OOS 合成 OOT。 |
 | 加权样本 | `weight_col` 指定列 | 权重须为非负有限值；各 split（`ins/oos/oot`）中均保留该列。 |
 
 ### 样本权重
@@ -431,9 +431,9 @@ result.woe_artifacts["extra_eval"]  # WOE 变换后的额外评估集
 
 `woe_fit_query` 引用的列必须在主输入 `DataFrame` 中存在；语法会在 `run()` 入口预检。列名校验失败抛 `KeyError`，语法错误抛 `ValueError`。
 
-### OOT 治理与评估方向（0.7.0）
+### OOT 治理与评估方向（0.7.1）
 
-0.7.0 将候选阶段与最终 OOT 验收分开：默认只评估 `ins/oos`，调参只使用 `oos`，backward 不再把 OOT 放进逐轮报告；没有真实 OOT 时也不再以 OOS 副本伪造 OOT。这样 `result.split_governance` 和保存的模型 metadata 可以直接说明 OOT 是否真实、是否被候选阶段保留。
+0.7.1 将候选阶段与最终 OOT 验收分开：默认只评估 `ins/oos`，调参只使用 `oos`，backward 不再把 OOT 放进逐轮报告；没有真实 OOT 时也不再以 OOS 副本伪造 OOT。这样 `result.split_governance` 和保存的模型 metadata 可以直接说明 OOT 是否真实、是否被候选阶段保留。
 
 ```python
 cfg = CreditModelPipelineConfig(
@@ -508,7 +508,7 @@ cfg = CreditModelPipelineConfig(
 | `business_prior_groups` | `None` | Owen value 的业务先验分组。 |
 | `perf_pct_bins` | `10` | 性能评估分箱数量。 |
 | `perf_min_bin_prop` | `0.03` | 性能评估最小分箱占比。 |
-| `gains_ascending` | `True` | 0.7.0 起默认分数升序，bin 1 为低分低风险；Gains 表、加权路径与评估图使用同一方向。 |
+| `gains_ascending` | `True` | 0.7.1 起默认分数升序，bin 1 为低分低风险；Gains 表、加权路径与评估图使用同一方向。 |
 | `eval_weight_col` | `"inherit"` | `"inherit"` 沿用训练 `weight_col`；`None` 强制评估不加权；字符串可指定独立评估权重列。 |
 
 ### `split_config`
@@ -742,7 +742,7 @@ optuna_params={
 }
 ```
 
-上例的 `oot_gap_penalized` / `gap_ref_sets=["oot"]` 是显式使用真实 OOT 的高级配置；默认 0.7.0 搜索仅使用 `oos`，未提供真实 OOT 时应使用默认 `max_primary` 目标或显式选择不依赖 OOT 的目标。
+上例的 `oot_gap_penalized` / `gap_ref_sets=["oot"]` 是显式使用真实 OOT 的高级配置；默认 0.7.1 搜索仅使用 `oos`，未提供真实 OOT 时应使用默认 `max_primary` 目标或显式选择不依赖 OOT 的目标。
 
 ### Explain / Owen 参数
 
@@ -834,7 +834,7 @@ result.artifact_paths["woe_engine"]
 
 `write_outputs=False` 时解释结果仅保留在 `result.explain_outputs` 内存中；落盘路径索引见 `result.explain_paths`。
 
-0.7.0 起，性能图与 Gains 表共用 `gains_ascending` 的方向参数：默认均按分数升序展示，避免同一模型的表格、加权表与分布图出现相反的 bin 顺序。
+0.7.1 起，性能图与 Gains 表共用 `gains_ascending` 的方向参数：默认均按分数升序展示，避免同一模型的表格、加权表与分布图出现相反的 bin 顺序。
 
 ## 3. 特征验收流水线
 
@@ -934,7 +934,7 @@ result.high_corr_pairs
 | `distribution_params.feature_block_size` | `128` | 分布统计每个宽表特征块的列数。 |
 | `woe_engine` | `"monotone"` | 默认 `MonotoneWOEBinner`；也支持 `"equal_freq"` 使用 `WOE_Master`。 |
 | `woe_fit_query` | `None` | pandas `query()` 表达式，仅过滤 INS 上用于 WOE 拟合的行；PSI/IV/KS 与 transform 仍基于全量 splits。拟合审计写入 `woe_artifacts["refine_summary"]` 的 `fit_filter` 行。 |
-| `woe_fit_scope` | `"post_missing_gate"` | 0.7.0 起先按 `missing_rate_threshold` 运行 selection-grade 缺失门，再以幸存变量拟合顶层 WOE；显式 `"all"` 可复现旧口径。 |
+| `woe_fit_scope` | `"post_missing_gate"` | 0.7.1 起先按 `missing_rate_threshold` 运行 selection-grade 缺失门，再以幸存变量拟合顶层 WOE；显式 `"all"` 可复现旧口径。 |
 | `categorical_features` | `None` | 类别特征列表，传给 `MonotoneWOEBinner(cate_feats=...)`。 |
 | `monotone_refine_cate_enabled` | `False` | 是否对类别变量调用 `refine_cate()`。 |
 | `monotone_refine_cate_params` | `{}` | 透传 `refine_cate(features, max_bins, min_bin_size, badrate_tol)`。 |

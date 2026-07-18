@@ -203,4 +203,4 @@ binner.get_direction_summary()            # feat / direction / direction_basis /
 - `small_bin_policy="merge"` 向 WOE 更接近的邻箱合并，合并轨迹记录在结果的 `merge_trace`；`raise` 抛 `BinningPolicyViolation`（穿透逐特征容错，不会被吞进日志）。
 - 方向在 `fit` 前解析：串行与并行 worker 使用同一份 `_expected_direction`，杜绝串并行漂移。
 - 这些参数可经 `monotone_woe_params` 从 FVP / CMP / feature_screen 直通底层 binner。
-- 0.7.0 起，`refine_min_n_bins_policy` 默认 `"warn"`；如需完全关闭该检查，请显式传 `None`。
+- 0.7.1 起，`refine_min_n_bins_policy` 默认 `"warn"`；如需完全关闭该检查，请显式传 `None`。

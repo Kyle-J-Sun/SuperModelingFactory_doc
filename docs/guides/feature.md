@@ -298,7 +298,7 @@ FeatureValidationPipelineConfig(
         "direction_reference_target": "y",
         "max_selected_features": 30,             # G05 硬截断（IV 排序，名字破平）
         "vif_enabled": True, "vif_threshold": 10.0,  # G06 需 pip install "SuperModelingFactory[stats]"
-        "vif_use_woe_bins": True,                      # 0.7.0+：按 WOE 矩阵计算 VIF
+        "vif_use_woe_bins": True,                      # 0.7.1+：按 WOE 矩阵计算 VIF
     },
 )
 ```

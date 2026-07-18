@@ -472,7 +472,7 @@ lime_global = explainer.lime_global_importance(explain_x, X_train=background_x, 
 
 ## Pipeline 评估数据入口对比
 
-若使用 [`Modeling_Tool.Pipeline`](pipeline_one_click.md) 高层封装而非手写 Step 1–8，三条主流水线的**额外评估数据**入口如下。设计原则一致：训练/拟合口径与评估口径解耦、消费范围显式可审计；0.7.0 起 CM 默认只评估 `ins/oos`，真实 OOT 需显式纳入。
+若使用 [`Modeling_Tool.Pipeline`](pipeline_one_click.md) 高层封装而非手写 Step 1–8，三条主流水线的**额外评估数据**入口如下。设计原则一致：训练/拟合口径与评估口径解耦、消费范围显式可审计；0.7.1 起 CM 默认只评估 `ins/oos`，真实 OOT 需显式纳入。
 
 | Pipeline | 配置参数 | 典型用途 | 参与 WOE 拟合 | 参与模型训练 | 进入 perf 评估 |
 |---|---|---|---|---|---|
