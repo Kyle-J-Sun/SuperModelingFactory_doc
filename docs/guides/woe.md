@@ -104,6 +104,15 @@ edges = binner.get_bin_edges()
 | `export_woe_report(path)` | 导出 Excel 报告 |
 | `plot_woe_graph(dir, group_name=)` | 输出 WOE 图 PNG |
 
+### Format-A 分箱往返（0.7.2）
+
+`get_final_bins()` 返回的每个 DataFrame 都带有 `attrs["smf_woe_format_a"]`。其中的精确数值边界、稀疏箱号、类别成员和 `missing_woe` 只有在 metadata 摘要与行身份校验通过时才会被 `load_woe_bins()` 使用；直接传递或 pickle 往返可以保住这些信息，损坏或陈旧 metadata 会安全退回可见标签解析。
+
+!!! warning "CSV/Excel 不是精确往返载体"
+    CSV/Excel 会丢失 `DataFrame.attrs`。从这两类文件回载时，`bin_label`（默认 `.8g` 显示精度）是唯一事实来源，无法还原文本之外的精确切点、原始稀疏箱号、歧义类别成员或非默认 `missing_woe`。需要精确恢复时，请直接传递 DataFrame 或使用 pickle 等保留 attrs 的格式。
+
+类别转换会先做精确匹配，再做受支持的 `str()` dtype 回退。只有两者都失败的值才进入 `_unseen_category_stats`；回退成功的值仍会计入 `_categorical_transform_stats[feature]["fallback_match_rows"]` 并触发既有 tripwire 告警。
+
 !!! note "Clustered by-group 图片规格"
     当 `group_name` 非空且 `bar_mode="clustered"` 时，by-group WOE 图固定使用
     `figsize=(16, 6)` 和 `dpi=200`，以容纳并排柱、分组 WOE 曲线和右侧图例。
@@ -200,7 +209,7 @@ binner.get_direction_summary()            # feat / direction / direction_basis /
 
 要点：
 
-- `small_bin_policy="merge"` 向 WOE 更接近的邻箱合并，合并轨迹记录在结果的 `merge_trace`；`raise` 抛 `BinningPolicyViolation`（穿透逐特征容错，不会被吞进日志）。
+- `small_bin_policy="merge"` 向 WOE 更接近的邻箱合并，合并轨迹记录在结果的 `merge_trace`；`raise` 抛 `BinningPolicyViolation`（穿透逐特征容错，不会被吞进日志）。0.7.2 起类别特征也会在初始 `fit()` 阶段执行 `merge/warn/raise`，且 `merge` 不会越过 `min_n_bins`；到达下限仍有违规箱时可从 `_small_bin_stats[feature]["remaining_violation"]` 审计。
 - 方向在 `fit` 前解析：串行与并行 worker 使用同一份 `_expected_direction`，杜绝串并行漂移。
 - 这些参数可经 `monotone_woe_params` 从 FVP / CMP / feature_screen 直通底层 binner。
 - 0.7.1 起，`refine_min_n_bins_policy` 默认 `"warn"`；如需完全关闭该检查，请显式传 `None`。
