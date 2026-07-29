@@ -110,12 +110,20 @@
                 "nbins": "equal_freq 分箱数",
                 "equal_freq": "是否等频",
                 "min_bin_prop": "最小箱占比",
-                "woe_suffix": "WOE 后缀，可选"
+                "woe_suffix": "WOE 后缀，可选",
+                "sv_min_bin_size": "0.8.0 SV 箱占比阈值 [0.0,1.0)，默认 0.0 关闭",
+                "sv_small_policy": "0.8.0 keep(默认)/neutral/merge_missing，亚阈值 SV 箱兜底",
+                "sv_woe_smoothing": "0.8.0 none(默认)/laplace，SV 箱 WOE 坏率收缩",
+                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭"
               },
               "monotone_woe_params": {
                 "n_init_bins": "monotone 初始箱数",
                 "min_bin_size": "monotone 最小箱占比",
-                "min_n_bins": "monotone 最小箱数"
+                "min_n_bins": "monotone 最小箱数",
+                "sv_min_bin_size": "0.8.0 SV 箱占比阈值 [0.0,1.0)，默认 0.0 关闭",
+                "sv_small_policy": "0.8.0 keep(默认)/neutral/merge_missing，亚阈值 SV 箱兜底",
+                "sv_woe_smoothing": "0.8.0 none(默认)/laplace，SV 箱 WOE 坏率收缩",
+                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭"
               }
             }
           },
@@ -467,6 +475,33 @@
         "spec_values": {
           "default": [],
           "meaning": "特殊值列表"
+        },
+        "sv_min_bin_size": {
+          "default": 0.0,
+          "allowed": "[0.0, 1.0)",
+          "meaning": "0.8.0 SV 箱占比阈值；prop = n_bin / N_total（分母不加 eps），严格小于该值才触发兜底；0.0 关闭"
+        },
+        "sv_small_policy": {
+          "default": "keep",
+          "allowed": [
+            "keep",
+            "neutral",
+            "merge_missing"
+          ],
+          "meaning": "0.8.0 亚阈值 SV 箱兜底：keep=旧行为；neutral=WOE/IV 置 0；merge_missing=计数并入 [Missing] 箱后重算，被合并行存表 WOE 改写为 [Missing] WOE 且 IV 置 0，无 [Missing] 箱时降级 neutral 并 warn"
+        },
+        "sv_woe_smoothing": {
+          "default": "none",
+          "allowed": [
+            "none",
+            "laplace"
+          ],
+          "meaning": "0.8.0 SV 箱 WOE 平滑；laplace 用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 再折回占比，仅作用于 SV 箱，普通箱不动"
+        },
+        "sv_smoothing_alpha": {
+          "default": 0.0,
+          "allowed": ">= 0.0",
+          "meaning": "0.8.0 平滑强度 α；0.0 逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱内样本越少收缩越强"
         }
       }
     },
@@ -511,6 +546,33 @@
         "bin_label_decimals": {
           "default": null,
           "meaning": "分箱边界展示小数位"
+        },
+        "sv_min_bin_size": {
+          "default": 0.0,
+          "allowed": "[0.0, 1.0)",
+          "meaning": "0.8.0 SV 箱占比阈值；prop = n_bin / N_total（分母不加 eps），严格小于该值才触发兜底；0.0 关闭"
+        },
+        "sv_small_policy": {
+          "default": "keep",
+          "allowed": [
+            "keep",
+            "neutral",
+            "merge_missing"
+          ],
+          "meaning": "0.8.0 亚阈值 SV 箱兜底：keep=旧行为；neutral=WOE/IV 置 0；merge_missing=计数并入 [Missing] 箱后重算，被合并行存表 WOE 改写为 [Missing] WOE 且 IV 置 0，无 [Missing] 箱时降级 neutral 并 warn。处置结果见结果表 sv_policy_applied 列"
+        },
+        "sv_woe_smoothing": {
+          "default": "none",
+          "allowed": [
+            "none",
+            "laplace"
+          ],
+          "meaning": "0.8.0 SV 箱 WOE 平滑；laplace 用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 再折回占比，仅作用于 SV 箱，普通箱不动"
+        },
+        "sv_smoothing_alpha": {
+          "default": 0.0,
+          "allowed": ">= 0.0",
+          "meaning": "0.8.0 平滑强度 α；0.0 逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱内样本越少收缩越强"
         }
       },
       "fit": {
@@ -600,7 +662,7 @@
           "meaning": "并行数；-1 表示所有可用 CPU"
         }
       },
-      "pipeline_note": "CreditModelPipeline 当前把 monotone_woe_params 直接传给 MonotoneWOEBinner 构造器，并仅显式读取 chi2_binning 传给 fit；除默认构造器参数外的 fit-only key 需谨慎。"
+      "pipeline_note": "CreditModelPipeline 当前把 monotone_woe_params 直接传给 MonotoneWOEBinner 构造器，并仅显式读取 chi2_binning 传给 fit；除默认构造器参数外的 fit-only key 需谨慎。fit-only pop 名单为 {chi2_binning, chi2_p, chi2_init_size, n_jobs}，四个 sv_* 属于构造器参数、不在该名单内，因此会正确进入 __init__；切勿把 sv_* 加进 fit-only 名单，否则会抛 TypeError。"
     },
     "model_params": {
       "passes_to": "Modeling_Tool.Model.GBM_Tool.GradientBoostingModel / LRMaster",

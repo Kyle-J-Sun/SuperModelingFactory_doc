@@ -165,7 +165,11 @@
                 "equal_freq": "是否等频",
                 "min_bin_prop": "最小箱占比",
                 "woe_suffix": "WOE 字段后缀，可选",
-                "missing_ref_value": "缺失替代值，可选"
+                "missing_ref_value": "缺失替代值，可选",
+                "sv_min_bin_size": "0.8.0 SV 箱占比阈值 [0.0,1.0)，默认 0.0 关闭",
+                "sv_small_policy": "0.8.0 keep(默认)/neutral/merge_missing，亚阈值 SV 箱兜底",
+                "sv_woe_smoothing": "0.8.0 none(默认)/laplace，SV 箱 WOE 坏率收缩",
+                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭"
               }
             }
           },
@@ -179,7 +183,11 @@
                 "n_jobs": "并行数",
                 "special_values": "特殊值",
                 "missing_woe": "缺失 WOE",
-                "eps": "平滑项"
+                "eps": "平滑项",
+                "sv_min_bin_size": "0.8.0 SV 箱占比阈值 [0.0,1.0)，默认 0.0 关闭",
+                "sv_small_policy": "0.8.0 keep(默认)/neutral/merge_missing，亚阈值 SV 箱兜底",
+                "sv_woe_smoothing": "0.8.0 none(默认)/laplace，SV 箱 WOE 坏率收缩",
+                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭"
               }
             },
             "children": {
@@ -209,6 +217,25 @@
               "missing_bin_strategy": "empirical_special/fixed_woe/fail；None(默认)按 special_values 推导",
               "refine_min_n_bins_policy": "warn/enforce/raise；refine_dtree 结果箱数低于 min_n_bins 时的处理，0.7.0 默认 warn；显式 null 可关闭该治理"
             }
+          },
+          {
+            "name": "低占比特殊值治理（SV Bin Governance，0.8.0，经 woe_params / monotone_woe_params 透传）",
+            "params": {
+              "sv_min_bin_size": "SV 箱占比阈值 [0.0,1.0)；prop = n_bin / N_total（分母不加 eps），严格小于才触发；0.0(默认)关闭",
+              "sv_small_policy": "keep(默认，旧行为)/neutral(WOE=IV=0)/merge_missing(计数并入 [Missing] 后重算，被合并行存表 WOE 改写为 [Missing] WOE、IV 置 0；无 [Missing] 箱时降级 neutral 并 warn)",
+              "sv_woe_smoothing": "none(默认)/laplace；laplace 采用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 后折回占比，仅作用于 SV 箱",
+              "sv_smoothing_alpha": "平滑强度 α>=0；0.0(默认)逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱越小收缩越强"
+            },
+            "rules": [
+              "只治理特殊值箱（含 [Missing]），普通区间箱完全不受影响",
+              "方式1（兜底）优先于方式2（平滑）：亚阈值箱走 neutral/merge_missing 后不再平滑",
+              "merge_missing + laplace 同开时，合并目标 [Missing] 箱按经验公式重算、不平滑；其他达标 SV 箱仍平滑",
+              "[Missing] 箱本身也是受治理 SV 箱，唯一特殊之处是只能当 merge 目标、不能当 merge 来源",
+              "四个参数默认值组合与 0.7.2 逐位一致，升级不改变既有产出；非法取值在入口抛 ValueError",
+              "FVP 的 monotone 分支经 _MONOTONE_INIT_KEYS 白名单过滤，四个 sv_* 已入名单；不在名单的 key 会被静默丢弃（不报错）",
+              "sv_* 是构造器参数，不得加入 _MONOTONE_FIT_KEYS（{chi2_binning, chi2_p, chi2_init_size, n_jobs}），否则抛 TypeError",
+              "config_snapshot 原样 dump woe_params / monotone_woe_params，sv_* 自动进快照可供复现审计"
+            ]
           }
         ]
       },
@@ -524,8 +551,36 @@
         "spec_values": {
           "default": [],
           "meaning": "特殊值列表"
+        },
+        "sv_min_bin_size": {
+          "default": 0.0,
+          "allowed": "[0.0, 1.0)",
+          "meaning": "0.8.0 SV 箱占比阈值；prop = n_bin / N_total（分母不加 eps），严格小于该值才触发兜底；0.0 关闭"
+        },
+        "sv_small_policy": {
+          "default": "keep",
+          "allowed": [
+            "keep",
+            "neutral",
+            "merge_missing"
+          ],
+          "meaning": "0.8.0 亚阈值 SV 箱兜底：keep=旧行为；neutral=WOE/IV 置 0；merge_missing=计数并入 [Missing] 箱后重算，被合并行存表 WOE 改写为 [Missing] WOE 且 IV 置 0，无 [Missing] 箱时降级 neutral 并 warn"
+        },
+        "sv_woe_smoothing": {
+          "default": "none",
+          "allowed": [
+            "none",
+            "laplace"
+          ],
+          "meaning": "0.8.0 SV 箱 WOE 平滑；laplace 用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 再折回占比，仅作用于 SV 箱，普通箱不动"
+        },
+        "sv_smoothing_alpha": {
+          "default": 0.0,
+          "allowed": ">= 0.0",
+          "meaning": "0.8.0 平滑强度 α；0.0 逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱内样本越少收缩越强"
         }
-      }
+      },
+      "pipeline_note": "FeatureValidationPipeline._fit_woe_master 用 master.fit(**woe_params) 透传（仅剔除 woe_suffix / missing_ref_value），该分支没有白名单，四个 sv_* 会正确到达 WOE_Master.fit()。"
     },
     "monotone_woe_params": {
       "source": "Modeling_Tool.WOE.WOE_Monotone_Binner.MonotoneWOEBinner",
@@ -568,8 +623,36 @@
         "bin_label_decimals": {
           "default": null,
           "meaning": "分箱边界展示小数位"
+        },
+        "sv_min_bin_size": {
+          "default": 0.0,
+          "allowed": "[0.0, 1.0)",
+          "meaning": "0.8.0 SV 箱占比阈值；prop = n_bin / N_total（分母不加 eps），严格小于该值才触发兜底；0.0 关闭"
+        },
+        "sv_small_policy": {
+          "default": "keep",
+          "allowed": [
+            "keep",
+            "neutral",
+            "merge_missing"
+          ],
+          "meaning": "0.8.0 亚阈值 SV 箱兜底：keep=旧行为；neutral=WOE/IV 置 0；merge_missing=计数并入 [Missing] 箱后重算，被合并行存表 WOE 改写为 [Missing] WOE 且 IV 置 0，无 [Missing] 箱时降级 neutral 并 warn。处置结果见结果表 sv_policy_applied 列"
+        },
+        "sv_woe_smoothing": {
+          "default": "none",
+          "allowed": [
+            "none",
+            "laplace"
+          ],
+          "meaning": "0.8.0 SV 箱 WOE 平滑；laplace 用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 再折回占比，仅作用于 SV 箱，普通箱不动"
+        },
+        "sv_smoothing_alpha": {
+          "default": 0.0,
+          "allowed": ">= 0.0",
+          "meaning": "0.8.0 平滑强度 α；0.0 逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱内样本越少收缩越强"
         }
       },
+      "pipeline_note": "FeatureValidationPipeline._fit_monotone_binner 先用 _MONOTONE_INIT_KEYS 白名单过滤 monotone_woe_params 再传给构造器：init_params = {k: v for k, v in params.items() if k in self._MONOTONE_INIT_KEYS}。不在白名单里的 key 会被静默丢弃（不报错、不告警）。四个 sv_* 已加入 _MONOTONE_INIT_KEYS，同时也加入了 Feature_Screen._MONOTONE_INIT_KEYS（筛选期复用的 WOE 拟合走那一份，漏改会导致筛选 IV 与建模 WOE 口径分裂）。今后给 MonotoneWOEBinner.__init__ 新增参数必须同步这两份白名单；sv_* 属于构造器参数，不得加入 _MONOTONE_FIT_KEYS。",
       "fit": {
         "chi2_binning": {
           "default": false,

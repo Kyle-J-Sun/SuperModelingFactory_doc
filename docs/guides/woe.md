@@ -213,3 +213,148 @@ binner.get_direction_summary()            # feat / direction / direction_basis /
 - 方向在 `fit` 前解析：串行与并行 worker 使用同一份 `_expected_direction`，杜绝串并行漂移。
 - 这些参数可经 `monotone_woe_params` 从 FVP / CMP / feature_screen 直通底层 binner。
 - 0.7.1 起，`refine_min_n_bins_policy` 默认 `"warn"`；如需完全关闭该检查，请显式传 `None`。
+
+## 低占比特殊值治理（SV Bin Governance，0.8.0）
+
+0.6.7 的 `small_bin_policy` / `min_bin_size` 只治理**普通区间箱**；特殊值（special value，下称 SV）箱一直是**无条件**取经验 WOE 并计入总 IV。当某个 SV 占比极低（例如 `-1` 只占 0.05%）时，`ln(pct_bad/pct_good)` 由极少数样本估计，方差极大、IV 虚高、上线后 PSI 容易漂移。
+
+0.8.0 为此引入**两组正交**的 SV 治理开关。四个参数在两个引擎上**同名同义、口径一致**：`MonotoneWOEBinner.__init__` 是构造器参数，`WOE_Master.fit()` / `update_woe()` 是方法参数。
+
+| 参数 | 类型 / 默认 | 取值 | 语义 |
+|------|-------------|------|------|
+| `sv_min_bin_size` | `float = 0.0` | `[0.0, 1.0)` | SV 箱占**全量样本**的占比阈值；`0.0` = 关闭 |
+| `sv_small_policy` | `str = "keep"` | `keep` / `neutral` / `merge_missing` | 占比低于阈值的 SV 箱如何兜底 |
+| `sv_woe_smoothing` | `str = "none"` | `none` / `laplace` | 是否把 SV 箱 WOE 向全局 base rate 收缩 |
+| `sv_smoothing_alpha` | `float = 0.0` | `>= 0.0` | 平滑强度 α；`0.0` = 关闭 |
+
+!!! note "默认值严格等于旧行为"
+    四个参数的默认值组合（`0.0` / `"keep"` / `"none"` / `0.0`）与 0.7.2 **逐位一致**，升级 0.8.0 不会改变任何既有产出。非法取值在 `__init__` / `fit()` 入口即抛 `ValueError`，风格与 G08 `small_bin_policy` 一致。
+
+### 方式1 —— 低占比兜底（`sv_min_bin_size` + `sv_small_policy`）
+
+占比按 `prop = n_bin / N_total` 计算（**分母不加 eps**），判定用**严格小于** `prop < sv_min_bin_size`；等于阈值**不**触发。
+
+- `keep`（默认）：取经验 WOE，零行为变更。
+- `neutral`：亚阈值 SV 箱 `woe = 0.0`、`iv = 0.0`。最稳，等价于"这个 SV 不提供任何证据"。
+- `merge_missing`：亚阈值 SV 箱的 `bad` / `good` 计数**并入 `[Missing]` 箱**，`[Missing]` 箱随后按经验公式**重算** WOE；被合并行存表的 `woe` 会被**改写为 `[Missing]` 重算后的 WOE**，`iv` 置 `0` 避免重复计入总 IV。若该特征**没有** `[Missing]` 箱 → 降级为 `neutral` 并 `warnings.warn(UserWarning)`。
+
+!!! tip "`merge_missing` 不需要改 transform"
+    采用的是 **rewrite-stored-WOE** 方案：被合并 SV 行的存表 WOE 直接写成 `[Missing]` 的 WOE。因此 `apply_woe()` / `mapping_woe()` 照常按 `bin_label → WOE` 查表即可命中正确值，**两个引擎的 transform 路径都没有任何改动**，fit→transform 往返自动一致。
+
+治理结果可从结果表的 `sv_policy_applied` 列审计，取值为
+`keep` / `neutral` / `neutral(fallback)` / `merged_into_missing` / `merge_target`。
+
+### 方式2 —— SV WOE 平滑（`sv_woe_smoothing="laplace"`）
+
+平滑**只作用于 SV 箱**，普通区间箱完全不受影响。采用的是**坏率收缩（bad-rate shrinkage）**：先把箱内坏率向全局坏率收缩，再折回计数占比。
+
+```
+p = N_bad / (N_bad + N_good)          # 全局坏率
+n_bin = n_bad + n_good                # 箱内样本量
+
+r = (n_bad + alpha * p) / (n_bin + alpha)        # 坏率向 p 收缩，alpha 与 n_bin 竞争
+
+pct_bad_smoothed  = n_bin * r       / N_bad      # 折回占比，分母仍是全局 N_bad / N_good
+pct_good_smoothed = n_bin * (1 - r) / N_good
+
+woe = ln(pct_bad_smoothed / pct_good_smoothed)
+iv  = (pct_bad_smoothed - pct_good_smoothed) * woe
+```
+
+收敛性质（这也是选用该形式的原因）：
+
+- `alpha = 0` → `r` 退化为经验坏率，**逐位还原**旧经验 WOE（回归护栏）。
+- `alpha → ∞` → `r → p`，两个占比之比趋于全局比，`woe → 0`，且是**单调**收缩。
+- α 与 `n_bin` 竞争 ⇒ **样本越少的箱收缩越强**，正是低占比 SV 需要的性质。
+
+!!! danger "不要用"人口分母伪计数"形式"
+    早期设计曾把伪计数放在人口分母上（`(n_bad + alpha*p) / (N_bad + alpha)`）。该式 `alpha → ∞` 时收敛到 `logit(p) = ln(p/(1-p)) ≠ 0`，而且**不单调**——加大平滑强度反而可能推高 |WOE|。两个引擎实现的都是上面的坏率收缩式，上方公式为唯一权威定义。
+
+### 正交组合语义（执行顺序固定）
+
+两个开关可独立启用，也可叠加。fit 阶段对每个 SV 箱按固定顺序决策：
+
+```
+1. prop = n_sv / N_total
+2. if sv_small_policy != "keep" and sv_min_bin_size > 0 and prop < sv_min_bin_size:
+       走方式1 兜底（neutral / merge_missing），【不再】走方式2
+   else:
+       若 sv_woe_smoothing == "laplace" 且 alpha > 0 → 走方式2 平滑
+       否则 → 经验 WOE（旧行为）
+```
+
+即**方式1 优先**：一个亚阈值箱**永远不会被平滑**，它已经被兜底掉了；方式2 只作用于"占比达标、保留经验 WOE"的 SV 箱。
+
+`merge_missing` + `laplace` 同时开启时：合并目标 `[Missing]` 箱按**经验**公式重算（**不**平滑），因为合并后的桶应当反映真实的 post-merge 坏率；其他占比达标的 SV 箱仍照常平滑。
+
+### `[Missing]` 箱也是受治理的 SV 箱
+
+`[Missing]`（NaN）箱在**两个引擎**里都是一个正常的受治理 SV 箱：占比达标就照常平滑，亚阈值就照常 `neutral` 置零。它唯一的特殊之处是在 `merge_missing` 下**只能当合并目标、不能当合并来源**。
+
+这与 `missing_bin_strategy`（`empirical_special` / `fixed_woe` / `fail`）**正交**：后者只治理 NaN 缺失箱的语义，前者治理**所有** SV 箱（含 `-1` 这类非 NaN 哨兵值）。
+
+### 用法示例
+
+```python
+binner = MonotoneWOEBinner(
+    feature_cols=feats, target_col="y",
+    special_values=[-1, -999999, float("nan")],
+    # 占比 < 1% 的 SV 箱直接中性化
+    sv_min_bin_size=0.01,
+    sv_small_policy="neutral",       # keep / neutral / merge_missing
+    # 占比达标的 SV 箱做坏率收缩
+    sv_woe_smoothing="laplace",      # none / laplace
+    sv_smoothing_alpha=50.0,
+)
+binner.fit(train)
+binner.get_final_bins()["risk_score"]   # sv_policy_applied 列记录每个 SV 箱的实际处置
+```
+
+`WOE_Master` 侧同名同义，只是落在 `fit()` 上：
+
+```python
+woe = WOE_Master(train_data=train, varlist=feats, dep="y")
+woe.fit(
+    nbins=10, equal_freq=True, spec_values=[-1, -999999],
+    sv_min_bin_size=0.01, sv_small_policy="neutral",
+    sv_woe_smoothing="laplace", sv_smoothing_alpha=50.0,
+)
+```
+
+### Pipeline 层暴露
+
+`CreditModelPipelineConfig` 与 `FeatureValidationPipelineConfig` 的**两个**透传字典都已带上四个 `sv_*` 默认键：`woe_params`（喂 `equal_freq` / `WOE_Master`）和 `monotone_woe_params`（喂 `MonotoneWOEBinner`）。
+
+```python
+from Modeling_Tool import CreditModelPipeline, CreditModelPipelineConfig
+
+cfg = CreditModelPipelineConfig(
+    target_col="y",
+    woe_engine="monotone",
+    monotone_woe_params={
+        "n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2,
+        "special_values": [-999999],
+        "sv_min_bin_size": 0.01,
+        "sv_small_policy": "neutral",
+    },
+)
+```
+
+FVP 的 `config_snapshot` 会原样 dump 这两个字典，`sv_*` 自动进快照，便于复现"某个模型用了什么 SV 治理口径"。
+
+!!! warning "维护者注意：FVP 的白名单必须同步"
+    `FeatureValidationPipeline` 的 monotone 分支**不是**直接 `**monotone_woe_params`，而是先过一层
+    `_MONOTONE_INIT_KEYS` 白名单：
+
+    ```python
+    init_params = {k: v for k, v in params.items() if k in self._MONOTONE_INIT_KEYS}
+    ```
+
+    **不在白名单里的 key 会被静默丢弃，不报错、不告警**——参数看起来传进去了，实际治理完全没生效。
+    四个 `sv_*` 已加入 `_MONOTONE_INIT_KEYS`（同样也加进了
+    `Feature_Screen._MONOTONE_INIT_KEYS`，否则筛选期复用的 WOE 拟合会漏掉治理，导致筛选 IV 与建模 WOE 口径分裂）。
+    今后给 `MonotoneWOEBinner.__init__` 新增任何参数，都必须同步这两份白名单。
+
+    `sv_*` 是**构造器**参数，**不要**加进 `_MONOTONE_FIT_KEYS`（`{chi2_binning, chi2_p, chi2_init_size, n_jobs}`），
+    否则会被当成 `fit()` kwarg 传下去而抛 `TypeError`。CM 侧的 monotone fit-only `pop` 名单同理，
+    保持不含 `sv_*` 才能让它们正确进入构造器。

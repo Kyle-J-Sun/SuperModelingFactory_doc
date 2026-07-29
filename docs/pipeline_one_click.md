@@ -478,8 +478,8 @@ cfg = CreditModelPipelineConfig(
 | `feature_selection_mode` | `"run"` | `run` / `from_artifact` / `skip`；有 artifact 时自动 `from_artifact`。 |
 | `reuse_screening_woe` | `True` | handoff 时是否复用 artifact 内已拟合 WOE 引擎。 |
 | `woe_engine` | `"equal_freq"` | WOE 引擎。支持 `"equal_freq"` 和 `"monotone"`。 |
-| `woe_params` | `{"nbins": 10, "equal_freq": True, "min_bin_prop": 0.05}` | `WOE_Master.fit()` 参数和通用 WOE 配置。 |
-| `monotone_woe_params` | `{"n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2}` | `MonotoneWOEBinner` 参数。 |
+| `woe_params` | `{"nbins": 10, "equal_freq": True, "min_bin_prop": 0.05, "sv_min_bin_size": 0.0, "sv_small_policy": "keep", "sv_woe_smoothing": "none", "sv_smoothing_alpha": 0.0}` | `WOE_Master.fit()` 参数和通用 WOE 配置。0.8.0 起显式带上四个 `sv_*` SV 箱治理键，默认值 = 旧行为。 |
+| `monotone_woe_params` | `{"n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2, "sv_min_bin_size": 0.0, "sv_small_policy": "keep", "sv_woe_smoothing": "none", "sv_smoothing_alpha": 0.0}` | `MonotoneWOEBinner` 参数。0.8.0 起显式带上四个 `sv_*` SV 箱治理键，默认值 = 旧行为。 |
 | `woe_fit_query` | `None` | pandas `query()` 表达式，仅过滤 INS 上用于 WOE 拟合的行；transform 与评估仍用全量 splits。 |
 | `extra_eval_datasets` | `None` | eval-only 额外评估集 `dict[str, DataFrame]`；WOE transform 后并入 `perf_results`，不参与筛选/训练/backward/Optuna。 |
 | `train_models` | `["lr", "lgb", "xgb", "cat"]` | 要训练的模型列表。 |
@@ -575,6 +575,11 @@ woe_params={
     "min_bin_prop": 0.05,
     "woe_suffix": "_woe",
     "missing_ref_value": -999999,
+    # 0.8.0 SV 箱治理，透传给 WOE_Master.fit()；默认值 = 旧行为
+    "sv_min_bin_size": 0.0,
+    "sv_small_policy": "keep",
+    "sv_woe_smoothing": "none",
+    "sv_smoothing_alpha": 0.0,
 }
 ```
 
@@ -587,8 +592,22 @@ monotone_woe_params={
     "min_n_bins": 2,
     "special_values": [-999999],
     "chi2_binning": False,
+    # 0.8.0 SV 箱治理，透传给 MonotoneWOEBinner.__init__()；默认值 = 旧行为
+    "sv_min_bin_size": 0.0,
+    "sv_small_policy": "keep",
+    "sv_woe_smoothing": "none",
+    "sv_smoothing_alpha": 0.0,
 }
 ```
+
+四个 `sv_*` 只治理**特殊值箱**（含 `[Missing]`），普通区间箱不受影响；语义、`laplace` 公式与正交组合顺序见
+[WOE 编码 · 低占比特殊值治理](guides/woe.md)。
+
+!!! warning "FVP 走白名单，新增 monotone 参数必须同步"
+    `FeatureValidationPipeline` 的 monotone 分支用 `_MONOTONE_INIT_KEYS` 白名单过滤 `monotone_woe_params`，
+    **不在白名单里的 key 会被静默丢弃**（不报错）。四个 `sv_*` 已加入该白名单以及
+    `Feature_Screen._MONOTONE_INIT_KEYS`；今后给 `MonotoneWOEBinner.__init__` 加参数时必须同步这两份名单。
+    `sv_*` 属于构造器参数，不要加进 `_MONOTONE_FIT_KEYS`。
 
 ### 模型参数
 
@@ -935,6 +954,8 @@ result.high_corr_pairs
 | `woe_engine` | `"monotone"` | 默认 `MonotoneWOEBinner`；也支持 `"equal_freq"` 使用 `WOE_Master`。 |
 | `woe_fit_query` | `None` | pandas `query()` 表达式，仅过滤 INS 上用于 WOE 拟合的行；PSI/IV/KS 与 transform 仍基于全量 splits。拟合审计写入 `woe_artifacts["refine_summary"]` 的 `fit_filter` 行。 |
 | `woe_fit_scope` | `"post_missing_gate"` | 0.7.1 起先按 `missing_rate_threshold` 运行 selection-grade 缺失门，再以幸存变量拟合顶层 WOE；显式 `"all"` 可复现旧口径。 |
+| `woe_params` | `{"nbins": 10, "equal_freq": True, "min_bin_prop": 0.05, "sv_min_bin_size": 0.0, "sv_small_policy": "keep", "sv_woe_smoothing": "none", "sv_smoothing_alpha": 0.0}` | `woe_engine="equal_freq"` 时透传给 `WOE_Master.fit()`。0.8.0 起显式带上四个 `sv_*` SV 箱治理键，默认值 = 旧行为。 |
+| `monotone_woe_params` | `{"n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2, "sv_min_bin_size": 0.0, "sv_small_policy": "keep", "sv_woe_smoothing": "none", "sv_smoothing_alpha": 0.0}` | 透传给 `MonotoneWOEBinner`。**经 `_MONOTONE_INIT_KEYS` 白名单过滤，不在名单内的 key 会被静默丢弃**；四个 `sv_*` 已在名单内。 |
 | `categorical_features` | `None` | 类别特征列表，传给 `MonotoneWOEBinner(cate_feats=...)`。 |
 | `monotone_refine_cate_enabled` | `False` | 是否对类别变量调用 `refine_cate()`。 |
 | `monotone_refine_cate_params` | `{}` | 透传 `refine_cate(features, max_bins, min_bin_size, badrate_tol)`。 |

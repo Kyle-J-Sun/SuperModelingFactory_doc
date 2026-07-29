@@ -11,6 +11,8 @@ SuperModelingFactory 各版本迭代总览。所有 `0.3.x` 发布在成型的�
 ## 版本索引
 
 <div class="grid cards" markdown>
+- :material-tag: **[v0.8.0](v0.8.0.md)** - SV bin governance: `sv_min_bin_size` / `sv_small_policy` low-share fallback and `sv_woe_smoothing` / `sv_smoothing_alpha` bad-rate shrinkage on both WOE engines, defaults bit-for-bit identical to 0.7.2
+
 - :material-tag: **[v0.7.2](v0.7.2.md)** - 0.7.1 boundary hardening: categorical small-bin fit governance, verified Format-A round-trips, frozen FVP transform audits, weighted VIF, and constant-weight corr parity
 
 - :material-tag: **[v0.7.1](v0.7.1.md)** - First 0.7.x release (0.7.0 burned pre-release): default-governance flip, categorical VIF support, and the unweighted-corr categorical crash fix with mixed WOE matrix basis
