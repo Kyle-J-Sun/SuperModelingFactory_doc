@@ -167,22 +167,22 @@ from Modeling_Tool.Core import *
 
 0.8.1 及之前，`Modeling_Tool.WOE.WOE_Monotone_Binner`（`import Modeling_Tool` 时就会加载）和 `Modeling_Tool.Model.Backward_Tool` 在导入时执行 `warnings.filterwarnings("ignore")`。这会在**整个 Python 进程**里屏蔽所有告警：SMF 自己的防护告警（如特殊值箱治理降级、声明了但拟合样本中没出现的特殊值）、你自己代码的告警、第三方库的弃用提示全都看不到。0.8.2 删除了这两处全局设置，告警恢复 Python 默认行为；计算结果与之前完全相同，只是这些提示重新可见。
 
-目前常见的几类：
+0.8.2 同时清理了 SMF 自身调用触发的弃用与数值提示（seaborn `distplot` / `bw`、WOE/IV 里的 `log(0)`、pandas `concat` / `groupby` 的 FutureWarning、sklearn feature names、xlsxwriter 单格合并、pyodps `Schema`、shap 全局随机数），并修复了其中暴露出的问题（见 0.8.2 更新日志）。现在仍会看到的主要是：
 
 | 告警 | 来源 | 说明 |
 |---|---|---|
-| seaborn 的 `distplot` / `bw` 弃用提示（`UserWarning`） | SMF 评估画图 | seaborn 0.14 将移除这些用法，SMF 会在后续版本迁移 |
-| `divide by zero encountered in log`（`RuntimeWarning`） | WOE/IV 计算中某一类样本为 0 的箱 | 结果与之前版本一致，后续版本会消除这条提示 |
-| pandas `concat` 的 `FutureWarning` | 评估汇总 | 不影响当前结果，后续版本会消除 |
-| `declared special value(s) never occur in the fit sample` 等 | SMF 防护告警 | 需要关注，见 [WOE 指南](guides/woe.md) |
+| `declared special value(s) never occur in the fit sample`、`bins have zero-mass class`、`keep_all_warn` 等 | SMF 防护告警 | 数据或配置需要关注，见 [WOE 指南](guides/woe.md) 与 [特征指南](guides/feature.md) |
+| sklearn `UndefinedMetricWarning` | 单一类别的数据集（如没有坏样本的 OOT） | 该数据集的 AUC / KS 等指标记为 NaN |
+| sklearn 校准时 `sample_weight` 只作用于校准器的提示 | 加权校准 | 加权语义提示，建议阅读 |
+| xgboost `Parameters: { ... } are not used` | 模型参数 | 传给原生训练接口的参数（如 `n_estimators`）没有生效 |
 
 **只屏蔽不想看的告警**
 
 ```python
 import warnings
 
-warnings.filterwarnings("ignore", message=r"[\s\S]*distplot")   # 按消息正则
-warnings.filterwarnings("ignore", category=FutureWarning)       # 按类别
+warnings.filterwarnings("ignore", message=r".*zero-mass class")   # 按消息正则（从消息开头匹配）
+warnings.filterwarnings("ignore", category=FutureWarning)          # 按类别
 ```
 
 不建议再用不带参数的 `warnings.filterwarnings("ignore")`：它会把 SMF 的防护告警一起屏蔽。
