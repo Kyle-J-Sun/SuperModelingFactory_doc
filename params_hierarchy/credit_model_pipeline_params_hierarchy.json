@@ -123,7 +123,8 @@
                 "sv_min_bin_size": "0.8.0 SV 箱占比阈值 [0.0,1.0)，默认 0.0 关闭",
                 "sv_small_policy": "0.8.0 keep(默认)/neutral/merge_missing，亚阈值 SV 箱兜底",
                 "sv_woe_smoothing": "0.8.0 none(默认)/laplace，SV 箱 WOE 坏率收缩",
-                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭"
+                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭",
+                "unseen_special_policy": "0.8.2 normal_bin(默认)/neutral，声明但拟合样本中未出现的数值特殊值：按普通值归箱 / 占位箱取 missing_woe"
               }
             }
           },

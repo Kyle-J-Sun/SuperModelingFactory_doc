@@ -161,6 +161,32 @@ from Modeling_Tool.Core import *
 | NumPy ≥ 1.24 + dask ≥ 2022.01 | 正常 |
 | 源码安装最新版 SuperModelingFactory | 已修复，不受影响 |
 
+### Q2b: 升级到 0.8.2 后，notebook 里多了很多 warning
+
+**原因**
+
+0.8.1 及之前，`Modeling_Tool.WOE.WOE_Monotone_Binner`（`import Modeling_Tool` 时就会加载）和 `Modeling_Tool.Model.Backward_Tool` 在导入时执行 `warnings.filterwarnings("ignore")`。这会在**整个 Python 进程**里屏蔽所有告警：SMF 自己的防护告警（如特殊值箱治理降级、声明了但拟合样本中没出现的特殊值）、你自己代码的告警、第三方库的弃用提示全都看不到。0.8.2 删除了这两处全局设置，告警恢复 Python 默认行为；计算结果与之前完全相同，只是这些提示重新可见。
+
+目前常见的几类：
+
+| 告警 | 来源 | 说明 |
+|---|---|---|
+| seaborn 的 `distplot` / `bw` 弃用提示（`UserWarning`） | SMF 评估画图 | seaborn 0.14 将移除这些用法，SMF 会在后续版本迁移 |
+| `divide by zero encountered in log`（`RuntimeWarning`） | WOE/IV 计算中某一类样本为 0 的箱 | 结果与之前版本一致，后续版本会消除这条提示 |
+| pandas `concat` 的 `FutureWarning` | 评估汇总 | 不影响当前结果，后续版本会消除 |
+| `declared special value(s) never occur in the fit sample` 等 | SMF 防护告警 | 需要关注，见 [WOE 指南](guides/woe.md) |
+
+**只屏蔽不想看的告警**
+
+```python
+import warnings
+
+warnings.filterwarnings("ignore", message=r"[\s\S]*distplot")   # 按消息正则
+warnings.filterwarnings("ignore", category=FutureWarning)       # 按类别
+```
+
+不建议再用不带参数的 `warnings.filterwarnings("ignore")`：它会把 SMF 的防护告警一起屏蔽。
+
 ---
 
 ## ODPS 访问密钥配置

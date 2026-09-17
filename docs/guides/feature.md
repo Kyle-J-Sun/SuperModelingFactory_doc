@@ -322,4 +322,4 @@ FeatureValidationPipelineConfig(
 
 ### FVP 类别转换审计（0.7.2）
 
-FVP 会在每个 split 转换后立即冻结类别覆盖率与 unseen 统计，避免 engine 的“最近一次 transform”状态覆盖先前结果。完整结果可从 `woe_artifacts["by_target"][target]["categorical_transform_stats_by_split"]` 与 `unseen_category_stats_by_split` 查看；batch/slim 汇总则保留在 `woe_artifacts["categorical_transform_stats_by_target"]` / `woe_artifacts["unseen_category_stats_by_target"]`。批次合并若发现同一 target/split/feature 的统计冲突会抛错，不会静默覆盖。
+FVP 会在每个 split 转换后立即冻结类别覆盖率与 unseen 统计，避免 engine 的“最近一次 transform”状态覆盖先前结果。完整结果可从 `woe_artifacts["by_target"][target]["categorical_transform_stats_by_split"]` 与 `unseen_category_stats_by_split` 查看；batch/slim 汇总则保留在 `woe_artifacts["categorical_transform_stats_by_target"]` / `woe_artifacts["unseen_category_stats_by_target"]`。0.8.2 起同样冻结数值特征上"声明了但拟合样本里没出现的特殊值"的命中统计（`unseen_special_stats_by_split` / `woe_artifacts["unseen_special_stats_by_target"]`，含义见 [WOE 指南](woe.md)）。批次合并若发现同一 target/split/feature 的统计冲突会抛错，不会静默覆盖。

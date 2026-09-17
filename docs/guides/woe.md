@@ -108,7 +108,7 @@ edges = binner.get_bin_edges()
 
 `get_final_bins()` 返回的每个 DataFrame 都带有 `attrs["smf_woe_format_a"]`。其中的精确数值边界、稀疏箱号、类别成员和 `missing_woe` 只有在 metadata 摘要与行身份校验通过时才会被 `load_woe_bins()` 使用；直接传递或 pickle 往返可以保住这些信息，损坏或陈旧 metadata 会安全退回可见标签解析。
 
-启用了低占比特殊值治理（见下文 SV Bin Governance）的表，attrs 里还会带上每个特殊值箱的 `sv_policy_applied` 决策和拟合时的平滑参数（`sv_decisions`）。这部分有独立的校验摘要，不参与原有 metadata 摘要：旧版本加载器照常验证原有字段，新版本加载后恢复决策，使 by-group 图的组 IV 与拟合时一致。未启用 SV 治理的表 attrs 与旧版完全相同。
+启用了低占比特殊值治理（见下文 SV Bin Governance）的表，attrs 里还会带上每个特殊值箱的 `sv_policy_applied` 决策和拟合时的平滑参数（`sv_decisions`）。这部分有独立的校验摘要，不参与原有 metadata 摘要：旧版本加载器照常验证原有字段，新版本加载后恢复决策，使 by-group 图的组 IV 与拟合时一致。未启用 SV 治理的表 attrs 与旧版完全相同；例外是 `unseen_special_policy="neutral"` 生成了占位箱的表（见下文），它们带 `sv_policy_applied`，决策照常写入。0.8.1 及更早的加载器不认识 `unseen_at_fit`，会整体忽略这份决策（组 IV 按无决策计算），打分不受影响。
 
 !!! warning "CSV/Excel 不是精确往返载体"
     CSV/Excel 会丢失 `DataFrame.attrs`。从这两类文件回载时，`bin_label`（默认 `.8g` 显示精度）是唯一事实来源，无法还原文本之外的精确切点、原始稀疏箱号、歧义类别成员或非默认 `missing_woe`。需要精确恢复时，请直接传递 DataFrame 或使用 pickle 等保留 attrs 的格式。
@@ -269,7 +269,8 @@ binner.get_direction_summary()            # feat / direction / direction_basis /
     采用的是 **rewrite-stored-WOE** 方案：被合并 SV 行的存表 WOE 直接写成 `[Missing]` 的 WOE。因此 `apply_woe()` / `mapping_woe()` 照常按 `bin_label → WOE` 查表即可命中正确值，**两个引擎的 transform 路径都没有任何改动**，fit→transform 往返自动一致。
 
 治理结果可从结果表的 `sv_policy_applied` 列审计，取值为
-`keep` / `neutral` / `neutral(fallback)` / `merged_into_missing` / `merge_target`。
+`keep` / `neutral` / `neutral(fallback)` / `merged_into_missing` / `merge_target`，
+以及 0.8.2 起 `unseen_at_fit`（声明了但拟合样本里没出现的特殊值的占位箱，见下文）。
 
 ### 方式2 —— SV WOE 平滑（`sv_woe_smoothing="laplace"`）
 
@@ -319,6 +320,33 @@ iv  = (pct_bad_smoothed - pct_good_smoothed) * woe
 `[Missing]`（NaN）箱在**两个引擎**里都是一个正常的受治理 SV 箱：占比达标就照常平滑，亚阈值就照常 `neutral` 置零。它唯一的特殊之处是在 `merge_missing` 下**只能当合并目标、不能当合并来源**。
 
 这与 `missing_bin_strategy`（`empirical_special` / `fixed_woe` / `fail`）**正交**：后者只治理 NaN 缺失箱的语义，前者治理**所有** SV 箱（含 `-1` 这类非 NaN 哨兵值）。
+
+### 声明了、但拟合样本里没出现的特殊值（`unseen_special_policy`，0.8.2）
+
+`special_values` 是一份**声明**：如果训练集里某个特征一行 `-1` 都没有，拟合出来的表里就没有 `[sv=-1]` 箱。`MonotoneWOEBinner(unseen_special_policy=...)` 决定这类取值此后怎么处理：
+
+| 取值 | 分箱表 | `apply_woe` 打分、筛选 PSI / IV | by-group 图与组内 IV |
+|---|---|---|---|
+| `"normal_bin"`（默认，旧行为） | 不建箱 | 按普通数值归箱（`-1` 落入最低箱，例如「0 张卡」） | 与打分一致，按普通数值归箱 |
+| `"neutral"` | 追加占位箱 `[sv=-1]`：n=0、WOE=`missing_woe`、IV=0、`sv_policy_applied="unseen_at_fit"` | 取 `missing_woe`（默认 0，中性） | 单独画出该取值的组内占比，组 IV 不计入 |
+
+- 占位箱在全部 SV 治理决策之后追加，不参与小占比兜底、合并与平滑；整体 IV、普通箱边界与 WOE 均不受影响。
+- 占位箱是分箱表里的**可见行**：`get_final_bins()` 导出后，无论经 Format-A attrs 还是 CSV/Excel 回载，打分都保持中性，不依赖加载方的构造参数。
+- 只作用于数值特殊值：声明了 NaN、但拟合时没有缺失值的特征，两种模式下缺失值打分本来就是 `missing_woe`；字符串形式的声明（如 `"-1"`）不建占位箱；类别特征不适用。
+- "某个取值有没有箱"以**拟合表**为准、按数值判定（`-1` 与 `-1.0` 视为同一取值），打分、by-group 图和告警统计用同一套判定；加载方自己声明的 `special_values` 写法不同也不影响。
+- 非整数特殊值（如 `0.5`）只匹配它自己；0.8.1 及之前，特殊值箱标签会被截断出一个整数键，导致取值 `0` 的普通样本也拿到 `[sv=0.5]` 的 WOE，0.8.2 一并修正。
+- by-group 图同样按拟合表拆分特殊值（0.8.2）：表里有 `[Missing]` 箱时，即使加载方没声明 NaN，缺失行也单独成箱（与打分一致；0.8.1 会把这些行从图和组 IV 里丢掉）；表里两行解析成同一数值（如格式 B 按 `special_values=[-1, -1.0]` 造出 `[sv=-1]` 与 `[sv=-1.0]`）时，每行只计入第一个匹配的箱。唯一例外是声明为 `-inf` 且没有箱的取值：打分归入最低箱，图表（`pd.cut`）则不计入这些行。
+- `CreditModelPipeline` 的 monotone 自拟合过去总是默认声明 `-999999`；0.8.2 起只在 WOE 拟合样本里确实出现该值时才声明（`monotone_woe_params` 里显式给出 `special_values` 时照旧）。没出现时声明与否分箱、打分完全一致，因此只是不再为一个不存在的哨兵值告警，也不会在 `neutral` 下给每个特征加占位箱。
+
+两种模式都会留痕，打分数值不受这部分记录影响：
+
+- `fit()`：`binner._unseen_special_at_fit` 记录 `{特征: [取值]}`；`"normal_bin"` 下整次 fit 汇总发一条 `UserWarning`，同时写入 `logger.warning`。
+- `apply_woe()`：`binner._unseen_special_stats` 记录最近一次调用中每个特征命中的取值（按本实例声明的写法，未声明时用表里的数值）、行数、占比与处理方式（`normal_bin` / `neutral` / `mixed`），并发 `RuntimeWarning` + `logger.warning`；`unseen_category_policy="silent"` 时不告警，统计照常记录，`"raise"` 时也只告警、不抛错。
+- `FeatureValidationPipeline` 在每个 split 转换后冻结这份统计：`woe_artifacts["by_target"][target]["unseen_special_stats_by_split"]`，batch/slim 汇总保留在 `woe_artifacts["unseen_special_stats_by_target"]`（与类别 unseen 统计同样的合并规则）。
+- 0.8.1 及之前 `import Modeling_Tool` 会全局屏蔽告警，这些 `warnings.warn` 在普通会话里看不到；0.8.2 起不再屏蔽，见 [FAQ](../faq.md)。
+
+!!! warning "默认值计划在 0.9.0 改为 `neutral`"
+    `"normal_bin"` 会让哨兵值（如表示"无记录"的 `-1`）拿到真实取值箱的 WOE。0.8.2 先以可选参数落地，下一个 minor 版本默认改为 `"neutral"`；需要保持旧打分口径的，请显式传 `unseen_special_policy="normal_bin"`。
 
 ### 用法示例
 
@@ -381,6 +409,8 @@ FVP 的 `config_snapshot` 会原样 dump 这两个字典，`sv_*` 自动进快�
     四个 `sv_*` 已加入 `_MONOTONE_INIT_KEYS`（同样也加进了
     `Feature_Screen._MONOTONE_INIT_KEYS`，否则筛选期复用的 WOE 拟合会漏掉治理，导致筛选 IV 与建模 WOE 口径分裂）。
     今后给 `MonotoneWOEBinner.__init__` 新增任何参数，都必须同步这两份白名单。
+    0.8.2 新增的 `unseen_special_policy` 只属于 monotone 引擎：已加入两份白名单和
+    `monotone_woe_params` 默认字典，不进 `woe_params`。
 
     `sv_*` 是**构造器**参数，**不要**加进 `_MONOTONE_FIT_KEYS`（`{chi2_binning, chi2_p, chi2_init_size, n_jobs}`），
     否则会被当成 `fit()` kwarg 传下去而抛 `TypeError`。CM 侧的 monotone fit-only `pop` 名单同理，
