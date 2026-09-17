@@ -108,6 +108,8 @@ edges = binner.get_bin_edges()
 
 `get_final_bins()` 返回的每个 DataFrame 都带有 `attrs["smf_woe_format_a"]`。其中的精确数值边界、稀疏箱号、类别成员和 `missing_woe` 只有在 metadata 摘要与行身份校验通过时才会被 `load_woe_bins()` 使用；直接传递或 pickle 往返可以保住这些信息，损坏或陈旧 metadata 会安全退回可见标签解析。
 
+启用了低占比特殊值治理（见下文 SV Bin Governance）的表，attrs 里还会带上每个特殊值箱的 `sv_policy_applied` 决策和拟合时的平滑参数（`sv_decisions`）。这部分有独立的校验摘要，不参与原有 metadata 摘要：旧版本加载器照常验证原有字段，新版本加载后恢复决策，使 by-group 图的组 IV 与拟合时一致。未启用 SV 治理的表 attrs 与旧版完全相同。
+
 !!! warning "CSV/Excel 不是精确往返载体"
     CSV/Excel 会丢失 `DataFrame.attrs`。从这两类文件回载时，`bin_label`（默认 `.8g` 显示精度）是唯一事实来源，无法还原文本之外的精确切点、原始稀疏箱号、歧义类别成员或非默认 `missing_woe`。需要精确恢复时，请直接传递 DataFrame 或使用 pickle 等保留 attrs 的格式。
 
@@ -117,6 +119,30 @@ edges = binner.get_bin_edges()
     当 `group_name` 非空且 `bar_mode="clustered"` 时，by-group WOE 图固定使用
     `figsize=(16, 6)` 和 `dpi=200`，以容纳并排柱、分组 WOE 曲线和右侧图例。
     其他模式仍使用调用方传入的 `figsize` 与 `dpi`。
+
+!!! note "By-group 图中的 IV 与 WOE 折线口径"
+    by-group 图的图例（`pooled` / `clustered`）与子图标题（`small_multiples`）中的各组 IV
+    是**组内 IV**，与整体图 IV 同口径，只是样本换成该组：
+
+    - 普通箱：以该组落入普通箱的行的 bad/good 为分母；
+    - 特殊值 / 缺失箱：以该组全部行的 bad/good 为分母，并沿用拟合时每个特殊值箱的治理决策
+      （`sv_policy_applied`），不在组内重新判断占比——`keep` 取经验值（拟合启用平滑时按拟合
+      时的参数平滑），`neutral` 记 0，`merged_into_missing` 并入该组 `[Missing]` 箱；
+    - 组内只有好样本或只有坏样本的箱（普通箱、特殊值箱均适用）不计入组 IV，与筛选 IV 的
+      `iv_guard` 口径一致，避免个别空类箱被 eps 放大成虚高的 IV。
+
+    拟合样本各箱两类齐全时，把整份拟合样本当作一个组，组 IV 等于整体 IV。样本少于 5 行或只有
+    单一类别的组显示 `IV=0.000`；类别特征中拟合时未出现的取值不计入普通箱分母。经
+    `get_final_bins()` → `load_woe_bins()`（保留 attrs）加载的分箱同样沿用拟合决策；CSV/Excel
+    回载或格式 B 不带决策，特殊值箱一律按 `keep` 的经验值计入。
+
+    各组 **WOE 折线**仍以全量 bad/good 为基准。对两类齐全的箱，它等于组内 WOE 加上常数
+    `ln(该组 bad 占全量 bad 的比例 / 该组 good 占全量 good 的比例)`：折线形状与组内一致，
+    上下位置反映该组坏账水平相对整体的高低。
+
+    0.8.0 及之前的版本中，各组 IV 以全量样本为分母且不含特殊值箱，k 个规模相近的组各自只显示
+    约 1/k 的组内 IV；拟合箱号不连续时，各组柱子与折线还会错位。这些版本产出的 by-group 图
+    不要直接与整体 IV 比较。
 
 ## 3. 统一分箱引擎 —— `as_woe_engine`
 
