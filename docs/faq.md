@@ -169,7 +169,18 @@ from Modeling_Tool.Core import *
 
 同理，0.8.1 及之前 `import Modeling_Tool` 还会执行 `pd.set_option('future.no_silent_downcasting', True)`（`Core/Binning_Tool.py`、`Core/kDataFrame.py`、`Core/Slope_Tool.py`、`Core/ODPS_Tool.py` 各一处）。这同样是**进程级**开关：导入 SMF 之后，你自己代码里与 SMF 无关的 `replace()` / `fillna()` 也会改变降级行为并开始报 downcasting 告警。0.8.2 删除了这四处；SMF 自身不依赖该开关（去掉后全量回归无任何 downcasting 告警）。如果你的代码确实需要它，在自己的脚本里显式设置即可。
 
-> 注：`pd.options.mode.chained_assignment = None` 仍在这四个模块的导入时设置（会屏蔽 pandas 的 `SettingWithCopyWarning`），另行处理中。
+同一批还去掉了 `pd.options.mode.chained_assignment = None`（原先在 `Core/kDataFrame.py`、`Core/Binning_Tool.py`、`Core/ODPS_Tool.py`、`Core/Slope_Tool.py`、`ExcelMaster/Template.py` 导入时设置，`Report/Report_Tool.plot_woe` 调用时再设一次）。它关掉的是 pandas 的 `SettingWithCopyWarning`——**"我改了一个切片、改动没生效"这类真 bug 的报警器**，而且是进程级的，连你自己的代码也一并失聪。
+
+它当初被关掉，是因为 SMF 自己在 6 个模块的 9 处触发了它。0.8.2 把这 9 处全部改成在自己的帧上操作，因此该告警可以开着而 SMF 全程不响。**随之而来的行为变化**：
+
+| 位置 | 以前 | 0.8.2 |
+|---|---|---|
+| `run_binning` / `super_binning` | 可能把 `bin_num` / `bin_range` 两列写回你传入的 DataFrame | 只在返回值里，你的表不动 |
+| `get_gains_table`（传 `model` 时） | 在你的表上留下 `_mdl_scr` 临时列 | 不再留下 |
+| `plot_woe` / `plot_woe_group`（**公开 API**） | 把你的列名改成小写，并就地把 `woe`/`iv` 的 inf 替换掉 | 你的表原样不动，图不变 |
+| `scoring` / `select_sample_seed` | 只是触发告警，写入本就落在副本上 | 无变化 |
+
+如果你的代码依赖上面前三行的旧副作用（例如调用 `plot_woe` 之后按小写列名取数），请显式自己做：`df.columns = [c.lower() for c in df.columns]`。
 
 0.8.2 同时清理了 SMF 自身调用触发的弃用与数值提示（seaborn `distplot` / `bw`、WOE/IV 里的 `log(0)`、pandas `concat` / `groupby` 的 FutureWarning、sklearn feature names、xlsxwriter 单格合并、pyodps `Schema`、shap 全局随机数），并修复了其中暴露出的问题（见 0.8.2 更新日志）。现在仍会看到的主要是：
 
