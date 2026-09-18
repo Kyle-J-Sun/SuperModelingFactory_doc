@@ -11,6 +11,8 @@ SuperModelingFactory 各版本迭代总览。所有 `0.3.x` 发布在成型的�
 ## 版本索引
 
 <div class="grid cards" markdown>
+- :material-tag: **[v0.8.2](v0.8.2.md)** - Seven defect batches: `unseen_special_policy` for declared-but-unseen special values, warnings visible at import again, SMF's own warning noise and the bugs behind it, single-class evaluation, bool features in binning/WOE/FVP, and no more process-wide pandas option changes or writes into the caller's DataFrame
+
 - :material-tag: **[v0.8.1](v0.8.1.md)** - By-group WOE chart IV fixed to in-group IV (special bins, fitted SV decisions, unsmoothed single-class cells excluded), SV decisions in Format-A attrs, sparse bin-id alignment, dict-wrapped `load_woe_bins`, and joblib ≥ 1.6 compatibility for `ParallelApplyEngine`
 
 - :material-tag: **[v0.8.0](v0.8.0.md)** - SV bin governance: `sv_min_bin_size` / `sv_small_policy` low-share fallback and `sv_woe_smoothing` / `sv_smoothing_alpha` bad-rate shrinkage on both WOE engines, defaults bit-for-bit identical to 0.7.2
