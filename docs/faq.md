@@ -167,6 +167,10 @@ from Modeling_Tool.Core import *
 
 0.8.1 及之前，`Modeling_Tool.WOE.WOE_Monotone_Binner`（`import Modeling_Tool` 时就会加载）和 `Modeling_Tool.Model.Backward_Tool` 在导入时执行 `warnings.filterwarnings("ignore")`。这会在**整个 Python 进程**里屏蔽所有告警：SMF 自己的防护告警（如特殊值箱治理降级、声明了但拟合样本中没出现的特殊值）、你自己代码的告警、第三方库的弃用提示全都看不到。0.8.2 删除了这两处全局设置，告警恢复 Python 默认行为；计算结果与之前完全相同，只是这些提示重新可见。
 
+同理，0.8.1 及之前 `import Modeling_Tool` 还会执行 `pd.set_option('future.no_silent_downcasting', True)`（`Core/Binning_Tool.py`、`Core/kDataFrame.py`、`Core/Slope_Tool.py`、`Core/ODPS_Tool.py` 各一处）。这同样是**进程级**开关：导入 SMF 之后，你自己代码里与 SMF 无关的 `replace()` / `fillna()` 也会改变降级行为并开始报 downcasting 告警。0.8.2 删除了这四处；SMF 自身不依赖该开关（去掉后全量回归无任何 downcasting 告警）。如果你的代码确实需要它，在自己的脚本里显式设置即可。
+
+> 注：`pd.options.mode.chained_assignment = None` 仍在这四个模块的导入时设置（会屏蔽 pandas 的 `SettingWithCopyWarning`），另行处理中。
+
 0.8.2 同时清理了 SMF 自身调用触发的弃用与数值提示（seaborn `distplot` / `bw`、WOE/IV 里的 `log(0)`、pandas `concat` / `groupby` 的 FutureWarning、sklearn feature names、xlsxwriter 单格合并、pyodps `Schema`、shap 全局随机数），并修复了其中暴露出的问题（见 0.8.2 更新日志）。现在仍会看到的主要是：
 
 | 告警 | 来源 | 说明 |

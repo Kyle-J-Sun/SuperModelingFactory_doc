@@ -320,6 +320,12 @@ FeatureValidationPipelineConfig(
 - G06 默认 `vif_use_woe_bins=False`，只在 raw 数值列上计算 VIF：非数值幸存变量会被保留、发出 warning，并在 `selection_summary` / `stage_tables["vif"]` 中留下排除审计；数值列不足时该门以 `skipped_insufficient_numeric` 跳过。bool 与 pandas nullable 数值列只在 VIF 矩阵内转换为浮点。
 - 将 `vif_use_woe_bins=True` 后，VIF 使用 INS 的 WOE 编码矩阵，分类变量也可参与共线性判断。声明了 `categorical_features` 时必须使用 `woe_engine="monotone"`；`equal_freq` 会在拟合前明确拒绝该组合。预拟合 WOE engine 必须覆盖全部幸存变量，且自定义 WOE 后缀会被自动识别。
 
+### bool 特征（0.8.2）
+
+numpy 不接受对 bool 数组取分位数（`TypeError: numpy boolean subtract`），所以 0.8.1 及之前，**任何基于分位数的分箱碰到 bool 特征都会失败**：`quick_binning`、`super_binning`、收益表、`WOE_Master`、monotone 分箱、两个筛选器都会抛错。在开启 WOE 的 FVP 里，它表现为一句被吞掉的"特征洞察计算失败"告警加上 `KeyError: WOE column 'x_woe' was not produced`——整条流程中断，而同一列 `astype("int8")` 之后一切正常。
+
+0.8.2 在取分位数的位置把 bool 列映射为 0/1，分箱、WOE 表、IV 与打分结果与 int8 副本**逐位一致**；只有 WOE 表的 `MIN` / `MAX` 仍按特征本身报告 `False` / `True`。pandas nullable `boolean` 列转为 `Int8`，缺失值保持缺失。分布摘要里 bool 仍按类别特征报告（0.8.2 起，见上文）。
+
 ### FVP 类别转换审计（0.7.2）
 
 FVP 会在每个 split 转换后立即冻结类别覆盖率与 unseen 统计，避免 engine 的“最近一次 transform”状态覆盖先前结果。完整结果可从 `woe_artifacts["by_target"][target]["categorical_transform_stats_by_split"]` 与 `unseen_category_stats_by_split` 查看；batch/slim 汇总则保留在 `woe_artifacts["categorical_transform_stats_by_target"]` / `woe_artifacts["unseen_category_stats_by_target"]`。0.8.2 起同样冻结数值特征上"声明了但拟合样本里没出现的特殊值"的命中统计（`unseen_special_stats_by_split` / `woe_artifacts["unseen_special_stats_by_target"]`，含义见 [WOE 指南](woe.md)）。批次合并若发现同一 target/split/feature 的统计冲突会抛错，不会静默覆盖。
