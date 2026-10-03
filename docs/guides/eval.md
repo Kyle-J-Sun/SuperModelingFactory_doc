@@ -1,48 +1,48 @@
-# 模型评估
+# Model Evaluation
 
-SuperModelingFactory 在 [`Eval`](../api/eval.md) 子包提供**Gains 表 / 性能汇总 / ROC-KS-PR 图 / 链式评估流水线**等工具。
+SuperModelingFactory provides tools in the [`Eval`](../api/eval.md) subpackage for **Gains tables / performance summaries / ROC-KS-PR plots / chained evaluation pipelines**.
 
-## 样本权重评估
+## Sample-Weighted Evaluation
 
-传入 `weight_col`（或底层函数的 `sample_weight`）后，Gains 表、性能汇总、ROC/KS/Lift
-等指标均按权重聚合。**不传权重时与历史行为完全一致**（向后兼容）。
+After you pass `weight_col` (or `sample_weight` for the low-level functions), the Gains table, performance summaries, and ROC/KS/Lift
+metrics are all aggregated by weight. **Without weights, behavior is exactly the same as before** (backward compatible).
 
-!!! info "原生 API"
+!!! info "Native API"
 
-    自主仓合并 [PR #25](https://github.com/Kyle-J-Sun/SuperModelingFactory/pull/25) 起，
-    加权逻辑已内置于 `Modeling_Tool.Eval`，无需运行时 patch。
+    Since the main repository merged [PR #25](https://github.com/Kyle-J-Sun/SuperModelingFactory/pull/25),
+    the weighting logic has been built into `Modeling_Tool.Eval`, with no runtime patch needed.
 
-### N 与 N_RAW
+### N and N_RAW
 
-Gains 表与分箱聚合输出中，样本量有两套计数：
+In Gains tables and binned aggregation outputs, sample size is counted two ways:
 
-| 列 | 含义 | 典型用途 |
+| Column | Meaning | Typical use |
 |----|------|----------|
-| `N` | 该分箱内**权重之和**（有效样本量） | 加权坏样本率、Lift、累计捕获率 |
-| `N_RAW` | 该分箱内**行数**（原始记录数） | 审计、核对原始户数/笔数 |
+| `N` | **Sum of weights** in the bin (effective sample size) | Weighted bad rate, Lift, cumulative capture rate |
+| `N_RAW` | **Number of rows** in the bin (raw record count) | Auditing, reconciling raw account/transaction counts |
 
-举例：一行代表一个账户、权重为贷款余额时，`N_RAW` 是账户数，`N` 是余额总量。
-加权场景下，坏样本率 = `sum(y * w) / sum(w)`，Lift = 该箱加权坏率 / 总体加权坏率。
+For example: when each row is an account and the weight is the loan balance, `N_RAW` is the number of accounts and `N` is the total balance.
+In the weighted case, bad rate = `sum(y * w) / sum(w)`, and Lift = the bin's weighted bad rate / the overall weighted bad rate.
 
-### 加权指标语义
+### Weighted Metric Semantics
 
-| 指标 | 加权行为 |
+| Metric | Weighted behavior |
 |------|----------|
-| `AUC` | 透传 sklearn `roc_auc_score(..., sample_weight=...)` |
-| `KS` | 在加权 ROC 曲线上取最大 TPR−FPR |
-| `Gini` | `2 * AUC - 1`（基于加权 AUC） |
-| `Top10%_TargetRate` | Top 10% 分数段内的**加权**坏样本占比 |
-| `Top10%_Lift` | Top 10% 分数段的**加权**提升倍数 |
-| Gains 坏样本率 / WOE / IV | 按 `N`（权重和）聚合 |
+| `AUC` | Passed through to sklearn `roc_auc_score(..., sample_weight=...)` |
+| `KS` | Maximum TPR−FPR on the weighted ROC curve |
+| `Gini` | `2 * AUC - 1` (based on the weighted AUC) |
+| `Top10%_TargetRate` | **Weighted** bad-sample share within the top 10% score band |
+| `Top10%_Lift` | **Weighted** lift multiple of the top 10% score band |
+| Gains bad rate / WOE / IV | Aggregated by `N` (sum of weights) |
 
-### 加权评估图片
+### Weighted Evaluation Images
 
-设置 `fig_save_path` 时，图片与汇总表使用完全相同的权重口径。每个数据集会读取
-自己通过 `add_dataset(..., weight_col=...)` 注册的权重，ROC、分数分布/KDE、
-Percentile 和 Gain 四个面板均按该权重计算，并在标题中标记 `Weighted`。
-如果某个 OOS/OOT 数据集的权重全为 1，加权图片与未加权图片数值相同。
+When `fig_save_path` is set, the images and the summary table use exactly the same weighting basis. Each dataset reads
+the weight it registered through `add_dataset(..., weight_col=...)`; the ROC, score distribution/KDE,
+Percentile, and Gain panels are all computed with that weight, and the title is marked `Weighted`.
+If the weights of an OOS/OOT dataset are all 1, the weighted and unweighted images have identical values.
 
-## 1. 多数据集评估 —— `PerformanceEvaluator`
+## 1. Multi-Dataset Evaluation — `PerformanceEvaluator`
 
 ```python
 from Modeling_Tool import PerformanceEvaluator
@@ -51,7 +51,7 @@ evaluator = PerformanceEvaluator(
     tgt_name="bad_flag",
     model=gbm._model.model,
     feature_cols=woe_features,
-    weight_col="sample_wgt",   # 可选：各 add_dataset 的 DataFrame 中须有该列
+    weight_col="sample_wgt",   # optional: the DataFrame of each add_dataset must have this column
 )
 
 perf = (
@@ -64,72 +64,72 @@ perf = (
 print(perf[["index", "KS", "AUC", "Top10%_TargetRate"]])
 ```
 
-### 输出指标
+### Output Metrics
 
-| 指标 | 含义 |
+| Metric | Meaning |
 |------|------|
-| `KS` | Kolmogorov-Smirnov（最大 TPR-FPR） |
-| `AUC` | ROC 曲线下面积 |
+| `KS` | Kolmogorov-Smirnov (maximum TPR-FPR) |
+| `AUC` | Area under the ROC curve |
 | `Gini` | `2*AUC - 1` |
-| `Top10%_TargetRate` | Top 10% 分数段内的坏样本占比 |
-| `Top10%_Lift` | Top 10% 分数段的提升倍数 |
-| `AvgScore` | 平均分数 |
+| `Top10%_TargetRate` | Bad-sample share within the top 10% score band |
+| `Top10%_Lift` | Lift multiple of the top 10% score band |
+| `AvgScore` | Average score |
 
-### 多 y 标签对比
+### Multi-y-Label Comparison
 
-`tgt_name` 可传入**多个 y 标签的 list/tuple**，对每个标签分别评估：
+`tgt_name` accepts a **list/tuple of multiple y labels**, evaluating each label separately:
 
-- **表格**：新增 `tgt_name` 列，各标签结果**纵向拼接**为一张表；
-- **图片**：每个标签**各出一张图**，`to_show=True` 时循环显示；`fig_save_path` 自动按标签加后缀（`perf.png` → `perf_<label>.png`）。
+- **Table**: a new `tgt_name` column is added, and the results for each label are **stacked vertically** into one table;
+- **Images**: **one image per label**, displayed in a loop when `to_show=True`; `fig_save_path` automatically gets a label suffix (`perf.png` → `perf_<label>.png`).
 
 ```python
 perf = (
     PerformanceEvaluator(
-        tgt_name=["bad_dpd7", "bad_dpd30"],   # 多个 y 标签
+        tgt_name=["bad_dpd7", "bad_dpd30"],   # multiple y labels
         model=gbm._model.model,
         feature_cols=woe_features,
         weight_col="sample_wgt",
     )
     .add_dataset("train", train_woe)
     .add_dataset("oot",   oot_woe)
-    .evaluate(to_show=True)                    # 每个标签各出一张图
+    .evaluate(to_show=True)                    # one image per label
 )
 
-# 输出含 tgt_name 列, 各标签纵向拼接
+# The output contains a tgt_name column, with each label stacked vertically
 print(perf[["tgt_name", "index", "KS", "AUC"]])
 ```
 
-> 传单个 `str`（如 `tgt_name="bad_flag"`）时行为不变，输出不含 `tgt_name` 列（向后兼容）。
+> Passing a single `str` (such as `tgt_name="bad_flag"`) behaves as before, and the output has no `tgt_name` column (backward compatible).
 
-`Model_Evaluation_Tool.model_perf_compare()` 是对 `PerformanceEvaluator` 的高层封装，会按 `base_score + comp_scrlist` 批量比较 OOT 性能并附加 `score_name` 列。
+`Model_Evaluation_Tool.model_perf_compare()` is a high-level wrapper around `PerformanceEvaluator` that compares OOT performance in batch using `base_score + comp_scrlist` and appends a `score_name` column.
 
-## 2. Gains 表 —— `GainsTableCalculator`
+## 2. Gains Table — `GainsTableCalculator`
 
-按分数分箱的收益表，是业务方最熟悉的报表形式。
+A gains table binned by score, the report form most familiar to business stakeholders.
 
 ```python
 from Modeling_Tool import GainsTableCalculator
 
 gains = GainsTableCalculator(
     data=test_woe,
-    score="prob",       # 分数列
+    score="prob",       # score column
     dep="bad_flag",
-    weight_col="sample_wgt",     # 可选：加权 Gains
-    weighted_binning=True,       # True=按累计权重等频分箱；False=按行数（默认）
+    weight_col="sample_wgt",     # optional: weighted Gains
+    weighted_binning=True,       # True = equal-frequency bins by cumulative weight; False = by row count (default)
     nbins=10,
 )
 gains_table = gains.calculate()
-print(gains_table)   # 含 N（权重和）与 N_RAW（行数）
+print(gains_table)   # contains N (sum of weights) and N_RAW (row count)
 ```
 
-`get_gains_table` / `get_gains_table_by_cust_metrics` 同样接受 `weight_col`；
-加权时坏/好样本计数、坏样本率、Lift、KS、WOE、IV 均按权重计算。
+`get_gains_table` / `get_gains_table_by_cust_metrics` also accept `weight_col`;
+when weighted, the bad/good counts, bad rate, Lift, KS, WOE, and IV are all computed by weight.
 
-`Model_Evaluation_Tool.get_gains_summary()` 内部使用 `GainsTableCalculator`，为多分数批量生成 gains 表，并支持 `add_func` 注入自定义列。
+`Model_Evaluation_Tool.get_gains_summary()` uses `GainsTableCalculator` internally to generate gains tables for multiple scores in batch, and supports injecting custom columns through `add_func`.
 
-## 3. 自定义指标 —— `add_func`
+## 3. Custom Metrics — `add_func`
 
-`Model_Evaluation_Tool.get_gains_summary(add_func=...)` 与 `GainsTableCalculator.calculate(add_func=...)` 使用同一扩展点：在分箱后的 grouped data 上追加自定义统计列。
+`Model_Evaluation_Tool.get_gains_summary(add_func=...)` and `GainsTableCalculator.calculate(add_func=...)` share the same extension point: append custom statistics columns on the binned grouped data.
 
 ```python
 from Modeling_Tool import Model_Evaluation_Tool, GainsTableCalculator
@@ -145,7 +145,7 @@ m_eval = Model_Evaluation_Tool(
 )
 gains = m_eval.get_gains_summary(add_func=mean_income)
 
-# 或直接调用计算器
+# Or call the calculator directly
 gains = GainsTableCalculator(
     data=test_woe,
     score="prob",
@@ -154,7 +154,7 @@ gains = GainsTableCalculator(
 ).calculate(add_func=mean_income)
 ```
 
-函数级 API `get_gains_table_by_cust_metrics` 仍可用于按列名批量聚合：
+The function-level API `get_gains_table_by_cust_metrics` can still be used for batch aggregation by column name:
 
 ```python
 from Modeling_Tool import get_gains_table_by_cust_metrics
@@ -170,9 +170,9 @@ gains = get_gains_table_by_cust_metrics(
 )
 ```
 
-## 4. 交叉风险矩阵 —— `cross_risk`
+## 4. Cross-Risk Matrix — `cross_risk`
 
-按**两个分数分箱**做联合风险评估（典型场景：新模型 vs 老模型对比）。
+Joint risk evaluation by **two score binnings** (typical scenario: comparing a new model against an old model).
 
 ```python
 from Modeling_Tool import cross_risk
@@ -187,9 +187,9 @@ risk_matrix = cross_risk(
 print(risk_matrix)
 ```
 
-## 5. 链式评估流水线 —— `EvaluationPipeline`
+## 5. Chained Evaluation Pipeline — `EvaluationPipeline`
 
-按条件分组/子集后执行自定义函数：
+Run a custom function after grouping/subsetting by conditions:
 
 ```python
 from Modeling_Tool import EvaluationPipeline, Model_Evaluation_Tool
@@ -203,8 +203,8 @@ m_eval = Model_Evaluation_Tool(
 
 pipeline = (
     EvaluationPipeline(m_eval)
-    .group_by("apply_month", min_size=100)        # 按月份分组
-    .subset_by({"city_grade": ["A", "B"]}, name="top_city")  # 筛选头部城市
+    .group_by("apply_month", min_size=100)        # group by month
+    .subset_by({"city_grade": ["A", "B"]}, name="top_city")  # filter to the top cities
 )
 
 def per_group_metrics(current_data):
@@ -217,27 +217,27 @@ def per_group_metrics(current_data):
 result = pipeline.apply(per_group_metrics)
 ```
 
-## 6. ROC / KS / PR / KDE 图 —— `evaluate_model.py`
+## 6. ROC / KS / PR / KDE Plots — `evaluate_model.py`
 
-直接绘制图片到本地：
+Draw images directly to local disk:
 
 ```python
 from Modeling_Tool import evaluate_performance, comparison_performance
 
-# 单模型：datasets = {数据集名: {'y_true':, 'y_score':, 'sample_weight': (可选)}}
+# Single model: datasets = {dataset name: {'y_true':, 'y_score':, 'sample_weight': (optional)}}
 evaluate_performance(
     datasets={
         "test": {
             "y_true": test_woe["bad_flag"],
             "y_score": test_woe["prob"],
-            "sample_weight": test_woe["sample_wgt"],   # 可选
+            "sample_weight": test_woe["sample_wgt"],   # optional
         }
     },
     to_show=False,
     save_path="./output/perf/",
 )
 
-# 多模型对比：每个数据集用 y_score_dict 放多个模型的分
+# Multi-model comparison: in each dataset, use y_score_dict to hold the scores of several models
 comparison_performance(
     datasets={
         "test": {
@@ -256,20 +256,20 @@ comparison_performance(
 )
 ```
 
-`calc_pr` / `calc_roc` 也接受 `sample_weight`，透传至 sklearn。
-分箱聚合（`calc_equid_dist` / `calc_equid_pct` / `calc_fixed_pct`）在提供权重时输出
-`n`（权重和）与 `n_raw`（行数）两列。
+`calc_pr` / `calc_roc` also accept `sample_weight`, passed through to sklearn.
+Binned aggregations (`calc_equid_dist` / `calc_equid_pct` / `calc_fixed_pct`) output two columns when weights are provided:
+`n` (sum of weights) and `n_raw` (row count).
 
-生成的图包括：
+The generated plots include:
 
-- ROC 曲线（含 AUC）
-- KS 曲线
-- PR 曲线
-- 分数 KDE 分布
-- 累计分布图
-- Gain / Lift 图
+- ROC curve (with AUC)
+- KS curve
+- PR curve
+- Score KDE distribution
+- Cumulative distribution plot
+- Gain / Lift plots
 
-## 7. Lift 表 —— `calc_lift_apt`
+## 7. Lift Table — `calc_lift_apt`
 
 ```python
 from Modeling_Tool import calc_lift_apt
@@ -277,13 +277,13 @@ from Modeling_Tool import calc_lift_apt
 lift_table = calc_lift_apt(
     y_true=test_woe["bad_flag"],
     y_score=test_woe["prob"],
-    sample_weight=test_woe["sample_wgt"],   # 可选
-    start=1.5, stop=3.0, step=0.5,   # lift 阈值区间与步长
+    sample_weight=test_woe["sample_wgt"],   # optional
+    start=1.5, stop=3.0, step=0.5,   # lift threshold range and step
 )
 print(lift_table)
 ```
 
-## 完整评估流水线
+## Complete Evaluation Pipeline
 
 ```python
 from Modeling_Tool import (
@@ -291,7 +291,7 @@ from Modeling_Tool import (
     get_gains_table_by_cust_metrics, evaluate_performance,
 )
 
-# 1) 多数据集汇总
+# 1) Multi-dataset summary
 perf = PerformanceEvaluator(
     tgt_name="bad_flag",
     model=gbm._model.model,
@@ -300,14 +300,14 @@ perf = PerformanceEvaluator(
 ).add_dataset("train", train_woe) \
  .add_dataset("test",  test_woe).evaluate()
 
-# 2) Gains 表 + 自定义指标
+# 2) Gains table + custom metrics
 gains = get_gains_table_by_cust_metrics(
     test_woe, score="prob", dep="bad_flag", nbins=10,
     weight_col="sample_wgt",
     eval_metrics=["income"], metric_agg_func="mean",
 )
 
-# 3) 输出图
+# 3) Output plots
 evaluate_performance(
     datasets={
         "test": {
@@ -321,27 +321,27 @@ evaluate_performance(
 )
 ```
 
-## 常见问题
+## FAQ
 
-??? question "AUC 与 KS 不一致（AUC 高 KS 低）"
+??? question "AUC and KS disagree (high AUC, low KS)"
 
-    通常意味着**分数集中在中段**。检查 Top 10% 分数段覆盖了多少坏样本。
+    This usually means **scores are concentrated in the middle range**. Check how many bad samples the top 10% score band covers.
 
-??? question "OOT AUC 远低于测试集"
+??? question "OOT AUC is far lower than the test set"
 
-    PSI > 0.25 表示分布显著漂移，需做：
+    PSI > 0.25 indicates significant distribution drift, so you need to:
 
-    1. 检查入模变量 PSI
-    2. 必要时重新训练（用更新窗口的样本）
+    1. Check the PSI of the model input variables
+    2. Retrain if necessary (using samples from a more recent window)
 
-??? question "Gains 表里 N 与 N_RAW 差很多，该看哪个？"
+??? question "N and N_RAW differ a lot in the Gains table — which one should I look at?"
 
-    业务指标（坏样本率、Lift、捕获率）基于 `N`（权重和）。
-    `N_RAW` 仅反映原始行数，用于核对「这一箱有多少户/笔」。
-    若一行一户且权重均为 1，则 `N == N_RAW`。
+    Business metrics (bad rate, Lift, capture rate) are based on `N` (sum of weights).
+    `N_RAW` reflects only the raw row count, and is used to check "how many accounts/transactions are in this bin".
+    If each row is one account and all weights are 1, then `N == N_RAW`.
 
-??? question "训练用了权重，评估忘记传会怎样？"
+??? question "What happens if I trained with weights but forget to pass them at evaluation?"
 
-    评估默认等权（每行权重 1），与加权训练模型的目标分布不一致，
-    可能导致 AUC/KS/Lift 与训练期认知偏差。请在 `PerformanceEvaluator`、
-    `GainsTableCalculator` 等处统一传入相同的 `weight_col`。
+    Evaluation defaults to equal weights (weight 1 per row), which is inconsistent with the target distribution of the weighted-trained model
+    and may leave you with a skewed picture of AUC/KS/Lift compared with training time. Pass the same `weight_col` consistently to `PerformanceEvaluator`,
+    `GainsTableCalculator`, and similar entry points.

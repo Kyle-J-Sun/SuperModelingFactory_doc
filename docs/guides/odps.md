@@ -1,65 +1,65 @@
-# ODPS 数据抽取
+# ODPS Data Extraction
 
-SuperModelingFactory 的 [`Modeling_Tool.Core.ODPS_Tool`](../api/core.md) 提供 `ODPSRunner` —— 封装阿里云 MaxCompute (ODPS) 的 SQL 执行、数据下载与上传。
+SuperModelingFactory's [`Modeling_Tool.Core.ODPS_Tool`](../api/core.md) provides `ODPSRunner` — a wrapper around SQL execution, data download, and upload for Alibaba Cloud MaxCompute (ODPS).
 
-## 1. 快速上手
+## 1. Quickstart
 
 ```python
 from Modeling_Tool.Core.ODPS_Tool import ODPSRunner
 
 odps = ODPSRunner()
 
-# 1) 拉数据到 DataFrame
+# 1) Pull data into a DataFrame
 df = odps.run_sql("SELECT * FROM mex_anls.drv LIMIT 1000")
 print(df.head())
 
-# 2) 拉数据直接落盘 CSV (大表推荐)
+# 2) Pull data straight to a CSV on disk (recommended for large tables)
 _ = odps.run_sql(
     "SELECT * FROM mex_anls.drv",
     to_df=False,
     csv_path="/data/drv.csv",
 )
 
-# 3) 既要 DataFrame 也要落盘
+# 3) Get both the DataFrame and the file on disk
 df = odps.run_sql(
     "SELECT * FROM mex_anls.drv",
     csv_path="/data/drv.csv",
 )
 ```
 
-## 2. `run_sql` 参数语义
+## 2. `run_sql` Parameter Semantics
 
-| `to_df` | `csv_path` | 行为 | 返回 |
+| `to_df` | `csv_path` | Behavior | Returns |
 |---------|-----------|------|------|
-| `True` | `None` | 下载到内存 | DataFrame |
-| `True` | 设置 | 下载 + 写 CSV | DataFrame |
-| `False` | `None` | **不下载** (DDL/INSERT 用) | 空 DataFrame |
-| `False` | 设置 | 下载 + 写 CSV (释放内存) | 空 DataFrame |
+| `True` | `None` | Download into memory | DataFrame |
+| `True` | Set | Download + write CSV | DataFrame |
+| `False` | `None` | **No download** (for DDL/INSERT) | Empty DataFrame |
+| `False` | Set | Download + write CSV (frees memory) | Empty DataFrame |
 
-!!! warning "反直觉的 `to_df=False + csv_path`"
+!!! warning "The counterintuitive `to_df=False + csv_path`"
 
-    历史上 `to_df=False` 会让 `csv_path` 也被**静默忽略** — 见 [§7 历史坑位](#7-常见坑位)。
-    当前版本已修复: `to_df` 与 `csv_path` 互相独立, 只要任一被设置就会触发下载。
+    Historically, `to_df=False` caused `csv_path` to be **silently ignored** as well — see [§7 Historical pitfalls](#7-common-pitfalls).
+    The current version has fixed this: `to_df` and `csv_path` are independent of each other, and setting either one triggers the download.
 
-## 3. 内部机制
+## 3. Internals
 
-### 3.1 重试策略
+### 3.1 Retry Policy
 
-- **执行阶段** (`execute_sql`) — 只跑 1 次, 无重试 (避免重复扣费)
-- **下载阶段** (`to_pandas` + `to_csv`) — 最多 6 次重试, 适合网络抖动
+- **Execution stage** (`execute_sql`) — runs only once, with no retry (to avoid being billed twice)
+- **Download stage** (`to_pandas` + `to_csv`) — up to 6 retries, suited to network jitter
 
-### 3.2 宽表 schema 补丁
+### 3.2 Wide-Table Schema Patch
 
-当 SQL 返回列数 > 200 时, `ODPSRunner` 会自动启用线程安全的 wide-schema patch:
+When a SQL result has more than 200 columns, `ODPSRunner` automatically enables a thread-safe wide-schema patch:
 
 ```text
-HTTP 414 (URI Too Long) ← 原始请求中包含全部列名作为 URL query 参数
-                         修补后 → 移除 columns 参数, 由 server 全量返回
+HTTP 414 (URI Too Long) ← the original request carries all column names as URL query parameters
+                         after the patch → the columns parameter is removed, and the server returns everything
 ```
 
-补丁会自动恢复，对调用方透明。多线程同时下载宽表时，内部用锁和引用计数保证最后一个下载任务退出后才恢复 ODPS 原始方法，避免并发 patch/unpatch 互相覆盖。
+The patch is restored automatically and is transparent to the caller. When several threads download wide tables at the same time, an internal lock and reference count ensure the original ODPS method is restored only after the last download task exits, so concurrent patch/unpatch calls cannot overwrite each other.
 
-### 3.3 `__init__` 中的连接配置
+### 3.3 Connection Configuration in `__init__`
 
 ```python
 class ODPSRunner:
@@ -67,7 +67,7 @@ class ODPSRunner:
         self.o = ODPS(
             "<ALIBABA_CLOUD_ACCESS_KEY_ID>",      # AccessKey ID
             "<ALIBABA_CLOUD_ACCESS_KEY_SECRET>",  # AccessKey Secret
-            "mex_anls",                          # ← 默认 project
+            "mex_anls",                          # ← default project
             endpoint="https://service.ap-southeast-1-vpc.maxcompute.aliyun-inc.com/api",
         )
         options.retry_times = 6
@@ -76,11 +76,11 @@ class ODPSRunner:
         options.read_timeout = 3600
 ```
 
-!!! warning "凭证配置"
+!!! warning "Credential configuration"
 
-    当前实现通过环境变量读取阿里云凭证。请勿把真实凭证写入源码或文档。
+    The current implementation reads the Alibaba Cloud credentials from environment variables. Never write real credentials into source code or documentation.
     
-    1. 通过环境变量注入:
+    1. Inject through environment variables:
        ```python
        self.o = ODPS(
            os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"],
@@ -89,10 +89,10 @@ class ODPSRunner:
            endpoint=os.environ["ODPS_ENDPOINT"],
        )
        ```
-    2. 配合 `.gitignore` 把 `.env` 加入忽略, 避免泄漏
-    3. 长期可改用 RAM Role / STS Token
+    2. Add `.env` to `.gitignore` to avoid leaking it
+    3. In the long run, consider switching to a RAM Role / STS Token
 
-## 4. 完整示例 — 抽取样本到本地
+## 4. Complete Example — Extract a Sample to Local Disk
 
 ```python
 from pathlib import Path
@@ -101,26 +101,26 @@ from Modeling_Tool.Core.utils import parse_sql_file, mkdir_if_not_exist
 
 odps = ODPSRunner()
 
-# 1) 渲染 SQL 模板
+# 1) Render the SQL template
 sql = parse_sql_file(
     sql_path="sql/00_sample.sql",
     tgt_name="IS_DPD7",
-    varlist="score_b, income, age, n_overdue",  # 占位符替换
+    varlist="score_b, income, age, n_overdue",  # placeholder substitution
 )
 
-# 2) 落盘目录
+# 2) Output directory
 out_dir = Path("data/")
 mkdir_if_not_exist(str(out_dir))
 csv_path = out_dir / "sample_drv.csv"
 
-# 3) 跑 SQL, 只写 CSV, 不占用内存
+# 3) Run the SQL, write only the CSV, use no memory
 _ = odps.run_sql(sql, to_df=False, csv_path=str(csv_path), n_process=4)
-print(f"样本已抽取: {csv_path}")
+print(f"Sample extracted: {csv_path}")
 ```
 
-## 5. `proc_means_odps` ODPS 端描述性统计
+## 5. `proc_means_odps`: ODPS-Side Descriptive Statistics
 
-`proc_means_odps()` 直接在 MaxCompute 中计算数值变量的描述性统计，只把聚合后的小结果下载为 pandas DataFrame。它适合行数很大或特征很多、不希望先 `SELECT *` 拉取全表的场景。
+`proc_means_odps()` computes descriptive statistics for numeric variables directly in MaxCompute, and downloads only the small aggregated result as a pandas DataFrame. It suits scenarios with very many rows or very many features, where you do not want to `SELECT *` the full table first.
 
 ```python
 from Modeling_Tool import proc_means_odps
@@ -132,16 +132,16 @@ summary = proc_means_odps(
 )
 ```
 
-默认输出一行一个变量：
+The default output has one row per variable:
 
 ```text
 attribute, N_ALL, N, MEAN, STD, MIN,
 Q5, Q15, Q25, Q50, Q75, Q95, Q99, MAX, MISSING_RATE
 ```
 
-### 5.1 按 group 统计
+### 5.1 Statistics by Group
 
-`group` 支持字符串或字段列表，输出结构和数值型 `proc_means_by_grp()` 一致：
+`group` accepts a string or a list of columns, and the output structure matches the numeric `proc_means_by_grp()`:
 
 ```python
 grouped = proc_means_odps(
@@ -152,21 +152,21 @@ grouped = proc_means_odps(
 )
 ```
 
-默认 `include_missing_group=False`，任一 group 字段为 NULL 的记录不进入分组结果，与 pandas `groupby` 的默认口径一致。设为 `True` 可保留 NULL group。
+The default is `include_missing_group=False`: records where any group column is NULL do not enter the grouped result, consistent with the default of pandas `groupby`. Set it to `True` to keep NULL groups.
 
-### 5.2 字段选择与批次
+### 5.2 Column Selection and Batches
 
-- `select_cols=None`：从普通表字段中自动选择数值列，不自动分析分区字段。
-- `select_cols=[...]`：只分析指定数值列；显式传入非数值列会报错。
-- `skip_cols=[...]`：从候选列中剔除字段；与 `select_cols` 重叠时 `skip_cols` 优先。
-- `group` 字段只参与分组，不会作为指标变量重复分析。
-- `batch_size=50`：每条 ODPS 聚合 SQL 处理 50 个特征。它限制 SQL 宽度，不是行级 chunk，也不会下载源数据行。
+- `select_cols=None`: automatically choose numeric columns from the ordinary table columns; partition columns are not analyzed automatically.
+- `select_cols=[...]`: analyze only the specified numeric columns; explicitly passing a non-numeric column raises an error.
+- `skip_cols=[...]`: remove columns from the candidates; when it overlaps with `select_cols`, `skip_cols` takes precedence.
+- `group` columns take part only in grouping and are not analyzed again as metric variables.
+- `batch_size=50`: each ODPS aggregation SQL handles 50 features. It limits the SQL width; it is not a row-level chunk and never downloads source data rows.
 
-每个 feature batch 只扫描源表一次，同时计算该批所有变量的 `COUNT/AVG/STDDEV_SAMP/MIN/PERCENTILE/MAX`，然后在本地把小型宽聚合结果转成长表。任一 batch 失败时函数立即抛错，CSV 和 ODPS 结果表都不会写出半成品。
+Each feature batch scans the source table only once, computing `COUNT/AVG/STDDEV_SAMP/MIN/PERCENTILE/MAX` for all variables in that batch at the same time, and then converts the small wide aggregated result into a long table locally. If any batch fails, the function raises immediately, and neither the CSV nor the ODPS result table gets a half-finished output.
 
-### 5.3 分位数与特殊缺失值
+### 5.3 Quantiles and Special Missing Values
 
-默认使用适合大表的近似分位数：
+By default, approximate quantiles suited to large tables are used:
 
 ```python
 approx = proc_means_odps(
@@ -177,7 +177,7 @@ approx = proc_means_odps(
 )
 ```
 
-需要更接近 pandas 线性插值时可显式选择精确模式：
+When you need something closer to pandas linear interpolation, choose the exact mode explicitly:
 
 ```python
 exact = proc_means_odps(
@@ -187,9 +187,9 @@ exact = proc_means_odps(
 )
 ```
 
-`approx` 使用 MaxCompute `PERCENTILE_APPROX`，`exact` 使用 `PERCENTILE_CONT`。精确模式需要更多计算资源，不建议在超大表和高基数组合分组上默认开启。
+`approx` uses MaxCompute `PERCENTILE_APPROX`, and `exact` uses `PERCENTILE_CONT`. The exact mode needs more compute resources and is not recommended as the default on very large tables or high-cardinality group combinations.
 
-特殊缺失值会在 SQL 聚合前转换为 NULL：
+Special missing values are converted to NULL before the SQL aggregation:
 
 ```python
 summary = proc_means_odps(
@@ -202,17 +202,17 @@ summary = proc_means_odps(
 )
 ```
 
-`N_ALL` 是过滤后 group 的总样本数，`N` 是排除 SQL NULL 和特殊缺失值后的有效样本数，`MISSING_RATE = 1 - N / N_ALL`。
+`N_ALL` is the total sample count of the filtered group, `N` is the valid sample count after excluding SQL NULL and special missing values, and `MISSING_RATE = 1 - N / N_ALL`.
 
-### 5.4 CSV 与 ODPS 输出
+### 5.4 CSV and ODPS Output
 
-默认只返回 DataFrame，不创建本地文件或远端表：
+By default, only a DataFrame is returned, and no local file or remote table is created:
 
 ```python
 summary = proc_means_odps("mex_anls.feature_wide_table")
 ```
 
-可选写 CSV，固定不写 pandas 索引：
+You can optionally write a CSV, always without the pandas index:
 
 ```python
 summary = proc_means_odps(
@@ -221,53 +221,53 @@ summary = proc_means_odps(
 )
 ```
 
-写回 MaxCompute 时必须显式指定模式：
+Writing back to MaxCompute requires an explicitly specified mode:
 
 ```python
 summary = proc_means_odps(
     "mex_anls.feature_wide_table",
     output_table_name="mex_anls.feature_means_report",
-    output_table_mode="overwrite",  # 或 "append"
+    output_table_mode="overwrite",  # or "append"
 )
 ```
 
-- `overwrite` 使用 `ODPSRunner.upload_df(..., atomic=True)` 原子替换目标表。
-- `append` 要求目标表已存在，且字段名称、顺序和类型与结果完全兼容。
-- 输入表和输出表不能是同一张表。
-- 第一版只支持写入非分区结果表。
+- `overwrite` uses `ODPSRunner.upload_df(..., atomic=True)` to replace the target table atomically.
+- `append` requires the target table to already exist, with column names, order, and types fully compatible with the result.
+- The input table and output table cannot be the same table.
+- The first version supports writing only to non-partitioned result tables.
 
-### 5.5 参数表
+### 5.5 Parameter Table
 
-| 参数 | 默认值 | 说明 |
+| Parameter | Default | Description |
 |---|---:|---|
-| `input_table_name` | 必填 | MaxCompute 表名，支持 `table` 或 `project.table`。 |
-| `skip_cols` | `None` | 从候选指标变量中排除的字段。 |
-| `select_cols` | `None` | 显式指标变量；不传时自动选择数值型普通字段。 |
-| `batch_size` | `50` | 每条聚合 SQL 处理的特征数。 |
-| `group` | `None` | 单个或多个分组字段；不传表示全局统计。 |
-| `q` | `[.05,.15,.25,.5,.75,.95,.99]` | 分位点，必须严格递增且位于 `[0,1]`。 |
-| `quantile_method` | `"approx"` | `"approx"` 或 `"exact"`。 |
-| `percentile_accuracy` | `10000` | `PERCENTILE_APPROX` 精度参数。 |
-| `where_clause` | `None` | 单条 SQL 过滤条件，适合分区裁剪；不能含分号。 |
-| `spec_missing_value` | `None` | 全局数值哨兵，或按字段配置的数值哨兵。 |
-| `include_missing_group` | `False` | 是否保留 group 字段为 NULL 的组合。 |
-| `sqlrunner` | `None` | 已初始化的 `ODPSRunner`；不传时延迟创建。 |
-| `output_csv` | `None` | 可选 CSV 输出路径。 |
-| `output_table_name` | `None` | 可选 MaxCompute 结果表。 |
-| `output_table_mode` | `None` | 写结果表时必填：`"overwrite"` 或 `"append"`。 |
+| `input_table_name` | Required | MaxCompute table name; `table` or `project.table` is supported. |
+| `skip_cols` | `None` | Columns excluded from the candidate metric variables. |
+| `select_cols` | `None` | Explicit metric variables; if omitted, numeric ordinary columns are chosen automatically. |
+| `batch_size` | `50` | Number of features handled by each aggregation SQL. |
+| `group` | `None` | One or several grouping columns; omitted means global statistics. |
+| `q` | `[.05,.15,.25,.5,.75,.95,.99]` | Quantile points; must be strictly increasing and within `[0,1]`. |
+| `quantile_method` | `"approx"` | `"approx"` or `"exact"`. |
+| `percentile_accuracy` | `10000` | Accuracy parameter of `PERCENTILE_APPROX`. |
+| `where_clause` | `None` | A single SQL filter condition, suited to partition pruning; must not contain a semicolon. |
+| `spec_missing_value` | `None` | A global numeric sentinel, or per-column numeric sentinels. |
+| `include_missing_group` | `False` | Whether to keep combinations where a group column is NULL. |
+| `sqlrunner` | `None` | An already-initialized `ODPSRunner`; created lazily if omitted. |
+| `output_csv` | `None` | Optional CSV output path. |
+| `output_table_name` | `None` | Optional MaxCompute result table. |
+| `output_table_mode` | `None` | Required when writing a result table: `"overwrite"` or `"append"`. |
 
-`proc_means_odps` 第一版只分析数值变量；类别变量的 `UNIQUE/TOP/FREQ` 不在本函数中计算。
+The first version of `proc_means_odps` analyzes only numeric variables; `UNIQUE/TOP/FREQ` for categorical variables are not computed by this function.
 
-## 6. `ParallelODPSManager` 并发拉取/上传
+## 6. `ParallelODPSManager` Concurrent Pull/Upload
 
-`ParallelODPSManager` 是 `ODPSRunner + ParallelApplyEngine` 的高层封装，适合把大表按 chunk 并发处理：
+`ParallelODPSManager` is a high-level wrapper around `ODPSRunner + ParallelApplyEngine`, suited to processing a large table concurrently by chunk:
 
-- `pull()`：按 `unique_key` 哈希分桶，或在没有 `unique_key` 时自动物化 ROW_NUMBER 临时表再分桶，并发执行 SQL 拉数，合并成本地 CSV。
-- `push()`：接收 pandas DataFrame 或本地 CSV，按行拆 chunk 上传到 ODPS 临时表，再 `UNION ALL` 写入目标表，并清理临时表。
+- `pull()`: hash-buckets by `unique_key`, or, when there is no `unique_key`, automatically materializes a ROW_NUMBER temp table and buckets by it; it runs the SQL concurrently to pull data and merges it into a local CSV.
+- `push()`: takes a pandas DataFrame or a local CSV, splits it into chunks by row, uploads them to ODPS temp tables, writes them into the target table with `UNION ALL`, and cleans up the temp tables.
 
-### 6.1 并发 pull
+### 6.1 Concurrent pull
 
-SQL 模板必须包含 `{chunk_filter}`，并放在希望切分的基础表 `WHERE` 子句里。若模板里没有这个占位符，`pull()` 会在任何 ODPS 查询前直接抛 `ValueError`，避免每个 chunk 都重复拉全量数据：
+The SQL template must contain `{chunk_filter}`, placed in the `WHERE` clause of the base table you want to split. If the template lacks this placeholder, `pull()` raises `ValueError` before any ODPS query, to avoid every chunk repeatedly pulling the full data:
 
 ```sql
 SELECT flow_id, score, apply_time
@@ -276,11 +276,11 @@ WHERE 1 = 1
   AND {chunk_filter}
 ```
 
-#### Hash 分桶：推荐有稳定 key 时使用
+#### Hash Bucketing: Recommended When You Have a Stable Key
 
-当配置了 `unique_key`，`pull_split_strategy="auto"` 会走 hash 分桶。执行并发 chunk 前，SMF 会先跑一次 probe SQL，校验 `unique_key` 在当前 SQL 作用域里可用；校验失败会抛 `ValueError`，不会进入并发拉取。
+When `unique_key` is configured, `pull_split_strategy="auto"` uses hash bucketing. Before running the concurrent chunks, SMF first runs a probe SQL to verify that `unique_key` is usable in the current SQL scope; if the check fails, it raises `ValueError` and does not enter the concurrent pull.
 
-Python 调用：
+Python call:
 
 ```python
 from Modeling_Tool import ParallelODPSConfig, ParallelODPSManager
@@ -302,23 +302,23 @@ summary = manager.pull(
 )
 ```
 
-每个 chunk 会自动注入：
+Each chunk automatically gets this injected:
 
 ```sql
 ABS(HASH(flow_id)) % 20 = <chunk_id>
 ```
 
-如果不直接传 `n_chunks`，可以传 `chunk_size`；此时 `pull()` 会先跑 `count_query` 推导分块数。对复杂宽表 join，建议手写更轻量的 `count_query`。
+If you do not pass `n_chunks` directly, you can pass `chunk_size`; `pull()` then first runs `count_query` to derive the number of chunks. For complex wide-table joins, it is advisable to hand-write a lighter `count_query`.
 
-#### ROW_NUMBER 分桶：没有 unique_key 时自动使用
+#### ROW_NUMBER Bucketing: Used Automatically When There Is No unique_key
 
-当 `unique_key=None` 且 `pull_split_strategy="auto"`，SMF 会自动走 ROW_NUMBER 分桶：
+When `unique_key=None` and `pull_split_strategy="auto"`, SMF automatically uses ROW_NUMBER bucketing:
 
-1. 先用 `{chunk_filter}=1=1` 渲染原 SQL。
-2. 将结果物化为 ODPS 临时表，并新增内部行号列。
-3. 并发执行 `WHERE (row_number_col - 1) % n_chunks = chunk_id` 拉取各 chunk。
-4. 本地输出 CSV 前删除内部行号列。
-5. 根据 `cleanup_tmp` / `keep_tmp_on_error` 清理临时表。
+1. First render the original SQL with `{chunk_filter}=1=1`.
+2. Materialize the result into an ODPS temp table and add an internal row-number column.
+3. Pull each chunk concurrently with `WHERE (row_number_col - 1) % n_chunks = chunk_id`.
+4. Delete the internal row-number column before writing the local CSV.
+5. Clean up the temp table according to `cleanup_tmp` / `keep_tmp_on_error`.
 
 ```python
 manager = ParallelODPSManager(
@@ -338,13 +338,13 @@ summary = manager.pull(
 )
 ```
 
-默认行号表达式是：
+The default row-number expression is:
 
 ```sql
 ROW_NUMBER() OVER (ORDER BY 1)
 ```
 
-如果希望行号顺序更稳定，可传 `row_number_order_by`：
+If you want a more stable row-number order, pass `row_number_order_by`:
 
 ```python
 ParallelODPSConfig(
@@ -355,92 +355,92 @@ ParallelODPSConfig(
 )
 ```
 
-ROW_NUMBER 模式会创建一张 ODPS 临时 staging 表，性能和存储成本高于 hash 模式；只要能提供稳定且分布较均匀的 key，仍推荐优先使用 `unique_key` hash 分桶。
+ROW_NUMBER mode creates an ODPS temporary staging table, with higher performance and storage cost than hash mode; as long as you can provide a stable and reasonably evenly distributed key, `unique_key` hash bucketing is still preferred.
 
-### 6.2 并发 push
+### 6.2 Concurrent push
 
-`push()` 支持 DataFrame 或 CSV 路径。目标表写入模式必须显式指定，避免误覆盖生产表：
+`push()` accepts a DataFrame or a CSV path. The write mode for the target table must be specified explicitly, to avoid overwriting a production table by mistake:
 
 ```python
 summary = manager.push(
     data=df_or_csv_path,
     target_table="mex_anls.target_table",
-    write_mode="overwrite",  # 必填: "overwrite" 或 "append"
+    write_mode="overwrite",  # required: "overwrite" or "append"
 )
 ```
 
-执行流程：
+Execution flow:
 
-1. 按行拆分 DataFrame；CSV 输入使用 `pd.read_csv(..., chunksize=...)` 流式切分到本地临时 chunk 文件。
-2. 每个 chunk 上传到独立 ODPS tmp 表，例如 `tmp_parallel_odps_<run_id>_0000`。
-3. 所有 tmp 表通过 `UNION ALL` 写入最终目标表。
-4. 成功后清理 tmp 表；失败时默认也清理，除非 `keep_tmp_on_error=True`。
+1. Split the DataFrame by row; for CSV input, `pd.read_csv(..., chunksize=...)` splits it as a stream into local temporary chunk files.
+2. Each chunk is uploaded to its own ODPS tmp table, for example `tmp_parallel_odps_<run_id>_0000`.
+3. All tmp tables are written into the final target table through `UNION ALL`.
+4. On success, the tmp tables are cleaned up; on failure they are also cleaned up by default, unless `keep_tmp_on_error=True`.
 
-每个 chunk 的 `upload_df()` 会等待临时表原子 rename 完成后才返回，因此最终 `UNION ALL` 不会抢在 tmp 表可见之前执行。调用方无需额外添加 `sleep` 或轮询。
+Each chunk's `upload_df()` returns only after the atomic rename of the temp table has completed, so the final `UNION ALL` never runs before the tmp tables are visible. Callers do not need to add any extra `sleep` or polling.
 
-写入模式：
+Write modes:
 
-| `write_mode` | 行为 |
+| `write_mode` | Behavior |
 |---|---|
-| `"overwrite"` | 先删除目标表，再 `CREATE TABLE target AS SELECT ... UNION ALL ...`。 |
-| `"append"` | 使用 `INSERT INTO TABLE target SELECT ... UNION ALL ...` 追加到已有目标表。 |
+| `"overwrite"` | Drop the target table first, then `CREATE TABLE target AS SELECT ... UNION ALL ...`. |
+| `"append"` | Append to the existing target table with `INSERT INTO TABLE target SELECT ... UNION ALL ...`. |
 
-### 6.3 backend 建议
+### 6.3 Backend Recommendations
 
-| backend | 建议 |
+| backend | Recommendation |
 |---|---|
-| `"thread"` | ODPS IO 任务默认推荐；共享连接池，`ODPSRunner` 宽表下载补丁已做线程安全保护。 |
-| `"sequential"` | 调试 chunk SQL、上传逻辑和 tmp 表清理时使用。 |
-| `"process"` | 每个 worker 内新建 `ODPSRunner()`，不跨进程传活连接；适合隔离性更强但开销更高的场景。 |
+| `"thread"` | The default recommendation for ODPS IO tasks; it shares the connection pool, and the `ODPSRunner` wide-table download patch is already thread-safe. |
+| `"sequential"` | Use when debugging chunk SQL, upload logic, and tmp-table cleanup. |
+| `"process"` | Each worker creates a new `ODPSRunner()` and does not pass live connections across processes; suited to scenarios needing stronger isolation at higher overhead. |
 
-第一版 `push()` 不支持分区目标表；如果需要分区写入，后续可扩展 `partition` 参数。
+The first version of `push()` does not support partitioned target tables; if partitioned writes are needed, a `partition` parameter can be added later.
 
-## 7. 常见坑位
+## 7. Common Pitfalls
 
-### ❌ 坑 1: `to_df=False + csv_path` 历史上 CSV 不会写
+### ❌ Pitfall 1: `to_df=False + csv_path` historically wrote no CSV
 
 ```python
-# 修复前 (≤ v1.0.0) 的"假象":
+# The "illusion" before the fix (≤ v1.0.0):
 odps.run_sql(sql, to_df=False, csv_path="x.csv")
-# → SQL 跑了, CSV 没写, 沉默失败
+# → the SQL ran, the CSV was not written, a silent failure
 ```
 
-**修复后 (当前版本)**: 任一被设置都会触发下载。
+**After the fix (current version)**: setting either one triggers the download.
 
-### ❌ 坑 2: 200+ 列宽表触发 HTTP 414
+### ❌ Pitfall 2: A table with 200+ columns triggers HTTP 414
 
 ```text
 odps.errors.InternalServerError: HTTP 414 (Request-URI Too Long)
 ```
 
-已由 `ODPSRunner` 的线程安全 wide-schema patch 自动处理, 无需手动干预。
+This is handled automatically by `ODPSRunner`'s thread-safe wide-schema patch, with no manual intervention needed.
 
-### ❌ 坑 3: ODPS Instance 是一次性的
+### ❌ Pitfall 3: An ODPS Instance is one-shot
 
-`execute_sql` 每次都会重新发起 SQL, 即便数据集没变。要避免重复扣费/时长:
+`execute_sql` re-issues the SQL every time, even if the dataset has not changed. To avoid repeated cost/time:
 
 ```python
-# 模式 A: 落盘缓存
+# Pattern A: cache on disk
 if csv_path.exists():
     df = pd.read_csv(csv_path)
 else:
     odps.run_sql(sql, to_df=False, csv_path=str(csv_path))
     df = pd.read_csv(csv_path)
 
-# 模式 B: 用 Modeling_Tool.Core.utils.save_model 缓存中间结果
+# Pattern B: cache intermediate results with Modeling_Tool.Core.utils.save_model
 from Modeling_Tool.Core.utils import save_model, load_model
 save_model(df, "data/cached.pkl")
 ```
 
-### ❌ 坑 4: 大查询耗时长导致 Bash 120s 超时
+### ❌ Pitfall 4: Long-running big queries hit the Bash 120s timeout
 
-`run_sql` 是同步阻塞, 几分钟级别的查询应:
+`run_sql` is synchronous and blocking; for queries that take minutes you should:
 
-1. **在后台启动** — 用 `nohup` + `&`, 见 [附录](#附录-后台启动长查询)
-2. **轮询状态** — 通过 `odps.instances` 查进度
-3. **写入日志文件** — 重定向到 `/tmp/odps_<ts>.log` 方便回溯
+1. **Start in the background** — with `nohup` + `&`, see the [appendix](#appendix-starting-a-long-query-in-the-background)
+2. **Poll the status** — check progress through `odps.instances`
+3. **Write to a log file** — redirect to `/tmp/odps_<ts>.log` for easy tracing
 
-### 附录: 后台启动长查询
+### Appendix: Starting a Long Query in the Background
 
 ```bash
 cd /path/to/project
@@ -457,11 +457,11 @@ PID=$!
 echo "ODPS job PID=$PID, log=/tmp/odps_*.log"
 ```
 
-## 8. `ODPSRunner` 其他方法
+## 8. Other `ODPSRunner` Methods
 
 ### `download_table(table_name, partition=None, n_process=1, csv_path=None)`
 
-直接拉取**整张表** (而非 SQL 查询), 自动推断 schema:
+Pulls an **entire table** directly (rather than a SQL query), inferring the schema automatically:
 
 ```python
 df = odps.download_table(
@@ -473,18 +473,18 @@ df = odps.download_table(
 
 ### `upload_df(df, table_name, table_schema=None, partition=None)`
 
-上传 DataFrame 到 ODPS 新表:
+Uploads a DataFrame to a new ODPS table:
 
 ```python
 schema = ODPSRunner.cre_table_schema(df, partition_name="dt")
 odps.upload_df(df, "mex_anls.my_table", table_schema=schema, partition="dt=2025-08-18")
 ```
 
-上传时先按原始 pandas dtype 推断 schema，再在 records 副本中把 `np.nan`、`pd.NA` 和 `NaT` 转成 ODPS `NULL`；不会修改调用方传入的 DataFrame，也不需要预先调用 `npnan2none()`。默认原子替换使用阻塞 DDL：目标表备份、tmp 表 rename 和失败恢复都会等待 ODPS Instance 成功后再进入下一步。
+On upload, the schema is first inferred from the original pandas dtypes, and then `np.nan`, `pd.NA`, and `NaT` are converted to ODPS `NULL` in a copy of the records; the DataFrame passed in by the caller is not modified, and there is no need to call `npnan2none()` beforehand. The default atomic replacement uses blocking DDL: the target-table backup, the tmp-table rename, and failure recovery all wait for the ODPS Instance to succeed before moving to the next step.
 
 ### `insert_df(df, table_name, overwrite=True, partition=None)`
 
-追加写入**已存在**的表:
+Appends to an **existing** table:
 
 ```python
 odps.insert_df(df, "mex_anls.my_table", overwrite=False, partition="dt=2025-08-19")
@@ -492,7 +492,7 @@ odps.insert_df(df, "mex_anls.my_table", overwrite=False, partition="dt=2025-08-1
 
 ### `cre_table_schema(df, partition_name=None)` (staticmethod)
 
-从 DataFrame 推断 ODPS Schema:
+Infers the ODPS schema from a DataFrame:
 
 ```python
 schema = ODPSRunner.cre_table_schema(df, partition_name="dt")
@@ -500,27 +500,27 @@ schema = ODPSRunner.cre_table_schema(df, partition_name="dt")
 # boolean → boolean, datetime → datetime, object/string/category → string
 ```
 
-复数和 timedelta 等当前不支持的 dtype 会抛出清晰的 `TypeError`，不会静默降型。
+Currently unsupported dtypes such as complex and timedelta raise a clear `TypeError` and are not silently downcast.
 
-## 9. 相关工具函数
+## 9. Related Utility Functions
 
-[`Modeling_Tool.Core.utils.pull_attributes_in_batch`](../api/core.md) 提供按批切分 `{varlist}` 的能力 — 当单次 SQL 拉取列数 > 2000 时强烈建议使用:
+[`Modeling_Tool.Core.utils.pull_attributes_in_batch`](../api/core.md) provides the ability to split `{varlist}` into batches — strongly recommended when a single SQL pull has more than 2000 columns:
 
 ```python
 from Modeling_Tool.Core.utils import pull_attributes_in_batch
 
-# 内部把 varlist 切成 N 批, 多次 run_sql 拼接
+# Internally splits varlist into N batches, runs run_sql several times and concatenates the results
 result_df = pull_attributes_in_batch(
     table_name="mex_anls.drv",
-    varlist=big_varlist,            # 1000+ 列
-    batch_num=6,                    # 每批 ~ 167 列
+    varlist=big_varlist,            # 1000+ columns
+    batch_num=6,                    # ~167 columns per batch
     unikey="FLOW_ID",
     main_info_select=["*"],
 )
 ```
 
-## 10. 下一步
+## 10. Next Steps
 
-- 想要完整的建模流水线？请阅读 [端到端建模流水线](../pipeline.md)
-- 想看 WOE / IV 等下游处理？请阅读 [WOE 编码](woe.md) 与 [特征筛选](feature.md)
-- 想看具体 API 签名？请访问 [API 参考 → Core](../api/core.md)
+- Want the complete modeling pipeline? Read [End-to-End Modeling Pipeline](../pipeline.md)
+- Want downstream processing such as WOE / IV? Read [WOE Encoding](woe.md) and [Feature Screening](feature.md)
+- Want specific API signatures? Visit [API Reference → Core](../api/core.md)

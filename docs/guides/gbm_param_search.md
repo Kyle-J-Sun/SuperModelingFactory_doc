@@ -1,12 +1,12 @@
-# GBM 超参搜索
+# GBM Hyperparameter Search
 
-`GradientBoostingModel.param_search(...)` 为 LightGBM / XGBoost 提供与 `LRMaster.grid_search_params(...)` 对齐的 **INS / OOS / OOT holdout 超参搜索**。
+`GradientBoostingModel.param_search(...)` provides **INS / OOS / OOT holdout hyperparameter search** for LightGBM / XGBoost, aligned with `LRMaster.grid_search_params(...)`.
 
-它不是 k-fold CV，而是针对风控建模常用的多时间窗验证：每个候选参数在训练集拟合，然后在 `eval_sets` 中的每个数据集上计算 AUC，并按指定目标函数选择最优组合。
+It is not k-fold CV but the multi-time-window validation commonly used in risk modeling: each candidate parameter set is fitted on the training set, AUC is then computed on every dataset in `eval_sets`, and the best combination is chosen according to the specified objective.
 
 ## 1. Grid Search
 
-`engine="grid"` 时，`search_space` 使用普通网格：每个参数给一个候选值列表，内部做笛卡尔积。
+With `engine="grid"`, `search_space` uses a plain grid: give each parameter a list of candidate values, and the Cartesian product is taken internally.
 
 ```python
 from Modeling_Tool import GradientBoostingModel
@@ -42,22 +42,22 @@ print(gbm.best_params_)
 print(gbm.search_results_.head())
 ```
 
-返回的 `results` 按 `score` 降序排列，包含：
+The returned `results` is sorted by `score` in descending order and contains:
 
-- 参数列（如 `num_leaves`、`learning_rate`、`max_depth`）
-- 每个 eval set 的 AUC：`AUC_ins` / `AUC_oos` / `AUC_oot`
-- `gap`（仅 `oot_gap_penalized` 下）
+- Parameter columns (such as `num_leaves`, `learning_rate`, `max_depth`)
+- AUC for each eval set: `AUC_ins` / `AUC_oos` / `AUC_oot`
+- `gap` (only under `oot_gap_penalized`)
 - `score`
 
 ## 2. Optuna Search
 
-`engine="optuna"` 时，需要额外安装：
+With `engine="optuna"`, you need an extra install:
 
 ```bash
 pip install supermodelingfactory[optuna]
 ```
 
-`search_space` 使用紧凑搜索空间定义：
+`search_space` uses a compact search-space definition:
 
 ```python
 gbm = GradientBoostingModel("xgb", {
@@ -87,7 +87,7 @@ results = gbm.param_search(
 )
 ```
 
-也支持 dict 形式：
+A dict form is also supported:
 
 ```python
 search_space = {
@@ -99,15 +99,15 @@ search_space = {
 
 ## 3. Objective
 
-与 `LRMaster.grid_search_params(...)` 一致，支持三种选择目标：
+Consistent with `LRMaster.grid_search_params(...)`, three selection objectives are supported:
 
-| objective | 选择标准 |
+| objective | Selection criterion |
 |---|---|
-| `'oot_gap_penalized'`（默认） | `AUC[primary] - abs(mean(AUC[gap_refs]) - AUC[primary])`，同时鼓励主集表现和惩罚过拟合 gap |
-| `'max_primary'` | 直接最大化 `AUC[primary]` |
-| callable | 自定义 `f(metric_dict) -> float`，其中 `metric_dict` 为 `{集名: AUC}` |
+| `'oot_gap_penalized'` (default) | `AUC[primary] - abs(mean(AUC[gap_refs]) - AUC[primary])`, which both rewards primary-set performance and penalizes the overfitting gap |
+| `'max_primary'` | Directly maximize `AUC[primary]` |
+| callable | Custom `f(metric_dict) -> float`, where `metric_dict` is `{set_name: AUC}` |
 
-自定义 objective 示例：
+Custom objective example:
 
 ```python
 def stable_oot(metrics):
@@ -126,13 +126,13 @@ results = gbm.param_search(
 
 ## 4. Validation Set
 
-GBM 训练本身需要 validation set。`param_search` 默认按以下顺序选择：
+GBM training itself needs a validation set. `param_search` selects one in the following order by default:
 
-1. `eval_sets["oos"]`，如果存在
-2. `eval_sets["validation"]` 或 `eval_sets["valid"]`，如果存在
+1. `eval_sets["oos"]`, if present
+2. `eval_sets["validation"]` or `eval_sets["valid"]`, if present
 3. `primary_set`
 
-也可以显式指定：
+You can also specify it explicitly:
 
 ```python
 gbm.param_search(
@@ -145,10 +145,10 @@ gbm.param_search(
 )
 ```
 
-## 5. 样本权重
+## 5. Sample Weights
 
-`param_search` 支持 `weight_col`（训练集）和 `eval_weight_col`（各 eval set DataFrame 中的权重列）。
-候选模型在训练与 holdout 评分时均使用对应权重计算加权 AUC：
+`param_search` supports `weight_col` (the training set) and `eval_weight_col` (the weight column in each eval-set DataFrame).
+Candidate models use the corresponding weights to compute weighted AUC during both training and holdout scoring:
 
 ```python
 results = gbm.param_search(
@@ -165,8 +165,8 @@ results = gbm.param_search(
     objective="oot_gap_penalized",
     primary_set="oot",
     gap_ref_sets=["ins", "oos"],
-    weight_col="sample_wgt",        # 训练集权重列（须在 data 中）
-    eval_weight_col="sample_wgt",   # 各 eval set 的权重列
+    weight_col="sample_wgt",        # training-set weight column (must be in data)
+    eval_weight_col="sample_wgt",   # weight column for each eval set
     refit=True,
 )
 
@@ -174,25 +174,25 @@ print(gbm.best_params_)
 print(gbm.search_results_[["max_depth", "learning_rate", "AUC_oot", "score"]].head())
 ```
 
-与 `LRMaster.grid_search_params` 对称：`weight_col` 控制候选拟合，`eval_weight_col` 控制
-各 holdout 上的评分。也可通过 `fit_kwargs` 额外透传 `sample_weight` / `eval_sample_weight` 数组。
+Symmetric with `LRMaster.grid_search_params`: `weight_col` controls candidate fitting, and `eval_weight_col` controls
+scoring on each holdout. You can also pass `sample_weight` / `eval_sample_weight` arrays through `fit_kwargs`.
 
-!!! note "权重列须存在于所有相关 DataFrame"
+!!! note "The weight column must exist in every relevant DataFrame"
 
-    `weight_col` 必须在 `data` 中存在；`eval_weight_col` 必须在 `eval_sets` 的每个
-    DataFrame 中存在，否则搜索启动时会报 `KeyError`。
+    `weight_col` must exist in `data`; `eval_weight_col` must exist in every
+    DataFrame in `eval_sets`, otherwise the search raises a `KeyError` at startup.
 
-## 6. 返回值与副作用
+## 6. Return Value and Side Effects
 
-- **返回**：按 `score` 降序的 `pandas.DataFrame`
-- **写入**：`gbm.best_params_` 和 `gbm.search_results_`
-- **更新**：把最优参数合并进 `gbm.params`
-- **重训**：`refit=True` 时，用最优参数在 `data` 上重训当前 `gbm`
+- **Returns**: a `pandas.DataFrame` sorted by `score` in descending order
+- **Writes**: `gbm.best_params_` and `gbm.search_results_`
+- **Updates**: merges the best parameters into `gbm.params`
+- **Refit**: with `refit=True`, the current `gbm` is retrained on `data` with the best parameters
 
-!!! note "目前仅支持 AUC"
+!!! note "Only AUC is supported for now"
 
-    `metric` 目前只支持 `'auc'`。如果需要 KS / logloss / brier，可先通过 callable objective 在搜索结果基础上扩展，后续版本再内置更多指标。
+    `metric` currently supports only `'auc'`. If you need KS / logloss / brier, you can extend the search results through a callable objective for now; more metrics will be built in in later versions.
 
-!!! tip "与 LR 搜索的区别"
+!!! tip "Difference from the LR search"
 
-    LR 搜索方法名为 `grid_search_params(...)`，GBM 使用 `param_search(...)`，因为它同时支持 grid 和 Optuna 两种 engine。
+    The LR search method is named `grid_search_params(...)`, while GBM uses `param_search(...)` because it supports both the grid and Optuna engines.

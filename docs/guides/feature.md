@@ -1,24 +1,24 @@
-# 特征筛选
+# Feature Screening
 
-SuperModelingFactory 在 [`Feature`](../api/feature.md) 子包提供 **PSI / IV / 相关性 / 分布** 四类筛选工具。推荐顺序是：先稳定性，再解释力，最后去冗余。
+SuperModelingFactory provides four kinds of screening tools in the [`Feature`](../api/feature.md) subpackage: **PSI / IV / correlation / distribution**. The recommended order is stability first, then explanatory power, and finally redundancy removal.
 
 ```mermaid
 flowchart LR
-    A[原始特征集] --> B[PSI 稳定性]
-    B --> C[IV / KS 信息量]
-    C --> D[相关性去冗余]
-    D --> E[最终特征集]
+    A[Raw feature set] --> B[PSI stability]
+    B --> C[IV / KS information value]
+    C --> D[Correlation de-redundancy]
+    D --> E[Final feature set]
 ```
 
-!!! important "分箱一致性"
+!!! important "Binning consistency"
 
-    如果模型最终使用 `MonotoneWOEBinner`，请把同一个 binner 传给 `PSICalculator`、`VarExtractionInsights` 和 `CorrelationFilter`。否则筛选阶段可能重新分箱，指标会和最终 WOE 编码不一致。
+    If the model ultimately uses `MonotoneWOEBinner`, pass the same binner to `PSICalculator`, `VarExtractionInsights`, and `CorrelationFilter`. Otherwise the screening stage may re-bin, and the metrics will disagree with the final WOE encoding.
 
-    详情见 [WOE 分箱引擎](woe_binning_engine.md)。
+    See [WOE Binning Engine](woe_binning_engine.md) for details.
 
-## 1. PSI 群体稳定性指数
+## 1. PSI Population Stability Index
 
-默认用法保持不变：
+The default usage is unchanged:
 
 ```python
 from Modeling_Tool import PSICalculator
@@ -33,7 +33,7 @@ psi_table = psi.calculate(train_df, oot_df, features)
 stable_features = psi_table.loc[psi_table["psi"] < 0.1, "var"].tolist()
 ```
 
-如果已有 WOE 分箱引擎，传入 `binning_engine`：
+If you already have a WOE binning engine, pass `binning_engine`:
 
 ```python
 psi = PSICalculator(buckets=10, binning_engine=binner)
@@ -52,17 +52,17 @@ psi = PSICalculator(psi_missing_bucket_policy="smooth_laplace")  # default
 Use `psi_missing_bucket_policy="floor_1e6"` for legacy reports, or
 `psi_missing_bucket_policy="exclude"` to remove one-sided buckets from the PSI sum.
 
-### PSI 阈值
+### PSI Thresholds
 
-| PSI 区间 | 含义 |
+| PSI range | Meaning |
 |---------|------|
-| `< 0.1` | 稳定，无需关注 |
-| `0.1 - 0.25` | 轻微漂移，建议复盘 |
-| `>= 0.25` | 显著漂移，需立即排查 |
+| `< 0.1` | Stable, no attention needed |
+| `0.1 - 0.25` | Slight drift, a review is recommended |
+| `>= 0.25` | Significant drift, investigate immediately |
 
-## 2. IV / KS 信息量
+## 2. IV / KS Information Value
 
-默认路径：
+Default path:
 
 ```python
 from Modeling_Tool import VarExtractionInsights
@@ -83,7 +83,7 @@ From v0.5.1, expected per-variable failures are recorded in
 `insights.failed_variables` and summarized with one warning instead of silently
 disappearing from the report.
 
-复用 Monotone 分箱：
+Reuse the Monotone binning:
 
 ```python
 insights = VarExtractionInsights(
@@ -96,19 +96,19 @@ insights = VarExtractionInsights(
 report = insights.get_var_analysis_report(train_df, features)
 ```
 
-### IV 阈值经验
+### IV Rules of Thumb
 
-| IV 区间 | 解释力 |
-|---------|--------|
-| `< 0.02` | 无预测力，剔除 |
-| `0.02 - 0.1` | 弱 |
-| `0.1 - 0.3` | 中 |
-| `0.3 - 0.5` | 强 |
-| `>= 0.5` | 异常强，警惕过拟合 / 信息泄露 |
+| IV range | Explanatory power |
+|---------|---------|
+| `< 0.02` | No predictive power, drop |
+| `0.02 - 0.1` | Weak |
+| `0.1 - 0.3` | Medium |
+| `0.3 - 0.5` | Strong |
+| `>= 0.5` | Abnormally strong, beware of overfitting / information leakage |
 
-## 3. 相关性去冗余
+## 3. Correlation De-Redundancy
 
-剔除两两相关性过高的变量，并保留 IV 或 KS 更高的变量。
+Drops variables whose pairwise correlation is too high and keeps the one with the higher IV or KS.
 
 ```python
 from Modeling_Tool import CorrelationFilter
@@ -122,18 +122,18 @@ keep_vars = CorrelationFilter(
 ).remove_highly_correlated(features)
 ```
 
-### 关键参数
+### Key Parameters
 
-| 参数 | 默认值 | 说明 |
+| Parameter | Default | Description |
 |------|-------|------|
-| `corr_cutpoint` | `0.8` | 相关系数阈值 |
-| `base_metric` | `iv` | 高相关变量组内的保留指标，可选 `iv` 或 `ks` |
-| `woe_engine` | `master` | 分箱引擎名称 |
-| `woe_binner` | `None` | 已拟合的 `WOE_Master` 或 `MonotoneWOEBinner` |
+| `corr_cutpoint` | `0.8` | Correlation coefficient threshold |
+| `base_metric` | `iv` | Metric used to decide which variable to keep within a highly correlated group; `iv` or `ks` |
+| `woe_engine` | `master` | Binning engine name |
+| `woe_binner` | `None` | An already-fitted `WOE_Master` or `MonotoneWOEBinner` |
 
-## 4. 统一特征筛选（v0.3.9+）
+## 4. Unified Feature Screening (v0.3.9+)
 
-`feature_screen` 是 CM / FVP 共享的筛选内核，在 INS/OOS/OOT 分片上做 PSI → IV → 相关性剔除。`weighted_feature_screen` 与 `CreditModelPipeline._feature_selection` 均委托此 API。
+`feature_screen` is the screening kernel shared by CM / FVP, performing PSI → IV → correlation removal on the INS/OOS/OOT splits. `weighted_feature_screen` and `CreditModelPipeline._feature_selection` both delegate to this API.
 
 ```python
 from Modeling_Tool import FeatureScreenConfig, feature_screen, fit_screening_woe_engine
@@ -151,11 +151,11 @@ result = feature_screen(splits, features, "badflag", config=config, prefit_woe_e
 selected = result.selected_features
 ```
 
-`feature_selection` 字典可通过 `screen_config_from_mapping()` 转为 `FeatureScreenConfig`。`weight_col` 非空时默认走加权等频路径；设置 `*_use_woe_bins=True` 且提供（或自动 fit）WOE 引擎后，加权 PSI/IV 复用相同分箱边界。
+A `feature_selection` dict can be converted into a `FeatureScreenConfig` through `screen_config_from_mapping()`. When `weight_col` is non-empty, the weighted equal-frequency path is used by default; once `*_use_woe_bins=True` is set and a WOE engine is provided (or fitted automatically), weighted PSI/IV reuse the same bin boundaries.
 
-`feature_block_size` 控制 PSI/WOE 适配器一次转换多少列，`corr_block_size` 控制加权相关性矩阵块大小。两者只用于限制超宽表峰值内存，不改变指标口径。
+`feature_block_size` controls how many columns the PSI/WOE adapter transforms at a time, and `corr_block_size` controls the block size of the weighted correlation matrix. Both only limit peak memory on very wide tables and do not change the metric definitions.
 
-分组分布统计也支持列块：
+Grouped distribution statistics also support column blocks:
 
 ```python
 from Modeling_Tool import proc_means_by_grp
@@ -168,8 +168,8 @@ summary = proc_means_by_grp(
 )
 ```
 
-如果源数据位于 MaxCompute，不需要先把全量宽表拉到 pandas。`proc_means_odps()`
-会在 ODPS 端按特征批次完成聚合，只下载最终统计结果：
+If the source data lives in MaxCompute, you do not need to pull the full wide table into pandas first. `proc_means_odps()`
+aggregates in feature batches on the ODPS side and downloads only the final statistics:
 
 ```python
 from Modeling_Tool import proc_means_odps
@@ -183,41 +183,41 @@ summary = proc_means_odps(
 )
 ```
 
-返回字段与数值型 `proc_means_by_grp()` 对齐，包括 `N_ALL/N/MEAN/STD/MIN/分位数/MAX/MISSING_RATE`。
-`batch_size` 表示一条聚合 SQL 中的特征数量，不会按行下载源数据。完整参数、分位数模式和 ODPS 写回规则见
-[ODPS 数据抽取：`proc_means_odps`](odps.md#5-proc_means_odps-odps-端描述性统计)。
+The returned fields align with the numeric `proc_means_by_grp()`, including `N_ALL/N/MEAN/STD/MIN/quantiles/MAX/MISSING_RATE`.
+`batch_size` is the number of features in one aggregation SQL statement; source rows are never downloaded. For the full parameters, quantile modes, and ODPS write-back rules, see
+[ODPS Data Extraction: `proc_means_odps`](odps.md#5-proc_means_odps-odps-side-descriptive-statistics).
 
-## 5. 加权特征筛选（v0.3.8+）
+## 5. Weighted Feature Screening (v0.3.8+)
 
-`weighted_feature_screen` 把 PSI → IV → 相关性去冗余串成一条 API，并支持 `weight_col` 加权分位切点、加权 IV/PSI 与加权 Pearson 相关性（IV 仲裁）。
+`weighted_feature_screen` chains PSI → IV → correlation de-redundancy into a single API, and supports `weight_col` weighted quantile cut points, weighted IV/PSI, and weighted Pearson correlation (with IV arbitration).
 
 ```python
 from Modeling_Tool import weighted_feature_screen
 
 result = weighted_feature_screen(
-    data=df,                      # 需含 split_col 取值 ins/oos/oot
+    data=df,                      # must contain split_col with values ins/oos/oot
     feature_cols=features,
     target_col="badflag",
     split_col="sample_ind",
-    weight_col="_weight",         # None 时走 legacy 无权工具，与旧 Pipeline 回归一致
-    psi_compare_splits=["oos", "oot"],  # 独立 API 默认；Pipeline 默认仅 ["oos"]
+    weight_col="_weight",         # None takes the legacy unweighted tools, consistent with the old Pipeline regression
+    psi_compare_splits=["oos", "oot"],  # standalone API default; the Pipeline default is only ["oos"]
 )
 selected = result.selected_features
 iv_table = result.iv_table       # iv_weighted / n_bins / missing_rate
 psi_table = result.psi_table     # psi_ins_oos / psi_ins_oot / psi_max
 ```
 
-典型场景：Fuzzy Augment 双行样本带 `_weight` 时，用加权 IV 避免未加权计数对冲失真；05E 实验可对 RI 增广样本 + `weight_col` 做加权 top-N 筛选。
+Typical scenarios: when Fuzzy Augment two-row samples carry `_weight`, weighted IV avoids the distortion from unweighted counts offsetting each other; the 05E experiment can run weighted top-N screening on RI-augmented samples + `weight_col`.
 
-`CreditModelPipeline` 的 `_feature_selection` 已委托 `feature_screen`；配置 `weight_col` 非空时自动走加权路径。
+`CreditModelPipeline`'s `_feature_selection` already delegates to `feature_screen`; when `weight_col` is configured as non-empty, the weighted path is taken automatically.
 
-### 0.7.2 加权 VIF / corr 边界
+### 0.7.2 Weighted VIF / corr Boundaries
 
-- G06 VIF 会把 `weight_col` 传给 `FeatureSelectionAnalyzer.compute_vif(..., sample_weight=...)`。非恒定权重使用 WLS 辅助回归；未传权重或正常数恒定权重继续走原有 OLS 计算，保持严格 legacy parity。
-- `corr_nan_policy="pairwise"` 下，正常数恒定权重复用无权重 corr 的实际迭代决策，同时保留 `corr_dropped` 加权审计。`corr_nan_policy="raise"` 仍先执行 NaN 硬闸，不会被恒定权重路径绕过。
-- 加权 WOE corr 会识别 adapter 的自定义后缀。若只有部分特征成功编码，可用数值子矩阵仍会计算；未编码特征以告警和 NaN 行/列留在完整矩阵中，不会被静默剔除。
+- G06 VIF passes `weight_col` to `FeatureSelectionAnalyzer.compute_vif(..., sample_weight=...)`. Non-constant weights use a WLS auxiliary regression; when no weights are passed, or the weights are a normal positive constant, the original OLS computation is kept, preserving strict legacy parity.
+- Under `corr_nan_policy="pairwise"`, normal positive constant weights reuse the actual iteration decisions of the unweighted corr, while keeping the weighted `corr_dropped` audit. `corr_nan_policy="raise"` still runs the NaN hard gate first and is not bypassed by the constant-weight path.
+- Weighted WOE corr recognizes the adapter's custom suffix. If only some features are encoded successfully, the usable numeric sub-matrix is still computed; unencoded features stay in the full matrix as NaN rows/columns with a warning, and are never silently dropped.
 
-## 6. 分布偏移分析
+## 6. Distribution Shift Analysis
 
 ```python
 from Modeling_Tool import DistributionShiftAnalyzer
@@ -227,9 +227,9 @@ shift_table = analyzer.analyze(varlist=features, outlier_value=0.99)
 print(shift_table)
 ```
 
-## 完整筛选流水线
+## Complete Screening Pipeline
 
-=== "WOE_Master（默认）"
+=== "WOE_Master (default)"
 
     ```python
     from Modeling_Tool import WOE_Master, PSICalculator, VarExtractionInsights, CorrelationFilter, SMF_MISSING_BIN
@@ -248,7 +248,7 @@ print(shift_table)
         .remove_highly_correlated(features)
     ```
 
-=== "MonotoneWOEBinner（评分卡推荐）"
+=== "MonotoneWOEBinner (recommended for scorecards)"
 
     ```python
     from Modeling_Tool import PSICalculator, VarExtractionInsights, CorrelationFilter
@@ -273,59 +273,59 @@ print(shift_table)
     ).remove_highly_correlated(features)
     ```
 
-## 常见问题
+## FAQ
 
-??? question "PSI 和 IV 结果与 WOE 图不一致"
+??? question "PSI and IV results don't match the WOE plots"
 
-    通常是因为筛选阶段没有传入最终建模使用的 `binning_engine` / `woe_binner`。请复用训练期已拟合的 `WOE_Master` 或 `MonotoneWOEBinner`。
+    This is usually because the screening stage was not given the `binning_engine` / `woe_binner` used for the final model. Reuse the `WOE_Master` or `MonotoneWOEBinner` fitted at training time.
 
-??? question "Monotone 分箱后，相关性过滤传 raw 数据还是 WOE 数据？"
+??? question "After Monotone binning, should correlation filtering get raw data or WOE data?"
 
-    推荐传 raw 数据，并同时传入 `woe_binner`。这样相关性过滤仍基于原始变量相关性，变量保留决策则基于同一套 WOE 分箱的 IV/KS。
+    Raw data is recommended, together with `woe_binner`. Correlation filtering then still relies on raw-variable correlations, while the decision on which variable to keep is based on the IV/KS from the same WOE binning.
 
-## 后置选择门（0.6.7+，G02–G06）
+## Post-Selection Gates (0.6.7+, G02–G06)
 
-经典 缺失率 → PSI → IV → 相关性 之后，`feature_screen` 新增一组默认关闭的后置门，
-按 **VIF → 组稳 → 多标签 → 截断** 顺序执行；证据帧与淘汰明细统一进
-`result.stage_tables` / `result.dropped_detail`（列：var/stage/metric/value/threshold/reason）：
+After the classic missing rate → PSI → IV → correlation, `feature_screen` adds a set of post-selection gates that are off by default,
+executed in the order **VIF → group stability → multi-label → truncation**; the evidence frames and elimination details are unified in
+`result.stage_tables` / `result.dropped_detail` (columns: var/stage/metric/value/threshold/reason):
 
 ```python
 FeatureValidationPipelineConfig(
     selection_enabled=True,
-    selection_group_dims=["apply_month"],       # G03 证据分组维度
+    selection_group_dims=["apply_month"],       # G03 evidence grouping dimensions
     selection_params={
-        "iv_upper_threshold": 2.0,               # G02 IV 上限（疑似泄漏淘汰）
-        "monthly_iv_min": 0.02,                  # G03 分组 IV 下限
-        "monthly_iv_cv_max": 1.0,                #     分组 IV 变异系数上限
-        "direction_consistency_min": 0.9,        #     方向一致组占比下限
-        "insufficient_group_policy": "keep_warn",#     合格组<2：keep_warn/drop/raise
-        "target_rules": "all",                   # G04 多标签联合门：all/any/min_pass_count
+        "iv_upper_threshold": 2.0,               # G02 IV upper limit (eliminates suspected leakage)
+        "monthly_iv_min": 0.02,                  # G03 lower limit of group IV
+        "monthly_iv_cv_max": 1.0,                #     upper limit of the group-IV coefficient of variation
+        "direction_consistency_min": 0.9,        #     lower limit of the share of direction-consistent groups
+        "insufficient_group_policy": "keep_warn",#     qualifying groups < 2: keep_warn/drop/raise
+        "target_rules": "all",                   # G04 multi-label joint gate: all/any/min_pass_count
         "per_target_iv_range": {"y": (0.02, None)},
         "direction_reference_target": "y",
-        "max_selected_features": 30,             # G05 硬截断（IV 排序，名字破平）
-        "vif_enabled": True, "vif_threshold": 10.0,  # G06 需 pip install "SuperModelingFactory[stats]"
-        "vif_use_woe_bins": True,                      # 0.7.1+：按 WOE 矩阵计算 VIF
+        "max_selected_features": 30,             # G05 hard truncation (IV ranking, ties broken by name)
+        "vif_enabled": True, "vif_threshold": 10.0,  # G06 requires pip install "SuperModelingFactory[stats]"
+        "vif_use_woe_bins": True,                      # 0.7.1+: compute VIF on the WOE matrix
     },
 )
 ```
 
-要点：
+Key points:
 
-- G03/G04 的证据（分组/分标签 IV 与方向）由 FVP 以 **lazy 闭包**构建，只对 post-corr 幸存集计价；
-  CMP 路径没有证据来源——配置了组稳/多标签阈值但无证据会在 `feature_screen` 入口报错。
-- 方向的统一定义是 point-biserial 符号（`Screen_Gates.point_biserial_direction`）。
-- G05 截断不足 `min_selected_features` 时只告警不回填，保住每个门的因果可审计性。
-- 筛选自拟合的 monotone 引擎会挂到 `result.woe_engine` 并随 `FeatureScreeningArtifact`
-  进入 CM 复用契约（G00）；`WOE_Master` 只附 woe_table + 警告（它持有训练帧，不宜序列化）。
-- G06 默认 `vif_use_woe_bins=False`，只在 raw 数值列上计算 VIF：非数值幸存变量会被保留、发出 warning，并在 `selection_summary` / `stage_tables["vif"]` 中留下排除审计；数值列不足时该门以 `skipped_insufficient_numeric` 跳过。bool 与 pandas nullable 数值列只在 VIF 矩阵内转换为浮点。
-- 将 `vif_use_woe_bins=True` 后，VIF 使用 INS 的 WOE 编码矩阵，分类变量也可参与共线性判断。声明了 `categorical_features` 时必须使用 `woe_engine="monotone"`；`equal_freq` 会在拟合前明确拒绝该组合。预拟合 WOE engine 必须覆盖全部幸存变量，且自定义 WOE 后缀会被自动识别。
+- The G03/G04 evidence (group/per-label IV and direction) is built by FVP as a **lazy closure** and is priced only for the post-corr survivor set;
+  the CMP path has no evidence source — configuring group-stability/multi-label thresholds without evidence raises an error at the `feature_screen` entry.
+- The unified definition of direction is the point-biserial sign (`Screen_Gates.point_biserial_direction`).
+- If G05 truncation falls short of `min_selected_features`, it only warns and does not backfill, preserving the causal auditability of every gate.
+- The monotone engine self-fitted by screening is attached to `result.woe_engine` and enters the CM reuse contract with `FeatureScreeningArtifact`
+  (G00); `WOE_Master` attaches only the woe_table + a warning (it holds the training frame and should not be serialized).
+- G06 defaults to `vif_use_woe_bins=False` and computes VIF only on raw numeric columns: non-numeric survivors are kept with a warning, and an exclusion audit is left in `selection_summary` / `stage_tables["vif"]`; when there are too few numeric columns, the gate is skipped as `skipped_insufficient_numeric`. bool and pandas nullable numeric columns are converted to floats only inside the VIF matrix.
+- With `vif_use_woe_bins=True`, VIF uses the INS WOE-encoded matrix, so categorical variables can also take part in the collinearity check. When `categorical_features` is declared, `woe_engine="monotone"` is required; `equal_freq` explicitly rejects that combination before fitting. A pre-fitted WOE engine must cover all surviving variables, and custom WOE suffixes are recognized automatically.
 
-### bool 特征（0.8.2）
+### bool Features (0.8.2)
 
-numpy 不接受对 bool 数组取分位数（`TypeError: numpy boolean subtract`），所以 0.8.1 及之前，**任何基于分位数的分箱碰到 bool 特征都会失败**：`quick_binning`、`super_binning`、收益表、`WOE_Master`、monotone 分箱、两个筛选器都会抛错。在开启 WOE 的 FVP 里，它表现为一句被吞掉的"特征洞察计算失败"告警加上 `KeyError: WOE column 'x_woe' was not produced`——整条流程中断，而同一列 `astype("int8")` 之后一切正常。
+numpy does not accept quantiles on bool arrays (`TypeError: numpy boolean subtract`), so in 0.8.1 and earlier **any quantile-based binning failed on a bool feature**: `quick_binning`, `super_binning`, the gains table, `WOE_Master`, monotone binning, and both screeners all raised errors. In an FVP with WOE enabled, it showed up as a swallowed "feature insights computation failed" warning plus `KeyError: WOE column 'x_woe' was not produced` — the whole flow aborted, while the same column after `astype("int8")` worked fine.
 
-0.8.2 在取分位数的位置把 bool 列映射为 0/1，分箱、WOE 表、IV 与打分结果与 int8 副本**逐位一致**；只有 WOE 表的 `MIN` / `MAX` 仍按特征本身报告 `False` / `True`。pandas nullable `boolean` 列转为 `Int8`，缺失值保持缺失。分布摘要里 bool 仍按类别特征报告（0.8.2 起，见上文）。
+0.8.2 maps bool columns to 0/1 at the point where quantiles are taken, and the binning, WOE table, IV, and scoring results are **bit-for-bit identical** to the int8 copy; only the `MIN` / `MAX` of the WOE table are still reported as `False` / `True` for the feature itself. pandas nullable `boolean` columns are converted to `Int8`, with missing values staying missing. In the distribution summary, bool is still reported as a categorical feature (as of 0.8.2, see above).
 
-### FVP 类别转换审计（0.7.2）
+### FVP Categorical Transform Audit (0.7.2)
 
-FVP 会在每个 split 转换后立即冻结类别覆盖率与 unseen 统计，避免 engine 的“最近一次 transform”状态覆盖先前结果。完整结果可从 `woe_artifacts["by_target"][target]["categorical_transform_stats_by_split"]` 与 `unseen_category_stats_by_split` 查看；batch/slim 汇总则保留在 `woe_artifacts["categorical_transform_stats_by_target"]` / `woe_artifacts["unseen_category_stats_by_target"]`。0.8.2 起同样冻结数值特征上"声明了但拟合样本里没出现的特殊值"的命中统计（`unseen_special_stats_by_split` / `woe_artifacts["unseen_special_stats_by_target"]`，含义见 [WOE 指南](woe.md)）。批次合并若发现同一 target/split/feature 的统计冲突会抛错，不会静默覆盖。
+FVP freezes categorical coverage and unseen statistics immediately after each split's transform, so the engine's "most recent transform" state cannot overwrite earlier results. The full results can be viewed in `woe_artifacts["by_target"][target]["categorical_transform_stats_by_split"]` and `unseen_category_stats_by_split`; the batch/slim summaries are kept in `woe_artifacts["categorical_transform_stats_by_target"]` / `woe_artifacts["unseen_category_stats_by_target"]`. As of 0.8.2, hit statistics for "declared special values that never occur in the fit sample" on numeric features are frozen the same way (`unseen_special_stats_by_split` / `woe_artifacts["unseen_special_stats_by_target"]`; for their meaning, see the [WOE guide](woe.md)). If a batch merge finds conflicting statistics for the same target/split/feature, it raises an error rather than silently overwriting.

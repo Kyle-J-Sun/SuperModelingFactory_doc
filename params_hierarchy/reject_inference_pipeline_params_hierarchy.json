@@ -4,25 +4,25 @@
   "hierarchy": {
     "required": [
       {
-        "level1": "基础输入与字段边界",
+        "level1": "Basic Input and Field Boundaries",
         "level2": [
           {
-            "name": "输出与运行控制",
+            "name": "Output and Run Control",
             "params": {
-              "output_dir": "输出目录，默认 output/reject_inference",
-              "random_state": "全局随机种子",
-              "write_outputs": "是否输出 CSV/图片等中间产物",
-              "write_excel": "是否输出 Excel 报告"
+              "output_dir": "Output directory, default output/reject_inference",
+              "random_state": "Global random seed",
+              "write_outputs": "Whether to output intermediate artifacts such as CSVs/images",
+              "write_excel": "Whether to output the Excel report"
             }
           },
           {
-            "name": "业务字段",
+            "name": "Business Fields",
             "params": {
-              "approved_col": "审批通过标识字段，默认 approved；1 为通过，0 为拒绝",
-              "target_col": "真实标签字段，默认 badflag",
-              "score_col": "拒绝推断使用的前置分字段，默认 prescore_prob",
-              "feature_cols": "建模特征列表；为空时自动选择数值列并排除 target/approved/score/split 等字段",
-              "split_col": "可选样本切分字段，支持 ins/oos/oot；ins/oos 进入 RI 训练，oot 只做评估"
+              "approved_col": "Approval flag field, default approved; 1 is approved, 0 is rejected",
+              "target_col": "True label field, default badflag",
+              "score_col": "Pre-score field used by reject inference, default prescore_prob",
+              "feature_cols": "List of model features; when empty, numeric columns are selected automatically, excluding fields such as target/approved/score/split",
+              "split_col": "Optional sample split field, supports ins/oos/oot; ins/oos enter RI training, and oot is used only for evaluation"
             }
           }
         ]
@@ -30,137 +30,137 @@
     ],
     "optional": [
       {
-        "level1": "前置分训练",
+        "level1": "Pre-Score Training",
         "level2": [
           {
-            "name": "前置分开关",
+            "name": "Pre-Score Switch",
             "params": {
-              "train_prescore": "是否训练 pre-score 模型；true 时会覆盖已有 score_col",
-              "prescore_model_type": "pre-score 模型类型，支持 lgb/xgb/cat/lr，默认 lgb",
-              "prescore_params": "pre-score 模型参数覆盖",
-              "prescore_test_size": "pre-score 训练验证切分比例"
+              "train_prescore": "Whether to train a pre-score model; when true, an existing score_col is overwritten",
+              "prescore_model_type": "Pre-score model type, supports lgb/xgb/cat/lr, default lgb",
+              "prescore_params": "Pre-score model parameter overrides",
+              "prescore_test_size": "Pre-score training/validation split ratio"
             },
             "rules": [
-              "train_prescore=true 或输入缺少 score_col 时必须存在 target_col",
-              "ri_approved_data 若缺少 score_col，会使用同一个 prescore 模型补分",
-              "train_prescore=false 且不训练补分时，主数据和外部 RI reference 都必须已有 score_col"
+              "target_col must exist when train_prescore=true or the input lacks score_col",
+              "If ri_approved_data lacks score_col, the same prescore model is used to fill in the score",
+              "When train_prescore=false and no score filling is trained, both the main data and the external RI reference must already have score_col"
             ]
           }
         ]
       },
       {
-        "level1": "RI 方法与分数方向",
+        "level1": "RI Methods and Score Direction",
         "level2": [
           {
-            "name": "RI 方法选择",
+            "name": "RI Method Selection",
             "params": {
-              "ri_methods": "RI 方法列表，默认 simple_augment/hard_cutoff/fuzzy_augment/parceling",
-              "ri_method_params": "每个 RI 方法的独立参数字典",
-              "ri_score_direction": "分数方向，high_bad 表示分数越高风险越高，high_good 表示分数越高越好"
+              "ri_methods": "List of RI methods, default simple_augment/hard_cutoff/fuzzy_augment/parceling",
+              "ri_method_params": "Independent parameter dict for each RI method",
+              "ri_score_direction": "Score direction; high_bad means the higher the score, the higher the risk, and high_good means the higher the score, the better"
             },
             "children": {
               "simple_augment": {
-                "bad_rate": "拒绝件随机伪标签坏账率；为空时基于参考样本估计",
-                "random_state": "继承顶层 random_state"
+                "bad_rate": "Bad rate of the random pseudo-labels for rejected cases; when empty, estimated from the reference sample",
+                "random_state": "Inherits the top-level random_state"
               },
               "hard_cutoff": {
-                "cutoff": "硬切阈值；为空时按 ri_score_direction 从 approved bad score 分位数推导"
+                "cutoff": "Hard-cut threshold; when empty, derived from the quantiles of the approved bad scores according to ri_score_direction"
               },
               "fuzzy_augment": {
-                "weight_factor": "拒绝件 good/bad 双行权重缩放系数，默认 1.0"
+                "weight_factor": "Weight scaling factor for the good/bad double rows of rejected cases, default 1.0"
               },
               "parceling": {
-                "n_parcels": "parcel 分箱数，默认 10"
+                "n_parcels": "Number of parcel bins, default 10"
               }
             }
           }
         ]
       },
       {
-        "level1": "RI Approved 参考样本",
+        "level1": "RI Approved Reference Sample",
         "level2": [
           {
-            "name": "参考样本来源",
+            "name": "Reference Sample Source",
             "params": {
-              "ri_approved_data": "外部 approved DataFrame，仅用于 RI 规则估计",
-              "ri_approved_query": "从主数据 approved 中筛选 RI reference 的 pandas query",
-              "ri_approved_func": "从主数据 approved 中筛选 RI reference 的函数",
-              "ri_approved_frac": "从 reference 中随机抽样比例",
-              "ri_approved_n": "从 reference 中随机抽样条数",
-              "ri_approved_scope": "reference_only 或 output_subset；默认 reference_only"
+              "ri_approved_data": "External approved DataFrame, used only for estimating the RI rules",
+              "ri_approved_query": "A pandas query that selects the RI reference from the main data's approved samples",
+              "ri_approved_func": "A function that selects the RI reference from the main data's approved samples",
+              "ri_approved_frac": "Share to randomly sample from the reference",
+              "ri_approved_n": "Number of rows to randomly sample from the reference",
+              "ri_approved_scope": "reference_only or output_subset; default reference_only"
             },
             "rules": [
-              "ri_approved_data 不能与 ri_approved_query/ri_approved_func 同时使用",
-              "ri_approved_frac 和 ri_approved_n 不能同时使用",
-              "ri_approved_scope=output_subset 不能与外部 ri_approved_data 同时使用",
-              "reference_only 下最终增强样本仍输出主数据全量 approved + rejected inferred",
-              "output_subset 下最终增强样本输出筛选后的 approved + rejected inferred"
+              "ri_approved_data cannot be used together with ri_approved_query/ri_approved_func",
+              "ri_approved_frac and ri_approved_n cannot be used together",
+              "ri_approved_scope=output_subset cannot be used together with an external ri_approved_data",
+              "Under reference_only, the final augmented sample still outputs all approved + rejected inferred of the main data",
+              "Under output_subset, the final augmented sample outputs the filtered approved + rejected inferred"
             ]
           }
         ]
       },
       {
-        "level1": "RI 后模型训练与评估",
+        "level1": "Post-RI Model Training and Evaluation",
         "level2": [
           {
-            "name": "模型训练开关",
+            "name": "Model Training Switch",
             "params": {
-              "train_ri_models": "是否对每套 RI 增强样本训练后续模型",
-              "ri_model_type": "RI 后模型类型，支持 lgb/xgb/cat/lr，默认 lgb",
-              "ri_model_params": "RI 后模型参数覆盖",
-              "lr_nan_handling": "lr 模型（prescore/RI 后模型）特征缺失值处理：fillna_median（默认）/fillna_mean/fillna_0 用 train 侧统计量填充并随模型保存、打分时复用；raise 表示禁止填充、遇 NaN/Inf 直接报错。GBM 系不受影响（天然支持 NaN）",
-              "include_no_ri_benchmark": "是否加入不做 RI 的 approved-only benchmark",
-              "ri_validation_frac": "无 OOS 时从 approved training pool 抽 validation 的比例"
+              "train_ri_models": "Whether to train a follow-up model on each RI-augmented sample",
+              "ri_model_type": "Post-RI model type, supports lgb/xgb/cat/lr, default lgb",
+              "ri_model_params": "Post-RI model parameter overrides",
+              "lr_nan_handling": "Missing-value handling for features of the lr model (prescore/post-RI model): fillna_median (default)/fillna_mean/fillna_0 fill with train-side statistics, which are saved with the model and reused when scoring; raise forbids filling and raises an error directly on NaN/Inf. GBM families are unaffected (they support NaN natively)",
+              "include_no_ri_benchmark": "Whether to add an approved-only benchmark that does no RI",
+              "ri_validation_frac": "Share of validation drawn from the approved training pool when there is no OOS"
             }
           },
           {
-            "name": "OOT 与性能评估",
+            "name": "OOT and Performance Evaluation",
             "params": {
-              "oot_data": "外部 OOT DataFrame；优先级高于 split_col 和 oot_frac",
-              "oot_frac": "没有 oot_data/split_col OOT 时，从 approved 中随机切 OOT 的比例",
-              "perf_pct_bins": "PerformanceEvaluator 分箱数",
-              "min_bin_prop": "PerformanceEvaluator 最小箱占比"
+              "oot_data": "External OOT DataFrame; takes precedence over split_col and oot_frac",
+              "oot_frac": "Share of OOT split randomly from approved when there is no oot_data/split_col OOT",
+              "perf_pct_bins": "Number of bins for PerformanceEvaluator",
+              "min_bin_prop": "Minimum bin share for PerformanceEvaluator"
             },
             "rules": [
-              "oot_data target_col 为空的未表现样本会自动过滤并 warning",
-              "split_col 存在时 ins/oos 用于训练与验证，oot 只评估",
-              "oot_data 优先级高于 split_col==oot，高于 oot_frac"
+              "Unperformed samples with an empty oot_data target_col are filtered automatically with a warning",
+              "When split_col exists, ins/oos are used for training and validation, and oot only for evaluation",
+              "oot_data takes precedence over split_col==oot, which takes precedence over oot_frac"
             ]
           }
         ]
       },
       {
-        "level1": "模型与 RI 数据落盘",
+        "level1": "Model and RI Data Persistence",
         "level2": [
           {
-            "name": "模型持久化",
+            "name": "Model Persistence",
             "params": {
-              "save_models": "是否保存 prescore 和 RI 后模型 pkl",
-              "model_output_dir": "模型输出目录；为空时使用 output_dir/models",
-              "model_include_metadata": "是否使用 save_model metadata envelope"
+              "save_models": "Whether to save the prescore and post-RI model pkl files",
+              "model_output_dir": "Model output directory; when empty, output_dir/models is used",
+              "model_include_metadata": "Whether to use the save_model metadata envelope"
             }
           },
           {
-            "name": "RI 数据集输出",
+            "name": "RI Dataset Output",
             "params": {
-              "write_ri_datasets": "是否写出每套 RI 增强样本",
-              "ri_dataset_output_cols": "只输出指定列；为空时输出全量列",
-              "ri_dataset_warn_mb": "增强样本估算内存超过该 MB 时 warning"
+              "write_ri_datasets": "Whether to write each RI-augmented sample",
+              "ri_dataset_output_cols": "Output only the specified columns; when empty, all columns are output",
+              "ri_dataset_warn_mb": "A warning is issued when the estimated memory of the augmented sample exceeds this many MB"
             }
           }
         ]
       }
     ]
   },
-  "requirement_note": "必填类别包含 RI 必须确认的数据字段入口；feature_cols 可自动推断，但 approved/target/score 口径需要确认。",
+  "requirement_note": "The required category contains the data-field entry points that RI must confirm; feature_cols can be inferred automatically, but the approved/target/score basis needs to be confirmed.",
   "underlying_method_params": {
     "prescore_params": {
-      "passes_to": "lgb/xgb/cat 使用 GradientBoostingModel.fit；lr 使用 LRMaster.fit",
-      "accepted_params": "按 prescore_model_type 使用对应模型参数；默认参数按模型隔离，并补对应随机种子"
+      "passes_to": "lgb/xgb/cat use GradientBoostingModel.fit; lr uses LRMaster.fit",
+      "accepted_params": "Uses the model parameters corresponding to prescore_model_type; the default parameters are isolated per model, with the corresponding random seed filled in"
     },
     "ri_model_params": {
-      "passes_to": "lgb/xgb/cat 使用 GradientBoostingModel.fit；lr 使用 LRMaster.fit",
-      "accepted_params": "按 ri_model_type 使用对应模型参数；fuzzy_augment 的 _weight 对 GBM 传 sample_weight，对 LR 传 weight_col"
+      "passes_to": "lgb/xgb/cat use GradientBoostingModel.fit; lr uses LRMaster.fit",
+      "accepted_params": "Uses the model parameters corresponding to ri_model_type; the _weight of fuzzy_augment is passed to GBMs as sample_weight and to LR as weight_col"
     },
     "ri_method_params": {
       "passes_to": "Modeling_Tool.Sample.Reject_Infer inferrer constructors",
@@ -168,25 +168,25 @@
         "simple_augment": {
           "bad_rate": {
             "default": null,
-            "meaning": "拒绝件伪标签坏账率；None 使用 approved 平均坏账率"
+            "meaning": "Pseudo-label bad rate for rejected cases; None uses the approved average bad rate"
           }
         },
         "hard_cutoff": {
           "cutoff": {
-            "default": "Pipeline 按 ri_score_direction 自动估计",
-            "meaning": "high_bad 时 score>=cutoff 判 bad；high_good 时 score<=cutoff 判 bad"
+            "default": "The Pipeline estimates it automatically according to ri_score_direction",
+            "meaning": "Under high_bad, score>=cutoff is judged bad; under high_good, score<=cutoff is judged bad"
           }
         },
         "fuzzy_augment": {
           "weight_factor": {
             "default": 1.0,
-            "meaning": "拒绝件 good/bad 双行权重缩放"
+            "meaning": "Weight scaling of the good/bad double rows of rejected cases"
           }
         },
         "parceling": {
           "n_parcels": {
             "default": 10,
-            "meaning": "approved 分箱数，用同一边界给 rejected 分箱"
+            "meaning": "Number of approved bins; rejected cases are binned with the same boundaries"
           }
         }
       },

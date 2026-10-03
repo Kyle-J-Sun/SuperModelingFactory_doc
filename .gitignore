@@ -1,11 +1,11 @@
-# MkDocs 构建产物
+# MkDocs build output
 /site/
 
-# 操作系统
+# Operating system
 .DS_Store
 Thumbs.db
 
-# 编辑器
+# Editors
 .idea/
 .vscode/
 *.swp

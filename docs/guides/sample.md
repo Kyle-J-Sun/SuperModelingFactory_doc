@@ -1,8 +1,8 @@
-# 样本管理
+# Sample Management
 
-样本管理是建模的第一步。SuperModelingFactory 在 [`Sample`](../api/sample.md) 子包中提供**切分 / 分层 / 均衡 / 最优种子搜索**四类工具。
+Sample management is the first step of modeling. SuperModelingFactory provides four kinds of tools in the [`Sample`](../api/sample.md) subpackage: **splitting / stratification / balancing / optimal seed search**.
 
-## 1. 样本切分 —— `SampleSplitter`
+## 1. Sample Splitting — `SampleSplitter`
 
 ```python
 from Modeling_Tool import SampleSplitter
@@ -10,26 +10,26 @@ from Modeling_Tool import SampleSplitter
 splitter = SampleSplitter(
     test_size=0.3,
     random_state=42,
-    stratify=True,      # 按目标分层
+    stratify=True,      # stratify by the target
 )
 train_df, test_df = splitter.split_df(data, target="bad_flag")
 ```
 
-### 关键参数
+### Key Parameters
 
-| 参数 | 默认值 | 说明 |
+| Parameter | Default | Description |
 |------|-------|------|
-| `test_size` | `0.25` | 验证集占比（0–1） |
-| `random_state` | `None` | 随机种子 |
-| `stratify` | `True` | 是否按目标列分层 |
+| `test_size` | `0.25` | Share of the validation set (0–1) |
+| `random_state` | `None` | Random seed |
+| `stratify` | `True` | Whether to stratify by the target column |
 
-### 返回值
+### Return Value
 
-`(train_df, test_df)` —— pandas DataFrame 元组。
+`(train_df, test_df)` — a tuple of pandas DataFrames.
 
-## 2. 分层采样 —— `StratifiedSampler`
+## 2. Stratified Sampling — `StratifiedSampler`
 
-保持坏样本率不变的随机采样，常用于**训练样本过大**时的下采样。
+Random sampling that preserves the bad rate, commonly used to downsample when the **training sample is too large**.
 
 ```python
 from Modeling_Tool import StratifiedSampler
@@ -38,36 +38,36 @@ sampler = StratifiedSampler(random_state=42)
 sample_df = sampler.sample(train_df, target="bad_flag", n_samples=5000)
 ```
 
-## 3. 样本均衡 —— `StratifiedSampler.balance`
+## 3. Sample Balancing — `StratifiedSampler.balance`
 
-处理**正负样本极不平衡**的问题（如坏样本率 < 1%）。
+Handles **severely imbalanced positive/negative samples** (for example, a bad rate below 1%).
 
 ```python
 from Modeling_Tool import StratifiedSampler
 
-# method：'undersample' / 'oversample' / 'smote'
+# method: 'undersample' / 'oversample' / 'smote'
 sampler = StratifiedSampler(random_state=42)
 balanced_df = sampler.balance(train_df, target="bad_flag", method="smote")
 ```
 
-| 模式 | 说明 | 适用场景 |
+| Mode | Description | When to use |
 |------|------|---------|
-| `undersample` | 随机下采样多数类 | 样本充足，训练耗时敏感 |
-| `oversample` | 随机上采样少数类 | 样本不足 |
-| `smote` | SMOTE 合成少数类 | 样本极少，需保留分布信息（需 `imbalanced-learn`） |
+| `undersample` | Randomly undersample the majority class | Plenty of samples, training time is a concern |
+| `oversample` | Randomly oversample the minority class | Not enough samples |
+| `smote` | SMOTE synthesizes minority-class samples | Very few samples, distribution information must be preserved (requires `imbalanced-learn`) |
 
-!!! note "`SampleBalancer`（imblearn 风格欠采样器）"
+!!! note "`SampleBalancer` (imblearn-style undersampler)"
 
-    若需要 `random` / `nearmiss` / `tomek` / `enn` 等欠采样器，并返回 `(X, y)` 元组：
+    If you need undersamplers such as `random` / `nearmiss` / `tomek` / `enn` that return an `(X, y)` tuple:
 
     ```python
     from Modeling_Tool import SampleBalancer
     X_res, y_res = SampleBalancer(method="nearmiss", random_state=42).fit_resample(X, y)
     ```
 
-## 4. 最优种子搜索 —— `select_sample_seed`
+## 4. Optimal Seed Search — `select_sample_seed`
 
-固定训练/验证/OOT 划分后，搜索使 **OOT AUC 最大化** 的随机种子。注意 `model` 传入的是 **GradientBoostingModel 包装类**（而非底层估计器）：
+With the train/validation/OOT split fixed, search for the random seed that **maximizes OOT AUC**. Note that `model` takes the **GradientBoostingModel wrapper class** (not the underlying estimator):
 
 ```python
 from Modeling_Tool import select_sample_seed, GradientBoostingModel
@@ -77,22 +77,22 @@ gbm = GradientBoostingModel("lgb", {"n_estimators": 100, "learning_rate": 0.1})
 best_seed = select_sample_seed(
     master_df=df,
     oot_split_col="sample_ind",   # 1=INS, 2=OOT
-    model=gbm,                    # 传包装类
+    model=gbm,                    # pass the wrapper class
     tgt_name="bad_flag",
-    seed_range=(3000, 3050),      # 搜索范围
+    seed_range=(3000, 3050),      # search range
     ins_prop=0.7,
 )
-print(f"最优种子: {best_seed}")
+print(f"Best seed: {best_seed}")
 ```
 
-!!! tip "何时需要搜索"
+!!! tip "When to search"
 
-    - 训练集极小（< 1 万）时，结果对随机种子敏感
-    - 希望最大化 OOT 表现而非训练集表现
+    - With a very small training set (< 10k), results are sensitive to the random seed
+    - You want to maximize OOT performance rather than training-set performance
 
-## 5. 拒绝推断 —— `RejectInferenceFactory`
+## 5. Reject Inference — `RejectInferenceFactory`
 
-建模数据只来自**审批通过**的样本时使用。
+Use this when the modeling data comes only from **approved** samples.
 
 ```python
 from Modeling_Tool import RejectInferenceFactory
@@ -101,36 +101,36 @@ inferrer = RejectInferenceFactory.create("parceling", target_col="bad_flag", sco
 df_combined = inferrer.infer(approved_df, rejected_df, score_col="prob")
 ```
 
-支持的推断方法详见 [拒绝推断与分布适配](reject_inference.md)。
+For the supported inference methods, see [Reject Inference and Distribution Adaptation](reject_inference.md).
 
-## 常见问题
+## FAQ
 
-??? question "切分后训练集坏样本率与全量不一致"
+??? question "The training-set bad rate after splitting differs from the full-sample bad rate"
 
-    检查是否设置了 `stratify=True`。否则 `train_test_split` 会做纯随机切分，
-    小样本下坏样本率会有 ±1% 的波动。
+    Check whether `stratify=True` is set. Otherwise `train_test_split` does a purely random split,
+    and with small samples the bad rate can fluctuate by ±1%.
 
-??? question "`StratifiedSampler.balance(method='smote')` 报 `ModuleNotFoundError`"
+??? question "`StratifiedSampler.balance(method='smote')` raises `ModuleNotFoundError`"
 
-    安装可选依赖：
+    Install the optional dependency:
 
     ```bash
     pip install imbalanced-learn>=0.10.0
     ```
 
-## 行级切分物化（0.6.7+，G01）
+## Row-Level Split Materialization (0.6.7+, G01)
 
-样本分析的推荐切分现在可以直接物化成行级归属，避免"统计口径与实际建模切分对不上"：
+The recommended split from sample analysis can now be materialized directly into row-level assignments, avoiding a mismatch between the statistics basis and the actual modeling split:
 
 ```python
 SampleAnalysisPipelineConfig(
     materialize_split=True, id_col="loan_id",
-    oot_cutoff="2025-04",          # 可选：覆盖推荐窗口，OOT = oot_time_dim >= cutoff
-    split_col_name="sample_split", # 输出列名，可直接回灌 CMP/FVP 的 split_col
-    persist_split_map=True,        # 落盘 row_level_split.csv + split_artifact.json
+    oot_cutoff="2025-04",          # optional: override the recommended window, OOT = oot_time_dim >= cutoff
+    split_col_name="sample_split", # output column name, can be fed straight back into the CMP/FVP split_col
+    persist_split_map=True,        # write row_level_split.csv + split_artifact.json to disk
 )
 ```
 
-- 物化按推荐 (窗口, 比例, 种子) 经同一个 `SampleSplitter` 重放，保证与统计阶段完全同索引。
-- 响亮断言：`id_col` 成熟行内唯一（重复即报计数）、三段两两互斥、覆盖全部成熟行。
-- `split_artifact` 携带每段的 sha256 ID 哈希（ins/oos/oot/full），两次运行可直接比对哈希验证一致性。
+- Materialization replays the recommended (window, ratio, seed) through the same `SampleSplitter`, guaranteeing identical indices to the statistics stage.
+- Loud assertions: `id_col` must be unique among matured rows (duplicates are reported with counts), the three segments must be pairwise disjoint, and they must cover all matured rows.
+- `split_artifact` carries a sha256 ID hash for each segment (ins/oos/oot/full), so two runs can be compared directly by hash to verify consistency.

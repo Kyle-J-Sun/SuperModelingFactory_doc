@@ -4,27 +4,27 @@
   "hierarchy": {
     "required": [
       {
-        "level1": "基础输入与字段边界",
+        "level1": "Basic Input and Field Boundaries",
         "level2": [
           {
-            "name": "主键与时间字段",
+            "name": "Primary Key and Time Fields",
             "params": {
-              "id_col": "主键字段，默认 flow_id，输入表必须存在",
-              "apply_time_col": "申请时间字段，默认 apply_time，输入表必须存在；time_dims 派生依赖它"
+              "id_col": "Primary key field, default flow_id; must exist in the input table",
+              "apply_time_col": "Application time field, default apply_time; must exist in the input table; the time_dims derivation depends on it"
             }
           },
           {
-            "name": "分析对象字段",
+            "name": "Analysis Object Fields",
             "params": {
-              "target_cols": "可选 y 标签；为空时跳过 WOE、IV/KS、变量级相关性明细、特征筛选",
-              "new_feature_cols": "新特征列表；为空时自动推断",
-              "incumbent_feature_cols": "老特征列表；主要用于 new vs incumbent 相关性对比"
+              "target_cols": "Optional y labels; when empty, WOE, IV/KS, variable-level correlation details, and feature screening are skipped",
+              "new_feature_cols": "List of new features; inferred automatically when empty",
+              "incumbent_feature_cols": "List of old features; mainly used for the new vs incumbent correlation comparison"
             }
           },
           {
-            "name": "类别变量声明",
+            "name": "Categorical Variable Declaration",
             "params": {
-              "categorical_features": "类别变量列表；主要影响 monotone WOE 的类别处理和 CSV batch base cols"
+              "categorical_features": "List of categorical variables; mainly affects the categorical handling of monotone WOE and the CSV batch base cols"
             }
           }
         ]
@@ -32,424 +32,424 @@
     ],
     "optional": [
       {
-        "level1": "输入类型与 CSV 分批",
+        "level1": "Input Type and CSV Batching",
         "level2": [
           {
-            "name": "输入类型",
+            "name": "Input type",
             "params": {
-              "input_type": "auto/dataframe/csv；auto 会根据 run(data) 类型判断",
-              "csv_read_kwargs": "传给 pandas.read_csv 的参数；不允许包含 usecols 或 chunksize"
+              "input_type": "auto/dataframe/csv; auto decides from the type of run(data)",
+              "csv_read_kwargs": "Parameters passed to pandas.read_csv; must not contain usecols or chunksize"
             }
           },
           {
-            "name": "是否启用分批",
+            "name": "Whether to enable batching",
             "params": {
-              "enable_batch": "默认 false；只有 true 且输入为 CSV 时才进入 feature batch mode"
+              "enable_batch": "Default false; feature batch mode is entered only when true and the input is a CSV"
             },
             "children": {
-              "feature_batch_size": "按 new_feature_cols 每 N 个特征拆一批",
-              "feature_batches": "用户显式指定特征批次；优先级高于 feature_batch_size",
-              "batch_base_cols": "每批强制读取的基础列；为空时自动包含 id/time/split/target/group/incumbent 等必要列",
-              "batch_output_subdir": "批次中间结果输出子目录，默认 feature_batches",
-              "batch_keep_intermediate": "是否保留每批 CSV 输出",
-              "batch_corr_mode": "within_batch/block_pairwise/off；控制 batch 模式相关性口径",
-              "batch_corr_pair_chunk_size": "block_pairwise 时跨批相关性二级分块大小"
+              "feature_batch_size": "Split into a batch for every N features of new_feature_cols",
+              "feature_batches": "Feature batches specified explicitly by the user; takes precedence over feature_batch_size",
+              "batch_base_cols": "Base columns forcibly read in every batch; when empty, the necessary columns such as id/time/split/target/group/incumbent are included automatically",
+              "batch_output_subdir": "Output subdirectory for the batch intermediate results, default feature_batches",
+              "batch_keep_intermediate": "Whether to keep the CSV output of each batch",
+              "batch_corr_mode": "within_batch/block_pairwise/off; controls the correlation basis in batch mode",
+              "batch_corr_pair_chunk_size": "Secondary block size for cross-batch correlation under block_pairwise"
             }
           },
           {
-            "name": "分批约束",
+            "name": "Batching Constraints",
             "rules": [
-              "enable_batch=true 时必须输入 CSV 路径",
-              "enable_batch=true 时必须配置 feature_batch_size 或 feature_batches",
-              "DataFrame 输入不支持 batch",
-              "block_pairwise 只支持 pearson/spearman，不支持 kendall"
+              "A CSV path must be the input when enable_batch=true",
+              "feature_batch_size or feature_batches must be configured when enable_batch=true",
+              "DataFrame input does not support batch",
+              "block_pairwise supports only pearson/spearman, not kendall"
             ]
           }
         ]
       },
       {
-        "level1": "样本切分",
+        "level1": "Sample Splitting",
         "level2": [
           {
-            "name": "已有切分字段",
+            "name": "Existing Split Fields",
             "params": {
-              "split_col": "推荐字段；必须含 ins/oos，oot 可选，ft_oot 等其他值作为额外评估集保留；优先级最高",
-              "sample_col": "兼容旧参数，默认 sample_ind；split_col 为空时使用",
-              "oot_col": "可选 OOT flag；没有 split/sample 字段时使用"
+              "split_col": "Recommended field; must contain ins/oos, oot is optional, and other values such as ft_oot are kept as extra evaluation sets; highest priority",
+              "sample_col": "Compatible legacy parameter, default sample_ind; used when split_col is empty",
+              "oot_col": "Optional OOT flag; used when there is no split/sample field"
             }
           },
           {
-            "name": "随机切分配置",
+            "name": "Random Split Configuration",
             "params": {
               "split_config": {
-                "test_size": "OOS 比例，默认 0.3",
-                "stratify": "是否按 target 分层，默认 true",
-                "random_state": "切分随机种子；为空时使用顶层 random_state"
+                "test_size": "OOS share, default 0.3",
+                "stratify": "Whether to stratify by target, default true",
+                "random_state": "Split random seed; when empty, the top-level random_state is used"
               },
-              "random_state": "全局随机种子，默认 42"
+              "random_state": "Global random seed, default 42"
             }
           },
           {
-            "name": "切分优先级",
+            "name": "Split Priority",
             "rules": [
-              "优先 split_col",
-              "split_col 值会 strip 并转为小写；自定义评估集不参与 WOE 拟合或特征筛选",
-              "其次 sample_col",
-              "其次 oot_col",
-              "最后按 split_config 随机切 INS/OOS"
+              "split_col first",
+              "split_col values are stripped and lowercased; custom evaluation sets take no part in the WOE fit or feature screening",
+              "Then sample_col",
+              "Then oot_col",
+              "Finally INS/OOS are split randomly by split_config"
             ]
           }
         ]
       },
       {
-        "level1": "时间与人群分组",
+        "level1": "Time and Population Grouping",
         "level2": [
           {
-            "name": "维度字段",
+            "name": "Dimension Fields",
             "params": {
-              "time_dims": "时间维度，默认 apply_month；可包含 apply_week/apply_month/apply_quarter",
-              "population_dims": "人群维度，例如 channel、strategy_version",
-              "group_specs": "显式分组配置；支持命名字典或 name/columns 列表，传入后覆盖 time_dims/population_dims 自动组合",
-              "min_group_size": "分组最小样本量，低于该阈值的 PSI/IVKS 明细会跳过"
+              "time_dims": "Time dimensions, default apply_month; may include apply_week/apply_month/apply_quarter",
+              "population_dims": "Population dimensions, such as channel and strategy_version",
+              "group_specs": "Explicit grouping configuration; supports a named dict or a name/columns list, and once passed it overrides the automatic combination of time_dims/population_dims",
+              "min_group_size": "Minimum group sample size; PSI/IVKS details below this threshold are skipped"
             }
           }
         ]
       },
       {
-        "level1": "分布分析",
+        "level1": "Distribution Analysis",
         "level2": [
           {
-            "name": "开关",
+            "name": "Switches",
             "params": {
-              "distribution_enabled": "是否计算分布，默认 true"
+              "distribution_enabled": "Whether to compute distributions, default true"
             },
             "children": {
               "distribution_params": {
-                "q": "分位点列表，默认 [0.05,0.15,0.25,0.5,0.75,0.95,0.99]",
-                "spec_missing_value": "特殊缺失值，可选",
-                "feature_block_size": "宽表分布统计的特征列块大小，默认 128"
+                "q": "List of quantile points, default [0.05,0.15,0.25,0.5,0.75,0.95,0.99]",
+                "spec_missing_value": "Special missing values, optional",
+                "feature_block_size": "Feature-column block size for wide-table distribution statistics, default 128"
               }
             }
           },
           {
-            "name": "依赖",
+            "name": "Dependencies",
             "rules": [
-              "默认只分析 new_feature_cols",
-              "分组依赖 time_dims、population_dims、group_specs"
+              "By default only new_feature_cols are analyzed",
+              "Grouping depends on time_dims, population_dims, and group_specs"
             ]
           }
         ]
       },
       {
-        "level1": "WOE 分箱与绘图",
+        "level1": "WOE Binning and Plotting",
         "level2": [
           {
-            "name": "WOE 总开关",
+            "name": "WOE Master Switch",
             "params": {
-              "woe_enabled": "是否执行 WOE，默认 true",
-              "woe_fit_query": "WOE fit 前对 INS 训练样本的过滤条件",
-              "woe_engine": "默认 monotone；可选 monotone/equal_freq",
-              "woe_plot_groups": "按哪些 group 输出 WOE by group 图"
+              "woe_enabled": "Whether to run WOE, default true",
+              "woe_fit_query": "Filter condition applied to the INS training sample before the WOE fit",
+              "woe_engine": "Default monotone; monotone/equal_freq optional",
+              "woe_plot_groups": "Which groups to output the WOE by-group plots for"
             },
             "rules": [
-              "必须 target_cols 非空才会执行",
-              "每个 target_col 单独 fit",
-              "只使用 target 非空的 INS 样本 fit"
+              "Runs only when target_cols is non-empty",
+              "Each target_col is fitted separately",
+              "Only INS samples with a non-null target are used for the fit"
             ]
           },
           {
-            "name": "equal_freq 引擎",
+            "name": "equal_freq Engine",
             "params": {
               "woe_params": {
-                "nbins": "分箱数",
-                "equal_freq": "是否等频",
-                "min_bin_prop": "最小箱占比",
-                "woe_suffix": "WOE 字段后缀，可选",
-                "missing_ref_value": "缺失替代值，可选",
-                "sv_min_bin_size": "0.8.0 SV 箱占比阈值 [0.0,1.0)，默认 0.0 关闭",
-                "sv_small_policy": "0.8.0 keep(默认)/neutral/merge_missing，亚阈值 SV 箱兜底",
-                "sv_woe_smoothing": "0.8.0 none(默认)/laplace，SV 箱 WOE 坏率收缩",
-                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭"
+                "nbins": "Number of bins",
+                "equal_freq": "Whether equal-frequency",
+                "min_bin_prop": "Minimum bin share",
+                "woe_suffix": "WOE field suffix, optional",
+                "missing_ref_value": "Missing substitute value, optional",
+                "sv_min_bin_size": "0.8.0 SV bin share threshold [0.0,1.0), default 0.0 = off",
+                "sv_small_policy": "0.8.0 keep (default)/neutral/merge_missing, fallback for sub-threshold SV bins",
+                "sv_woe_smoothing": "0.8.0 none (default)/laplace, bad-rate shrinkage of SV bin WOE",
+                "sv_smoothing_alpha": "0.8.0 smoothing strength α>=0, default 0.0 = off"
               }
             }
           },
           {
-            "name": "monotone 引擎",
+            "name": "monotone Engine",
             "params": {
               "monotone_woe_params": {
-                "n_init_bins": "初始箱数",
-                "min_bin_size": "最小箱占比",
-                "min_n_bins": "最小箱数",
-                "n_jobs": "并行数",
-                "special_values": "特殊值",
-                "missing_woe": "缺失 WOE",
-                "eps": "平滑项",
-                "sv_min_bin_size": "0.8.0 SV 箱占比阈值 [0.0,1.0)，默认 0.0 关闭",
-                "sv_small_policy": "0.8.0 keep(默认)/neutral/merge_missing，亚阈值 SV 箱兜底",
-                "sv_woe_smoothing": "0.8.0 none(默认)/laplace，SV 箱 WOE 坏率收缩",
-                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭",
-                "unseen_special_policy": "0.8.2 normal_bin(默认)/neutral，声明但拟合样本中未出现的数值特殊值：按普通值归箱 / 占位箱取 missing_woe"
+                "n_init_bins": "Initial number of bins",
+                "min_bin_size": "Minimum bin share",
+                "min_n_bins": "Minimum number of bins",
+                "n_jobs": "Parallelism",
+                "special_values": "Special values",
+                "missing_woe": "Missing WOE",
+                "eps": "Smoothing term",
+                "sv_min_bin_size": "0.8.0 SV bin share threshold [0.0,1.0), default 0.0 = off",
+                "sv_small_policy": "0.8.0 keep (default)/neutral/merge_missing, fallback for sub-threshold SV bins",
+                "sv_woe_smoothing": "0.8.0 none (default)/laplace, bad-rate shrinkage of SV bin WOE",
+                "sv_smoothing_alpha": "0.8.0 smoothing strength α>=0, default 0.0 = off",
+                "unseen_special_policy": "0.8.2 normal_bin (default)/neutral; numeric special values declared but absent from the fit sample: binned as ordinary values / a placeholder bin takes missing_woe"
               }
             },
             "children": {
-              "monotone_refine_cate_enabled": "是否对 categorical_features 调用 refine_cate",
-              "monotone_refine_cate_params": "refine_cate 参数",
-              "monotone_refine_dtree_enabled": "是否调用 refine_dtree",
-              "monotone_refine_dtree_params": "refine_dtree 参数",
-              "monotone_refine_chi2_enabled": "是否调用 refine_chi2",
-              "monotone_refine_chi2_params": "refine_chi2 参数"
+              "monotone_refine_cate_enabled": "Whether to call refine_cate on categorical_features",
+              "monotone_refine_cate_params": "refine_cate parameters",
+              "monotone_refine_dtree_enabled": "Whether to call refine_dtree",
+              "monotone_refine_dtree_params": "refine_dtree parameters",
+              "monotone_refine_chi2_enabled": "Whether to call refine_chi2",
+              "monotone_refine_chi2_params": "refine_chi2 parameters"
             }
           },
           {
-            "name": "WOE 拟合范围（G00）",
+            "name": "WOE Fit Scope (G00)",
             "params": {
-              "woe_fit_scope": "\"post_missing_gate\"（0.7.0 默认）或 \"all\"：先跑 missing_rate_threshold 缺失门再拟合顶层 WOE，防止单个高缺失特征拖垮整个 target 的 WOE 产物；显式 all 可保留旧口径"
+              "woe_fit_scope": "\"post_missing_gate\" (default since 0.7.0) or \"all\": first run the missing_rate_threshold missing-rate gate and then fit the top-level WOE, to keep a single high-missing feature from dragging down the whole target's WOE artifacts; an explicit all keeps the old basis"
             }
           },
           {
-            "name": "monotone 分箱治理（G08/G09/G17，经 monotone_woe_params 透传）",
+            "name": "monotone Binning Governance (G08/G09/G17, passed through via monotone_woe_params)",
             "params": {
-              "min_bad_count": "普通箱最小坏样本数；None(默认)不校验",
-              "min_good_count": "普通箱最小好样本数；None(默认)不校验",
-              "small_bin_policy": "merge/warn/raise；None(默认)关闭小箱治理",
-              "monotone_direction": "\"auto\"(默认)/increasing/decreasing 或 {feat: 方向} 字典",
-              "reference_target": "以参考标签的 point-biserial 符号推导每个特征的期望方向",
-              "direction_conflict_policy": "warn/raise/keep；方向被固定后实际 WOE 违背时的处理",
-              "missing_bin_strategy": "empirical_special/fixed_woe/fail；None(默认)按 special_values 推导",
-              "refine_min_n_bins_policy": "warn/enforce/raise；refine_dtree 结果箱数低于 min_n_bins 时的处理，0.7.0 默认 warn；显式 null 可关闭该治理"
+              "min_bad_count": "Minimum number of bad samples in an ordinary bin; None (default) means no check",
+              "min_good_count": "Minimum number of good samples in an ordinary bin; None (default) means no check",
+              "small_bin_policy": "merge/warn/raise; None (default) turns small-bin governance off",
+              "monotone_direction": "\"auto\" (default)/increasing/decreasing or a {feat: direction} dict",
+              "reference_target": "Derives the expected direction of each feature from the point-biserial sign of the reference label",
+              "direction_conflict_policy": "warn/raise/keep; how to handle an actual WOE that violates a fixed direction",
+              "missing_bin_strategy": "empirical_special/fixed_woe/fail; None (default) derives it from special_values",
+              "refine_min_n_bins_policy": "warn/enforce/raise; how to handle a refine_dtree result whose bin count falls below min_n_bins, default warn since 0.7.0; an explicit null turns this governance off"
             }
           },
           {
-            "name": "低占比特殊值治理（SV Bin Governance，0.8.0，经 woe_params / monotone_woe_params 透传）",
+            "name": "Low-Share Special-Value Governance (SV Bin Governance, 0.8.0, passed through via woe_params / monotone_woe_params)",
             "params": {
-              "sv_min_bin_size": "SV 箱占比阈值 [0.0,1.0)；prop = n_bin / N_total（分母不加 eps），严格小于才触发；0.0(默认)关闭",
-              "sv_small_policy": "keep(默认，旧行为)/neutral(WOE=IV=0)/merge_missing(计数并入 [Missing] 后重算，被合并行存表 WOE 改写为 [Missing] WOE、IV 置 0；无 [Missing] 箱时降级 neutral 并 warn)",
-              "sv_woe_smoothing": "none(默认)/laplace；laplace 采用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 后折回占比，仅作用于 SV 箱",
-              "sv_smoothing_alpha": "平滑强度 α>=0；0.0(默认)逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱越小收缩越强"
+              "sv_min_bin_size": "SV bin share threshold [0.0,1.0); prop = n_bin / N_total (no eps added to the denominator), triggers only when strictly below; 0.0 (default) = off",
+              "sv_small_policy": "keep (default, old behavior)/neutral (WOE=IV=0)/merge_missing (counts merged into [Missing] and recomputed, the stored WOE of merged rows rewritten to the [Missing] WOE and IV set to 0; when there is no [Missing] bin it degrades to neutral with a warning)",
+              "sv_woe_smoothing": "none (default)/laplace; laplace uses bad-rate shrinkage r=(n_bad+α·p)/(n_bin+α) and then converts back to shares, applying only to SV bins",
+              "sv_smoothing_alpha": "Smoothing strength α>=0; 0.0 (default) is bit-for-bit equivalent to the old empirical WOE, and as α→∞ the WOE shrinks monotonically to 0, with stronger shrinkage the smaller the bin"
             },
             "rules": [
-              "只治理特殊值箱（含 [Missing]），普通区间箱完全不受影响",
-              "方式1（兜底）优先于方式2（平滑）：亚阈值箱走 neutral/merge_missing 后不再平滑",
-              "merge_missing + laplace 同开时，合并目标 [Missing] 箱按经验公式重算、不平滑；其他达标 SV 箱仍平滑",
-              "[Missing] 箱本身也是受治理 SV 箱，唯一特殊之处是只能当 merge 目标、不能当 merge 来源",
-              "四个参数默认值组合与 0.7.2 逐位一致，升级不改变既有产出；非法取值在入口抛 ValueError",
-              "FVP 的 monotone 分支经 _MONOTONE_INIT_KEYS 白名单过滤，四个 sv_* 已入名单；不在名单的 key 会被静默丢弃（不报错）",
-              "sv_* 是构造器参数，不得加入 _MONOTONE_FIT_KEYS（{chi2_binning, chi2_p, chi2_init_size, n_jobs}），否则抛 TypeError",
-              "config_snapshot 原样 dump woe_params / monotone_woe_params，sv_* 自动进快照可供复现审计"
+              "Governs only special-value bins (including [Missing]); ordinary interval bins are completely unaffected",
+              "Mode 1 (fallback) takes priority over Mode 2 (smoothing): a sub-threshold bin that goes through neutral/merge_missing is not smoothed afterward",
+              "When merge_missing + laplace are both on, the merge-target [Missing] bin is recomputed by the empirical formula, unsmoothed; other qualifying SV bins are still smoothed",
+              "The [Missing] bin is itself a governed SV bin, with the only special trait that it can be only a merge target, not a merge source",
+              "The default combination of the four parameters is bit-for-bit identical to 0.7.2, so upgrading does not change existing outputs; illegal values raise ValueError at the entry",
+              "The monotone branch of FVP is filtered by the _MONOTONE_INIT_KEYS allowlist, and the four sv_* keys are on the list; keys not on the list are silently dropped (no error)",
+              "sv_* are constructor parameters and must not be added to _MONOTONE_FIT_KEYS ({chi2_binning, chi2_p, chi2_init_size, n_jobs}), otherwise a TypeError is raised",
+              "config_snapshot dumps woe_params / monotone_woe_params verbatim, so sv_* automatically enters the snapshot and is available for reproducibility audits"
             ]
           }
         ]
       },
       {
-        "level1": "PSI 稳定性",
+        "level1": "PSI Stability",
         "level2": [
           {
-            "name": "PSI 开关与 benchmark",
+            "name": "PSI Switch and Benchmark",
             "params": {
-              "psi_enabled": "是否计算 PSI，默认 true",
-              "psi_reference_dataset": "ins/oos/oot/external，默认 ins",
-              "psi_reference_data": "当 psi_reference_dataset=external 时必传"
+              "psi_enabled": "Whether to compute PSI, default true",
+              "psi_reference_dataset": "ins/oos/oot/external, default ins",
+              "psi_reference_data": "Required when psi_reference_dataset=external"
             }
           },
           {
-            "name": "PSI 分组与分箱",
+            "name": "PSI Grouping and Binning",
             "params": {
-              "psi_group_dims": "sample/time/population，默认三者都算",
-              "psi_use_woe_bins": "是否复用 WOE 分箱边界，默认 true",
+              "psi_group_dims": "sample/time/population, all three are computed by default",
+              "psi_use_woe_bins": "Whether to reuse the WOE bin boundaries, default true",
               "psi_params": {
-                "buckets": "重新分箱时的桶数",
-                "equal_freq": "重新分箱是否等频",
-                "min_bin_prop": "最小箱占比",
-                "feature_block_size": "WOE 分箱和分组 PSI 聚合的特征列块大小，默认 64"
+                "buckets": "Number of buckets when re-binning",
+                "equal_freq": "Whether re-binning is equal-frequency",
+                "min_bin_prop": "Minimum bin share",
+                "feature_block_size": "Feature-column block size for WOE binning and grouped PSI aggregation, default 64"
               }
             }
           },
           {
-            "name": "依赖",
+            "name": "Dependencies",
             "rules": [
-              "psi_use_woe_bins=true 时依赖 WOE 成功产出的 binning engine",
-              "若没有可复用 WOE engine，则回退到 PSICalculator 自身分箱",
-              "time/population 分组依赖 time_dims/population_dims"
+              "When psi_use_woe_bins=true, it depends on the binning engine produced successfully by WOE",
+              "If there is no reusable WOE engine, it falls back to PSICalculator's own binning",
+              "time/population grouping depends on time_dims/population_dims"
             ]
           }
         ]
       },
       {
-        "level1": "IV / KS 区分能力",
+        "level1": "IV / KS Discrimination",
         "level2": [
           {
-            "name": "IVKS 开关",
+            "name": "IVKS Switch",
             "params": {
-              "ivks_enabled": "是否计算 IV/KS，默认 true"
+              "ivks_enabled": "Whether to compute IV/KS, default true"
             },
             "rules": [
-              "必须 target_cols 非空才会执行",
-              "每个 target_col 单独计算",
-              "只使用 target 非空样本"
+              "Runs only when target_cols is non-empty",
+              "Computed separately for each target_col",
+              "Only samples with a non-null target are used"
             ]
           },
           {
-            "name": "IVKS 分组与分箱",
+            "name": "IVKS Grouping and Binning",
             "params": {
-              "ivks_group_dims": "global/time/population，默认三者都算",
-              "ivks_use_woe_bins": "是否复用 WOE 分箱边界，默认 true",
+              "ivks_group_dims": "global/time/population, all three are computed by default",
+              "ivks_use_woe_bins": "Whether to reuse the WOE bin boundaries, default true",
               "ivks_params": {
-                "iv_cut": "IV 过滤阈值",
-                "feature_block_size": "复用 WOE 分箱时的特征列块大小，默认 64"
+                "iv_cut": "IV filter threshold",
+                "feature_block_size": "Feature-column block size when reusing WOE bins, default 64"
               }
             }
           }
         ]
       },
       {
-        "level1": "相关性分析",
+        "level1": "Correlation Analysis",
         "level2": [
           {
-            "name": "相关性矩阵",
+            "name": "Correlation Matrix",
             "params": {
-              "corr_enabled": "是否计算相关性，默认 true",
-              "corr_include_incumbent": "是否把 incumbent_feature_cols 加入相关性对比，默认 true",
+              "corr_enabled": "Whether to compute correlation, default true",
+              "corr_include_incumbent": "Whether to include incumbent_feature_cols in the correlation comparison, default true",
               "corr_params": {
-                "corr_cutpoint": "高相关阈值，默认 0.75",
-                "method": "pearson/spearman/kendall；batch block_pairwise 不支持 kendall",
-                "max_iterations": "CorrelationFilter 最大迭代轮数",
-                "base_metric": "相关变量筛选时的主指标，默认 iv"
+                "corr_cutpoint": "High-correlation threshold, default 0.75",
+                "method": "pearson/spearman/kendall; batch block_pairwise does not support kendall",
+                "max_iterations": "CorrelationFilter maximum number of iteration rounds",
+                "base_metric": "Primary metric when screening correlated variables, default iv"
               }
             }
           },
           {
-            "name": "相关性明细中的 IV/KS",
+            "name": "IV/KS in the Correlation Details",
             "params": {
-              "corr_use_woe_bins": "是否复用 WOE 分箱计算相关变量的 IV/KS，默认 true"
+              "corr_use_woe_bins": "Whether to reuse the WOE bins to compute the IV/KS of correlated variables, default true"
             },
             "rules": [
-              "corr 矩阵本身按原始数值特征计算",
-              "corr_use_woe_bins 主要影响 correlated_detail 里的变量能力指标",
-              "target_cols 为空时仍可出 corr_matrix/high_corr_pairs，但不会有完整变量级 IV/KS 明细"
+              "The corr matrix itself is computed on the raw numeric features",
+              "corr_use_woe_bins mainly affects the variable-capability metrics in correlated_detail",
+              "When target_cols is empty, corr_matrix/high_corr_pairs can still be produced, but there are no complete variable-level IV/KS details"
             ]
           },
           {
-            "name": "batch 相关性",
+            "name": "batch Correlation",
             "params": {
-              "batch_corr_mode": "off 跳过；within_batch 只算批内；block_pairwise 额外算跨批 new-new",
-              "batch_corr_pair_chunk_size": "跨批相关性内部列块大小"
+              "batch_corr_mode": "off skips; within_batch computes only within a batch; block_pairwise additionally computes cross-batch new-new",
+              "batch_corr_pair_chunk_size": "Internal column-block size for cross-batch correlation"
             }
           }
         ]
       },
       {
-        "level1": "特征筛选",
+        "level1": "Feature Selection",
         "level2": [
           {
-            "name": "筛选开关",
+            "name": "Selection Switches",
             "params": {
-              "selection_enabled": "是否运行综合特征筛选，默认 false",
-              "selection_params": "传给 FeatureScreeningConfig 的覆盖参数",
-              "missing_rate_threshold": "缺失率阈值；selection_params 未覆盖时使用",
-              "weight_col": "筛选阶段样本权重字段",
-              "synthesize_missing_oot": "缺 OOT 时是否用 OOS 副本代替；0.7.0 默认 false，OOT 保持空、相关输出缺省；显式 true 才合成并发 UserWarning"
+              "selection_enabled": "Whether to run the comprehensive feature selection, default false",
+              "selection_params": "Override parameters passed to FeatureScreeningConfig",
+              "missing_rate_threshold": "Missing-rate threshold; used when selection_params does not override it",
+              "weight_col": "Sample-weight field for the screening stage",
+              "synthesize_missing_oot": "Whether to substitute an OOS copy when OOT is missing; default false since 0.7.0, so OOT stays empty and the related outputs are left out; only an explicit true synthesizes it and issues a UserWarning"
             },
             "rules": [
-              "必须 target_cols 非空才会执行",
-              "只使用 target_cols[0] 作为筛选 target",
-              "weight_col 若配置则必须存在于 INS split",
-              "categorical_features 中的字符串类别按非空状态计算加权缺失率，不强制转换为 float",
-              "weight_col 用于筛选与评估；WOE fit 本身仍按未加权样本执行"
+              "Runs only when target_cols is non-empty",
+              "Only target_cols[0] is used as the screening target",
+              "If weight_col is configured, it must exist in the INS split",
+              "String categories in categorical_features compute the weighted missing rate by non-null state, without being forced to float",
+              "weight_col is used for screening and evaluation; the WOE fit itself still runs on unweighted samples"
             ]
           },
           {
-            "name": "selection_params 常用三级参数",
+            "name": "Common Third-Level Parameters of selection_params",
             "params": {
-              "psi_enabled": "默认继承 psi_enabled",
-              "psi_threshold": "默认 0.2",
-              "psi_compare_splits": "默认 ['oos']",
-              "psi_use_woe_bins": "默认继承 psi_use_woe_bins",
-              "iv_enabled": "默认继承 ivks_enabled",
-              "iv_threshold": "默认 0.02",
-              "iv_use_woe_bins": "默认继承 ivks_use_woe_bins",
-              "corr_enabled": "默认继承 corr_enabled",
-              "corr_threshold": "默认继承 corr_params.corr_cutpoint",
-              "corr_max_iterations": "默认继承 corr_params.max_iterations",
-              "corr_use_woe_bins": "默认继承 corr_use_woe_bins"
+              "psi_enabled": "Inherits psi_enabled by default",
+              "psi_threshold": "Default 0.2",
+              "psi_compare_splits": "Default ['oos']",
+              "psi_use_woe_bins": "Inherits psi_use_woe_bins by default",
+              "iv_enabled": "Inherits ivks_enabled by default",
+              "iv_threshold": "Default 0.02",
+              "iv_use_woe_bins": "Inherits ivks_use_woe_bins by default",
+              "corr_enabled": "Inherits corr_enabled by default",
+              "corr_threshold": "Inherits corr_params.corr_cutpoint by default",
+              "corr_max_iterations": "Inherits corr_params.max_iterations by default",
+              "corr_use_woe_bins": "Inherits corr_use_woe_bins by default"
             }
           },
           {
-            "name": "后置选择门（G02–G06，selection_params 三级参数）",
+            "name": "Post-Selection Gates (G02–G06, third-level parameters of selection_params)",
             "params": {
-              "iv_upper_threshold": "IV 上限；超过视为疑似标签泄漏并淘汰(reason=iv_above_upper)",
-              "monthly_iv_min": "分组(如月度) IV 下限；需 selection_group_dims",
-              "monthly_iv_cv_max": "分组 IV 变异系数上限；需 selection_group_dims",
-              "direction_consistency_min": "与众数方向一致的组占比下限；需 selection_group_dims",
-              "min_group_n": "参与组稳门的组最小样本数；缺省回落 min_group_size",
-              "insufficient_group_policy": "keep_warn(默认)/drop/raise；合格组不足 2 个时的处理",
-              "target_rules": "all/any/min_pass_count；多标签联合门",
-              "min_pass_count": "target_rules=min_pass_count 时的最少通过标签数",
-              "per_target_iv_range": "(low, high) 或 {target: (low, high)}；分标签 IV 区间",
-              "direction_reference_target": "方向基准标签；其余标签方向须与之一致",
-              "max_selected_features": "入选特征数硬上限；按 IV 排序截断，同分按名字破平",
-              "min_selected_features": "下限；不足只 warn 不回填（保门因果可审计）",
-              "vif_enabled": "VIF 门开关(默认 False)；需要可选依赖 SuperModelingFactory[stats]",
-              "vif_threshold": "VIF 阈值(默认 10.0)，迭代剔除最大 VIF 特征",
-              "vif_min_features": "VIF 迭代保留特征下限(默认 2)",
-              "vif_use_woe_bins": "默认 false：仅原始数值列进入 VIF，非数值列保留并写入审计；true：使用 WOE 编码 INS 矩阵。声明 categorical_features 时需 woe_engine=monotone，equal_freq 会明确报错"
+              "iv_upper_threshold": "IV upper limit; exceeding it is treated as suspected label leakage and eliminated (reason=iv_above_upper)",
+              "monthly_iv_min": "Lower limit of the group (e.g. monthly) IV; requires selection_group_dims",
+              "monthly_iv_cv_max": "Upper limit of the group-IV coefficient of variation; requires selection_group_dims",
+              "direction_consistency_min": "Lower limit of the share of groups whose direction agrees with the mode; requires selection_group_dims",
+              "min_group_n": "Minimum number of samples in a group for the group-stability gate; falls back to min_group_size by default",
+              "insufficient_group_policy": "keep_warn (default)/drop/raise; how to handle fewer than 2 qualifying groups",
+              "target_rules": "all/any/min_pass_count; multi-label joint gate",
+              "min_pass_count": "Minimum number of passing labels when target_rules=min_pass_count",
+              "per_target_iv_range": "(low, high) or {target: (low, high)}; per-label IV range",
+              "direction_reference_target": "Direction reference label; the directions of the other labels must agree with it",
+              "max_selected_features": "Hard upper limit on the number of selected features; truncated by IV ranking, ties broken by name",
+              "min_selected_features": "Lower limit; falling short only warns and does not backfill (keeping the gate's causal auditability)",
+              "vif_enabled": "VIF gate switch (default False); requires the optional dependency SuperModelingFactory[stats]",
+              "vif_threshold": "VIF threshold (default 10.0); the feature with the largest VIF is removed iteratively",
+              "vif_min_features": "Lower limit on features kept by the VIF iteration (default 2)",
+              "vif_use_woe_bins": "Default false: only raw numeric columns enter VIF, and non-numeric columns are kept and written to the audit; true: use the WOE-encoded INS matrix. When categorical_features is declared, woe_engine=monotone is required, and equal_freq raises an explicit error"
             }
           },
           {
-            "name": "选择门证据维度（G03/G04）",
+            "name": "Selection-Gate Evidence Dimensions (G03/G04)",
             "params": {
-              "selection_group_dims": "组稳门证据的分组维度(如 ['apply_month'])；配置了组稳阈值但未给维度会响亮报错"
+              "selection_group_dims": "Grouping dimensions for the group-stability gate evidence (e.g. ['apply_month']); configuring group-stability thresholds without dimensions raises a loud error"
             }
           }
         ]
       },
       {
-        "level1": "输出与报告",
+        "level1": "Outputs and Reports",
         "level2": [
           {
-            "name": "输出路径",
+            "name": "Output Paths",
             "params": {
-              "output_dir": "输出目录，默认 output/feature_validation"
+              "output_dir": "Output directory, default output/feature_validation"
             }
           },
           {
-            "name": "落盘控制",
+            "name": "Disk-Write Control",
             "params": {
-              "write_outputs": "是否输出 CSV 和中间产物，并作为图片落盘总开关，默认 true",
-              "write_excel": "是否用 ExcelMaster 输出 Excel 报告，默认 true",
-              "plot_outputs": "是否输出 WOE 分析图片，默认 true；关闭后不影响 CSV 和 Excel"
+              "write_outputs": "Whether to output CSVs and intermediate artifacts, and the master switch for writing images to disk, default true",
+              "write_excel": "Whether to output the Excel report with ExcelMaster, default true",
+              "plot_outputs": "Whether to output WOE analysis images, default true; turning it off does not affect the CSV and Excel"
             },
             "rules": [
-              "WOE 图片仅在 write_outputs=true 且 plot_outputs=true 时生成",
-              "batch_keep_intermediate 只影响 batch 子目录中间产物",
-              "write_excel=true 时输出 Feature_Validation_Report.xlsx"
+              "WOE images are generated only when write_outputs=true and plot_outputs=true",
+              "batch_keep_intermediate affects only the intermediate artifacts in the batch subdirectories",
+              "When write_excel=true, Feature_Validation_Report.xlsx is output"
             ]
           }
         ]
       }
     ]
   },
-  "requirement_note": "必填类别包含宽表验收必须确认的数据字段入口；target_cols 可为空，但 id_col/apply_time_col/new_feature_cols 或其自动推断口径需要确认。",
+  "requirement_note": "The required category contains the data-field entry points that must be confirmed for wide-table acceptance; target_cols may be empty, but id_col/apply_time_col/new_feature_cols or their automatic inference basis need to be confirmed.",
   "underlying_method_params": {
     "distribution_params": {
       "passes_to": "Modeling_Tool.Feature.Distribution_Tool.proc_means_by_grp",
       "accepted_params": {
         "q": {
           "default": null,
-          "meaning": "分位点列表"
+          "meaning": "List of quantile points"
         },
         "spec_missing_value": {
           "default": null,
-          "meaning": "特殊缺失值标记"
+          "meaning": "Special missing-value markers"
         },
         "feature_block_size": {
           "default": 128,
-          "meaning": "proc_means_by_grp 每个宽表特征块的列数"
+          "meaning": "Number of columns in each wide-table feature block of proc_means_by_grp"
         }
       },
       "full_signature": {
-        "data": "Pipeline 控制",
-        "varlist": "new_feature_cols 中的数值列",
-        "groupby": "由 group_specs/time_dims/population_dims 解析",
+        "data": "Pipeline Control",
+        "varlist": "Numeric columns in new_feature_cols",
+        "groupby": "Resolved from group_specs/time_dims/population_dims",
         "spec_missing_value": "distribution_params.spec_missing_value",
         "q": "distribution_params.q",
         "feature_block_size": "distribution_params.feature_block_size"
@@ -460,30 +460,30 @@
       "constructor": {
         "test_size": {
           "default": 0.3,
-          "meaning": "测试/OOS 样本比例"
+          "meaning": "Test/OOS sample share"
         },
         "random_state": {
           "default": null,
-          "meaning": "随机种子"
+          "meaning": "Random seed"
         },
         "stratify": {
           "default": true,
-          "meaning": "是否按 target 分层抽样"
+          "meaning": "Whether to sample stratified by target"
         }
       },
       "methods": {
         "split_df": {
           "target": {
             "required": true,
-            "meaning": "分层目标字段"
+            "meaning": "Stratification target field"
           },
           "exclude_cols": {
             "default": null,
-            "meaning": "不参与切分策略的列，不会从输出 DataFrame 删除"
+            "meaning": "Columns that take no part in the split strategy; they are not removed from the output DataFrame"
           },
           "test_size": {
             "default": null,
-            "meaning": "覆盖 constructor test_size"
+            "meaning": "Overrides the constructor test_size"
           }
         }
       }
@@ -513,50 +513,50 @@
         },
         "remove_exist_dir": {
           "default": false,
-          "meaning": "初始化时是否删除已有图目录"
+          "meaning": "Whether to delete an existing plot directory at initialization"
         }
       },
       "fit": {
         "nbins": {
           "default": 10,
-          "meaning": "分箱数"
+          "meaning": "Number of bins"
         },
         "equal_freq": {
           "default": true,
-          "meaning": "是否等频"
+          "meaning": "Whether equal-frequency"
         },
         "tree_binning_seed": {
           "default": null,
-          "meaning": "传入整数时启用树分箱并指定随机种子"
+          "meaning": "When an integer is passed, tree binning is enabled and the integer is the random seed"
         },
         "chi2_config": {
           "default": null,
-          "meaning": "卡方分箱配置，通常为 (init_equi_bins, chi2_p)"
+          "meaning": "Chi-square binning configuration, usually (init_equi_bins, chi2_p)"
         },
         "precision": {
           "default": 5,
-          "meaning": "边界/报表精度"
+          "meaning": "Boundary/report precision"
         },
         "min_bin_prop": {
           "default": 0.05,
-          "meaning": "最小箱占比"
+          "meaning": "Minimum bin share"
         },
         "include_missing": {
           "default": true,
-          "meaning": "是否单独包含缺失箱"
+          "meaning": "Whether to include the missing bin separately"
         },
         "fillna": {
           "default": null,
-          "meaning": "缺失填充值；None 时使用 missing_ref_value"
+          "meaning": "Missing fill value; when None, missing_ref_value is used"
         },
         "spec_values": {
           "default": [],
-          "meaning": "特殊值列表"
+          "meaning": "List of special values"
         },
         "sv_min_bin_size": {
           "default": 0.0,
           "allowed": "[0.0, 1.0)",
-          "meaning": "0.8.0 SV 箱占比阈值；prop = n_bin / N_total（分母不加 eps），严格小于该值才触发兜底；0.0 关闭"
+          "meaning": "0.8.0 SV bin share threshold; prop = n_bin / N_total (no eps added to the denominator), and the fallback triggers only when strictly below this value; 0.0 = off"
         },
         "sv_small_policy": {
           "default": "keep",
@@ -565,7 +565,7 @@
             "neutral",
             "merge_missing"
           ],
-          "meaning": "0.8.0 亚阈值 SV 箱兜底：keep=旧行为；neutral=WOE/IV 置 0；merge_missing=计数并入 [Missing] 箱后重算，被合并行存表 WOE 改写为 [Missing] WOE 且 IV 置 0，无 [Missing] 箱时降级 neutral 并 warn"
+          "meaning": "0.8.0 fallback for sub-threshold SV bins: keep = old behavior; neutral = WOE/IV set to 0; merge_missing = counts merged into the [Missing] bin and recomputed, the stored WOE of merged rows is rewritten to the [Missing] WOE with IV set to 0, and when there is no [Missing] bin it degrades to neutral with a warning"
         },
         "sv_woe_smoothing": {
           "default": "none",
@@ -573,62 +573,62 @@
             "none",
             "laplace"
           ],
-          "meaning": "0.8.0 SV 箱 WOE 平滑；laplace 用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 再折回占比，仅作用于 SV 箱，普通箱不动"
+          "meaning": "0.8.0 SV bin WOE smoothing; laplace uses bad-rate shrinkage r=(n_bad+α·p)/(n_bin+α) and then converts back to shares, applying only to SV bins and leaving ordinary bins untouched"
         },
         "sv_smoothing_alpha": {
           "default": 0.0,
           "allowed": ">= 0.0",
-          "meaning": "0.8.0 平滑强度 α；0.0 逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱内样本越少收缩越强"
+          "meaning": "0.8.0 smoothing strength α; 0.0 is bit-for-bit equivalent to the old empirical WOE, and as α→∞ the WOE shrinks monotonically to 0, with stronger shrinkage the fewer samples a bin has"
         }
       },
-      "pipeline_note": "FeatureValidationPipeline._fit_woe_master 用 master.fit(**woe_params) 透传（仅剔除 woe_suffix / missing_ref_value），该分支没有白名单，四个 sv_* 会正确到达 WOE_Master.fit()。"
+      "pipeline_note": "FeatureValidationPipeline._fit_woe_master passes through with master.fit(**woe_params) (removing only woe_suffix / missing_ref_value); this branch has no allowlist, and the four sv_* keys correctly reach WOE_Master.fit()."
     },
     "monotone_woe_params": {
       "source": "Modeling_Tool.WOE.WOE_Monotone_Binner.MonotoneWOEBinner",
       "constructor": {
         "feature_cols": {
           "controlled_by_pipeline": true,
-          "meaning": "数值特征；categorical_features 会从中剔除"
+          "meaning": "Numeric features; categorical_features are removed from them"
         },
         "target_col": {
           "controlled_by_pipeline": true
         },
         "n_init_bins": {
           "default": 20,
-          "meaning": "初始等频箱数"
+          "meaning": "Initial number of equal-frequency bins"
         },
         "min_bin_size": {
           "default": 0.03,
-          "meaning": "每箱最小样本占比"
+          "meaning": "Minimum sample share per bin"
         },
         "min_n_bins": {
           "default": 2,
-          "meaning": "最终普通箱数下限"
+          "meaning": "Lower limit on the final number of ordinary bins"
         },
         "eps": {
           "default": 1e-06,
-          "meaning": "WOE 平滑项，防止 log(0)"
+          "meaning": "WOE smoothing term, to prevent log(0)"
         },
         "missing_woe": {
           "default": 0.0,
-          "meaning": "未作为 special_values 的 NaN 对应 WOE"
+          "meaning": "WOE for NaN not declared as special_values"
         },
         "special_values": {
           "default": null,
-          "meaning": "需要单独成箱的特殊值"
+          "meaning": "Special values that need their own bin"
         },
         "cate_feats": {
           "default": null,
-          "meaning": "类别特征；Pipeline 由 categorical_features 映射"
+          "meaning": "Categorical features; the Pipeline maps them from categorical_features"
         },
         "bin_label_decimals": {
           "default": null,
-          "meaning": "分箱边界展示小数位"
+          "meaning": "Number of decimal places shown for bin boundaries"
         },
         "sv_min_bin_size": {
           "default": 0.0,
           "allowed": "[0.0, 1.0)",
-          "meaning": "0.8.0 SV 箱占比阈值；prop = n_bin / N_total（分母不加 eps），严格小于该值才触发兜底；0.0 关闭"
+          "meaning": "0.8.0 SV bin share threshold; prop = n_bin / N_total (no eps added to the denominator), and the fallback triggers only when strictly below this value; 0.0 = off"
         },
         "sv_small_policy": {
           "default": "keep",
@@ -637,7 +637,7 @@
             "neutral",
             "merge_missing"
           ],
-          "meaning": "0.8.0 亚阈值 SV 箱兜底：keep=旧行为；neutral=WOE/IV 置 0；merge_missing=计数并入 [Missing] 箱后重算，被合并行存表 WOE 改写为 [Missing] WOE 且 IV 置 0，无 [Missing] 箱时降级 neutral 并 warn。处置结果见结果表 sv_policy_applied 列"
+          "meaning": "0.8.0 fallback for sub-threshold SV bins: keep = old behavior; neutral = WOE/IV set to 0; merge_missing = counts merged into the [Missing] bin and recomputed, the stored WOE of merged rows is rewritten to the [Missing] WOE with IV set to 0, and when there is no [Missing] bin it degrades to neutral with a warning. See the sv_policy_applied column of the result table for the treatment result"
         },
         "sv_woe_smoothing": {
           "default": "none",
@@ -645,100 +645,100 @@
             "none",
             "laplace"
           ],
-          "meaning": "0.8.0 SV 箱 WOE 平滑；laplace 用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 再折回占比，仅作用于 SV 箱，普通箱不动"
+          "meaning": "0.8.0 SV bin WOE smoothing; laplace uses bad-rate shrinkage r=(n_bad+α·p)/(n_bin+α) and then converts back to shares, applying only to SV bins and leaving ordinary bins untouched"
         },
         "sv_smoothing_alpha": {
           "default": 0.0,
           "allowed": ">= 0.0",
-          "meaning": "0.8.0 平滑强度 α；0.0 逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱内样本越少收缩越强"
+          "meaning": "0.8.0 smoothing strength α; 0.0 is bit-for-bit equivalent to the old empirical WOE, and as α→∞ the WOE shrinks monotonically to 0, with stronger shrinkage the fewer samples a bin has"
         }
       },
-      "pipeline_note": "FeatureValidationPipeline._fit_monotone_binner 先用 _MONOTONE_INIT_KEYS 白名单过滤 monotone_woe_params 再传给构造器：init_params = {k: v for k, v in params.items() if k in self._MONOTONE_INIT_KEYS}。不在白名单里的 key 会被静默丢弃（不报错、不告警）。四个 sv_* 已加入 _MONOTONE_INIT_KEYS，同时也加入了 Feature_Screen._MONOTONE_INIT_KEYS（筛选期复用的 WOE 拟合走那一份，漏改会导致筛选 IV 与建模 WOE 口径分裂）。今后给 MonotoneWOEBinner.__init__ 新增参数必须同步这两份白名单；sv_* 属于构造器参数，不得加入 _MONOTONE_FIT_KEYS。",
+      "pipeline_note": "FeatureValidationPipeline._fit_monotone_binner first filters monotone_woe_params with the _MONOTONE_INIT_KEYS allowlist and then passes them to the constructor: init_params = {k: v for k, v in params.items() if k in self._MONOTONE_INIT_KEYS}. Keys not on the allowlist are silently dropped (no error, no warning). The four sv_* keys have been added to _MONOTONE_INIT_KEYS and also to Feature_Screen._MONOTONE_INIT_KEYS (the WOE fit reused at screening time goes through that one, and missing it would split the screening IV and the modeling WOE onto different bases). From now on, any new parameter added to MonotoneWOEBinner.__init__ must be added to both allowlists; sv_* are constructor parameters and must not be added to _MONOTONE_FIT_KEYS.",
       "fit": {
         "chi2_binning": {
           "default": false,
-          "meaning": "贪婪单调分箱后是否再做卡方合并"
+          "meaning": "Whether to do a chi-square merge after the greedy monotone binning"
         },
         "chi2_p": {
           "default": 0.99,
-          "meaning": "卡方检验置信度阈值"
+          "meaning": "Confidence threshold for the chi-square test"
         },
         "chi2_init_size": {
           "default": 1000,
-          "meaning": "卡方计算时分层抽样上限"
+          "meaning": "Upper limit of stratified sampling in the chi-square computation"
         },
         "n_jobs": {
           "default": 1,
-          "meaning": "并行数；-1 表示所有可用 CPU"
+          "meaning": "Parallelism; -1 means all available CPUs"
         }
       },
       "refine_cate": {
         "features": {
           "default": null,
-          "pipeline_default": "categorical_features 中存在于 fit_features 的列",
-          "meaning": "要聚类的类别特征"
+          "pipeline_default": "Columns of categorical_features that exist in fit_features",
+          "meaning": "Categorical features to cluster"
         },
         "max_bins": {
           "default": 5,
-          "meaning": "类别聚类后的最大箱数"
+          "meaning": "Maximum number of bins after categorical clustering"
         },
         "min_bin_size": {
           "default": 0.0,
-          "meaning": "低于该样本占比的小箱会优先合并"
+          "meaning": "Small bins below this sample share are merged first"
         },
         "badrate_tol": {
           "default": null,
-          "meaning": "相邻类别坏账率差阈值；None 表示不启用"
+          "meaning": "Threshold on the bad-rate difference between adjacent categories; None means not enabled"
         }
       },
       "refine_dtree": {
         "df": {
           "controlled_by_pipeline": true,
-          "meaning": "WOE fit 使用的训练数据"
+          "meaning": "Training data used for the WOE fit"
         },
         "features": {
           "default": null,
-          "pipeline_default": "数值特征列表",
-          "meaning": "要重分箱的数值特征"
+          "pipeline_default": "List of numeric features",
+          "meaning": "Numeric features to re-bin"
         },
         "max_bins": {
           "default": 6,
-          "meaning": "决策树最大叶子数，即分箱上限"
+          "meaning": "Maximum number of decision-tree leaves, i.e. the bin upper limit"
         },
         "min_samples_leaf": {
           "default": 0.05,
-          "meaning": "叶子最小样本占比或绝对样本量"
+          "meaning": "Minimum leaf sample share or absolute sample count"
         },
         "monotone": {
           "default": true,
-          "meaning": "树分箱后是否强制 WOE 单调"
+          "meaning": "Whether to force WOE monotonicity after tree binning"
         },
         "n_jobs": {
           "default": 1,
-          "meaning": "并行进程数；-1 表示所有可用 CPU"
+          "meaning": "Number of parallel processes; -1 means all available CPUs"
         }
       },
       "refine_chi2": {
         "df": {
           "controlled_by_pipeline": true,
-          "meaning": "WOE fit 使用的训练数据"
+          "meaning": "Training data used for the WOE fit"
         },
         "features": {
           "default": null,
-          "pipeline_default": "数值特征列表",
-          "meaning": "要做卡方后合并的数值特征"
+          "pipeline_default": "List of numeric features",
+          "meaning": "Numeric features to run the post-chi-square merge on"
         },
         "chi2_p": {
           "default": 0.99,
-          "meaning": "卡方检验置信度阈值"
+          "meaning": "Confidence threshold for the chi-square test"
         },
         "chi2_init_size": {
           "default": 1000,
-          "meaning": "卡方计算时分层抽样上限"
+          "meaning": "Upper limit of stratified sampling in the chi-square computation"
         },
         "n_jobs": {
           "default": 1,
-          "meaning": "并行数；-1 表示所有可用 CPU"
+          "meaning": "Parallelism; -1 means all available CPUs"
         }
       }
     },
@@ -747,20 +747,20 @@
       "accepted_params": {
         "features": {
           "default": null,
-          "pipeline_default": "categorical_features 中存在于 fit_features 的列",
-          "meaning": "要聚类的类别特征"
+          "pipeline_default": "Columns of categorical_features that exist in fit_features",
+          "meaning": "Categorical features to cluster"
         },
         "max_bins": {
           "default": 5,
-          "meaning": "类别聚类后的最大箱数"
+          "meaning": "Maximum number of bins after categorical clustering"
         },
         "min_bin_size": {
           "default": 0.0,
-          "meaning": "低于该样本占比的小箱会优先合并"
+          "meaning": "Small bins below this sample share are merged first"
         },
         "badrate_tol": {
           "default": null,
-          "meaning": "相邻类别坏账率差阈值；None 表示不启用"
+          "meaning": "Threshold on the bad-rate difference between adjacent categories; None means not enabled"
         }
       }
     },
@@ -769,28 +769,28 @@
       "accepted_params": {
         "df": {
           "controlled_by_pipeline": true,
-          "meaning": "WOE fit 使用的训练数据"
+          "meaning": "Training data used for the WOE fit"
         },
         "features": {
           "default": null,
-          "pipeline_default": "数值特征列表",
-          "meaning": "要重分箱的数值特征"
+          "pipeline_default": "List of numeric features",
+          "meaning": "Numeric features to re-bin"
         },
         "max_bins": {
           "default": 6,
-          "meaning": "决策树最大叶子数，即分箱上限"
+          "meaning": "Maximum number of decision-tree leaves, i.e. the bin upper limit"
         },
         "min_samples_leaf": {
           "default": 0.05,
-          "meaning": "叶子最小样本占比或绝对样本量"
+          "meaning": "Minimum leaf sample share or absolute sample count"
         },
         "monotone": {
           "default": true,
-          "meaning": "树分箱后是否强制 WOE 单调"
+          "meaning": "Whether to force WOE monotonicity after tree binning"
         },
         "n_jobs": {
           "default": 1,
-          "meaning": "并行进程数；-1 表示所有可用 CPU"
+          "meaning": "Number of parallel processes; -1 means all available CPUs"
         }
       }
     },
@@ -799,24 +799,24 @@
       "accepted_params": {
         "df": {
           "controlled_by_pipeline": true,
-          "meaning": "WOE fit 使用的训练数据"
+          "meaning": "Training data used for the WOE fit"
         },
         "features": {
           "default": null,
-          "pipeline_default": "数值特征列表",
-          "meaning": "要做卡方后合并的数值特征"
+          "pipeline_default": "List of numeric features",
+          "meaning": "Numeric features to run the post-chi-square merge on"
         },
         "chi2_p": {
           "default": 0.99,
-          "meaning": "卡方检验置信度阈值"
+          "meaning": "Confidence threshold for the chi-square test"
         },
         "chi2_init_size": {
           "default": 1000,
-          "meaning": "卡方计算时分层抽样上限"
+          "meaning": "Upper limit of stratified sampling in the chi-square computation"
         },
         "n_jobs": {
           "default": 1,
-          "meaning": "并行数；-1 表示所有可用 CPU"
+          "meaning": "Parallelism; -1 means all available CPUs"
         }
       }
     },
@@ -825,27 +825,27 @@
       "constructor": {
         "buckets": {
           "default": 10,
-          "meaning": "PSI 重新分箱桶数"
+          "meaning": "Number of PSI re-binning buckets"
         },
         "equal_freq": {
           "default": true,
-          "meaning": "重新分箱时是否等频"
+          "meaning": "Whether re-binning is equal-frequency"
         },
         "min_bin_prop": {
           "default": 0.05,
-          "meaning": "最小箱占比"
+          "meaning": "Minimum bin share"
         },
         "content": {
           "default": 1e-06,
-          "meaning": "避免除零的小平滑值"
+          "meaning": "Small smoothing value to avoid division by zero"
         },
         "precision": {
           "default": 5,
-          "meaning": "结果精度"
+          "meaning": "Result precision"
         },
         "binning_engine": {
           "controlled_by_pipeline": true,
-          "meaning": "psi_use_woe_bins=true 时由 WOE engine 注入"
+          "meaning": "Injected by the WOE engine when psi_use_woe_bins=true"
         },
         "missing_policy": {
           "default": "include",
@@ -854,15 +854,15 @@
             "drop",
             "warn_and_drop"
           ],
-          "meaning": "NaN 是否进入 PSI 缺失箱"
+          "meaning": "Whether NaN enters the PSI missing bin"
         },
         "psi_missing_bucket_policy": {
           "default": "smooth_laplace",
-          "meaning": "缺失箱 PSI 平滑策略"
+          "meaning": "PSI smoothing policy for the missing bin"
         },
         "feature_block_size": {
           "default": 64,
-          "meaning": "WOE assign_bins_frame 与分组计数每个特征块的列数"
+          "meaning": "Number of columns in each feature block for WOE assign_bins_frame and grouped counting"
         }
       },
       "calculate": {
@@ -872,7 +872,7 @@
         },
         "current_data": {
           "controlled_by_pipeline": true,
-          "meaning": "合并后的 ins/oos/oot 数据"
+          "meaning": "The merged ins/oos/oot data"
         },
         "varlist": {
           "controlled_by_pipeline": true,
@@ -884,7 +884,7 @@
         },
         "group_name": {
           "default": null,
-          "pipeline_value": "psi_group_dims 解析出的单个分组列"
+          "pipeline_value": "The single grouping column resolved from psi_group_dims"
         },
         "return_details": {
           "default": false,
@@ -892,11 +892,11 @@
         },
         "missing_policy": {
           "default": null,
-          "meaning": "覆盖 constructor missing_policy"
+          "meaning": "Overrides the constructor missing_policy"
         },
         "psi_missing_bucket_policy": {
           "default": null,
-          "meaning": "覆盖 constructor psi_missing_bucket_policy"
+          "meaning": "Overrides the constructor psi_missing_bucket_policy"
         }
       }
     },
@@ -905,69 +905,69 @@
       "pipeline_orchestration": {
         "feature_block_size": {
           "default": 64,
-          "meaning": "ivks_use_woe_bins=true 时批量分箱的特征列块大小；不会透传给 VarExtractionInsights constructor"
+          "meaning": "Feature-column block size for batch binning when ivks_use_woe_bins=true; not passed through to the VarExtractionInsights constructor"
         }
       },
       "constructor": {
         "nbins": {
           "default": 10,
-          "meaning": "原生分箱数"
+          "meaning": "Native number of bins"
         },
         "equal_freq": {
           "default": true,
-          "meaning": "是否等频"
+          "meaning": "Whether equal-frequency"
         },
         "min_bin_prop": {
           "default": 0.05,
-          "meaning": "最小箱占比"
+          "meaning": "Minimum bin share"
         },
         "precision": {
           "default": 5,
-          "meaning": "精度"
+          "meaning": "Precision"
         },
         "chi2_method": {
           "default": false,
-          "meaning": "是否使用卡方分箱"
+          "meaning": "Whether to use chi-square binning"
         },
         "chi2_p": {
           "default": 0.9,
-          "meaning": "卡方 p 阈值"
+          "meaning": "Chi-square p threshold"
         },
         "init_equi_bins": {
           "default": 5000,
-          "meaning": "初始等频箱数"
+          "meaning": "Initial number of equal-frequency bins"
         },
         "tree_binning": {
           "default": true,
-          "meaning": "是否使用树分箱"
+          "meaning": "Whether to use tree binning"
         },
         "include_missing": {
           "default": true,
-          "meaning": "是否单独包含缺失箱"
+          "meaning": "Whether to include the missing bin separately"
         },
         "seed": {
           "default": 3407,
-          "meaning": "随机种子"
+          "meaning": "Random seed"
         },
         "missing_rate_ref": {
           "default": -999999,
-          "meaning": "缺失填充值"
+          "meaning": "Missing fill value"
         },
         "spec_values": {
           "default": null,
-          "meaning": "特殊值列表"
+          "meaning": "List of special values"
         },
         "woe_engine": {
           "default": "master",
-          "meaning": "master/monotone；Pipeline 复用 WOE 时传 monotone"
+          "meaning": "master/monotone; the Pipeline passes monotone when reusing WOE"
         },
         "woe_binner": {
           "default": null,
-          "meaning": "ivks_use_woe_bins=true 时注入已 fit 的 WOE engine"
+          "meaning": "Injects the already-fitted WOE engine when ivks_use_woe_bins=true"
         },
         "woe_engine_params": {
           "default": null,
-          "meaning": "构造临时 WOE engine 的额外参数"
+          "meaning": "Extra parameters for constructing a temporary WOE engine"
         }
       },
       "get_var_analysis_report": {
@@ -991,7 +991,7 @@
       "constructor": {
         "corr_cutpoint": {
           "default": 0.8,
-          "meaning": "高相关阈值"
+          "meaning": "High-correlation threshold"
         },
         "method": {
           "default": "pearson",
@@ -1000,35 +1000,35 @@
             "spearman",
             "kendall"
           ],
-          "meaning": "相关性计算方法"
+          "meaning": "Correlation computation method"
         },
         "tree_binning": {
           "default": false,
-          "meaning": "变量能力对比时是否用树分箱"
+          "meaning": "Whether to use tree binning in the variable-capability comparison"
         },
         "chi2_method": {
           "default": false,
-          "meaning": "变量能力对比时是否用卡方分箱"
+          "meaning": "Whether to use chi-square binning in the variable-capability comparison"
         },
         "seed": {
           "default": 42,
-          "meaning": "随机种子"
+          "meaning": "Random seed"
         },
         "chi2_p": {
           "default": 0.999,
-          "meaning": "卡方 p 阈值"
+          "meaning": "Chi-square p threshold"
         },
         "init_equi_bins": {
           "default": 1000,
-          "meaning": "初始等频箱数"
+          "meaning": "Initial number of equal-frequency bins"
         },
         "missing_rate_ref": {
           "default": -9999999,
-          "meaning": "缺失填充值"
+          "meaning": "Missing fill value"
         },
         "spec_values": {
           "default": [],
-          "meaning": "特殊值列表"
+          "meaning": "List of special values"
         },
         "base_metric": {
           "default": "iv",
@@ -1036,7 +1036,7 @@
             "iv",
             "ks"
           ],
-          "meaning": "高相关变量组中保留变量的排序指标"
+          "meaning": "Ranking metric for the variable kept within a high-correlation group"
         },
         "woe_engine": {
           "default": "master",
@@ -1044,11 +1044,11 @@
         },
         "woe_binner": {
           "default": null,
-          "meaning": "corr_use_woe_bins=true 时注入已 fit 的 WOE engine"
+          "meaning": "Injects the already-fitted WOE engine when corr_use_woe_bins=true"
         },
         "woe_engine_params": {
           "default": null,
-          "meaning": "构造临时 WOE engine 的额外参数"
+          "meaning": "Extra parameters for constructing a temporary WOE engine"
         }
       },
       "remove_highly_correlated": {
@@ -1065,7 +1065,7 @@
       "passes_to": "Modeling_Tool.Feature.Feature_Screen.FeatureScreenConfig via screen_config_from_mapping",
       "accepted_params": {
         "psi_enabled": {
-          "default": "继承 psi_enabled"
+          "default": "Inherits psi_enabled"
         },
         "psi_threshold": {
           "default": 0.2
@@ -1076,40 +1076,40 @@
           ]
         },
         "psi_buckets": {
-          "default": "psi_params.buckets 或 10"
+          "default": "psi_params.buckets or 10"
         },
         "psi_use_woe_bins": {
-          "default": "继承 psi_use_woe_bins"
+          "default": "Inherits psi_use_woe_bins"
         },
         "iv_enabled": {
-          "default": "继承 ivks_enabled"
+          "default": "Inherits ivks_enabled"
         },
         "iv_threshold": {
           "default": 0.02
         },
         "iv_nbins": {
-          "default": "psi_params.buckets 或 10"
+          "default": "psi_params.buckets or 10"
         },
         "iv_min_bin_prop": {
-          "default": "psi_params.min_bin_prop 或 0.05"
+          "default": "psi_params.min_bin_prop or 0.05"
         },
         "iv_equal_freq": {
-          "default": "psi_params.equal_freq 或 true"
+          "default": "psi_params.equal_freq or true"
         },
         "iv_use_woe_bins": {
-          "default": "继承 ivks_use_woe_bins"
+          "default": "Inherits ivks_use_woe_bins"
         },
         "corr_enabled": {
-          "default": "继承 corr_enabled"
+          "default": "Inherits corr_enabled"
         },
         "corr_threshold": {
-          "default": "corr_params.corr_cutpoint 或 0.75"
+          "default": "corr_params.corr_cutpoint or 0.75"
         },
         "corr_max_iterations": {
-          "default": "corr_params.max_iterations 或 10"
+          "default": "corr_params.max_iterations or 10"
         },
         "corr_use_woe_bins": {
-          "default": "继承 corr_use_woe_bins"
+          "default": "Inherits corr_use_woe_bins"
         },
         "corr_nan_policy": {
           "default": "pairwise",
@@ -1127,10 +1127,10 @@
           ]
         },
         "missing_rate_threshold": {
-          "default": "顶层 missing_rate_threshold"
+          "default": "Top-level missing_rate_threshold"
         },
         "missing_rate_ref": {
-          "default": "woe_params.missing_ref_value 或 -999999"
+          "default": "woe_params.missing_ref_value or -999999"
         },
         "content": {
           "default": 1e-06
@@ -1139,7 +1139,7 @@
           "default": 5
         },
         "min_bin_prop": {
-          "default": "iv_min_bin_prop 或 0.05"
+          "default": "iv_min_bin_prop or 0.05"
         },
         "vif_enabled": {
           "default": false
@@ -1152,7 +1152,7 @@
         },
         "vif_use_woe_bins": {
           "default": false,
-          "meaning": "true 时按 WOE 编码 INS 矩阵计算 VIF；分类变量需 monotone WOE engine"
+          "meaning": "When true, VIF is computed on the WOE-encoded INS matrix; categorical variables need a monotone WOE engine"
         }
       }
     }

@@ -1,16 +1,16 @@
-# 常见问题 FAQ
+# FAQ
 
-本页收录使用 SuperModelingFactory 过程中的高频问题与解决方案。
+This page collects frequently asked questions and solutions encountered while using SuperModelingFactory.
 
 ---
 
-## 环境与依赖
+## Environment and Dependencies
 
-### Q1: 导入包时报 `_ARRAY_API not found` / `NameError: name 'exit' is not defined`
+### Q1: Importing the package fails with `_ARRAY_API not found` / `NameError: name 'exit' is not defined`
 
-**现象**
+**Symptom**
 
-在 K8s（或其他容器化）环境中执行 `from Modeling_Tool.Core import *` 或 `from config import *` 时，出现以下错误链：
+In a K8s (or other containerized) environment, running `from Modeling_Tool.Core import *` or `from config import *` produces the following error chain:
 
 ```
 A module that was compiled using NumPy 1.x cannot be run in
@@ -20,67 +20,67 @@ AttributeError: _ARRAY_API not found
 NameError: name 'exit' is not defined
 ```
 
-**根本原因**
+**Root cause**
 
-环境中安装了 NumPy 2.x（如 2.2.6），但 `matplotlib`、`lightgbm` 等依赖是用 NumPy 1.x ABI 编译的，
-与当前 NumPy 大版本 ABI 不兼容，导致整条 import 链崩溃：
+The environment has NumPy 2.x installed (for example 2.2.6), but dependencies such as `matplotlib` and `lightgbm` were compiled against the NumPy 1.x ABI.
+The ABI is incompatible with the current NumPy major version, which crashes the whole import chain:
 
 ```
-NumPy 2.x 安装
-  └─► matplotlib (NumPy 1.x 编译) → _ARRAY_API not found
-        └─► lightgbm/compat.py 导入 matplotlib 失败
-                    └─► GBM_Tool.py 导入 lightgbm 失败
-                          └─► 后续 Model 子模块初始化中断
+NumPy 2.x installed
+  └─► matplotlib (compiled against NumPy 1.x) → _ARRAY_API not found
+        └─► lightgbm/compat.py fails to import matplotlib
+                    └─► GBM_Tool.py fails to import lightgbm
+                          └─► initialization of the remaining Model submodules is aborted
 ```
 
-**解决方案**
+**Solutions**
 
-=== "方案一：降级 NumPy（推荐）"
+=== "Option 1: Downgrade NumPy (recommended)"
 
     ```bash
     pip install "numpy<2" --force-reinstall
     ```
 
-    执行后**重启 Jupyter Kernel**。这是最简单、最稳妥的方法。
+    **Restart the Jupyter Kernel** afterward. This is the simplest and most reliable fix.
 
-=== "方案二：升级依赖到支持 NumPy 2.x 的版本"
+=== "Option 2: Upgrade the dependencies to NumPy 2.x-compatible versions"
 
-    若环境策略不允许降级 NumPy，则需升级 `matplotlib` 和 `lightgbm` 到与 NumPy 2.x 兼容的版本：
+    If your environment policy does not allow downgrading NumPy, upgrade `matplotlib` and `lightgbm` to versions compatible with NumPy 2.x:
 
     ```bash
     pip install "matplotlib>=3.9" "lightgbm>=4.3" --upgrade
     ```
 
-    主仓已切换为**纯 Python 源码分发**（见 [PR #24](https://github.com/Kyle-J-Sun/SuperModelingFactory/pull/24)），
-    不再依赖预编译 `.so`/`.pyd` 扩展；按矩阵约束安装 `numpy` / `lightgbm` 即可。
+    The main repository has switched to **pure-Python source distribution** (see [PR #24](https://github.com/Kyle-J-Sun/SuperModelingFactory/pull/24)),
+    and no longer depends on precompiled `.so`/`.pyd` extensions; just install `numpy` / `lightgbm` according to the matrix constraints.
 
-=== "方案三：按需导入，绕过 Model 模块"
+=== "Option 3: Import on demand, bypassing the Model module"
 
-    若当前任务（如推理工作流）不需要 GBM/LR 训练功能，可在 `config.py` 中只导入必要模块：
+    If your current task (such as an inference workflow) does not need GBM/LR training, import only the necessary modules in `config.py`:
 
     ```python
-    # 只导入 Core / Sample / Eval，跳过触发 lightgbm 的 Model 模块
+    # Import only Core / Sample / Eval, skipping the Model module that triggers lightgbm
     from Modeling_Tool.Core import *
     from Modeling_Tool.Sample import *
     from Modeling_Tool.Eval import *
-    # 不执行 from Modeling_Tool import *  或  from Modeling_Tool.Model import *
+    # Do not run `from Modeling_Tool import *` or `from Modeling_Tool.Model import *`
     ```
 
-**受影响的版本**
+**Affected versions**
 
-| 包 | 不兼容版本 | 修复版本 |
+| Package | Incompatible versions | Fixed versions |
 |---|---|---|
-| NumPy | ≥ 2.0 | < 2.0（降级） |
+| NumPy | ≥ 2.0 | < 2.0 (downgrade) |
 | matplotlib | < 3.9 | ≥ 3.9 |
 | lightgbm | < 4.3 | ≥ 4.3 |
 
 ---
 
-### Q2: 导入包时报 `AttributeError: module 'numpy' has no attribute 'float'`
+### Q2: Importing the package fails with `AttributeError: module 'numpy' has no attribute 'float'`
 
-**现象**
+**Symptom**
 
-已将 NumPy 降级至 1.23.x，但执行 `from Modeling_Tool.Core import *`（或任何触发顶层 `Modeling_Tool` 的导入）时，仍报：
+NumPy has already been downgraded to 1.23.x, but running `from Modeling_Tool.Core import *` (or any import that triggers the top-level `Modeling_Tool`) still fails with:
 
 ```
 File .../dask/array/numpy_compat.py, line 13
@@ -91,137 +91,137 @@ AttributeError: module 'numpy' has no attribute 'float'.
 The aliases was originally deprecated in NumPy 1.20;
 ```
 
-**根本原因**
+**Root cause**
 
-`GBM_Tool.py` 原先在模块顶层执行 `import lightgbm as lgb`，而 `lightgbm/compat.py` 会尝试可选导入 `dask.array`。
-环境中的 **旧版 dask（早于 2022 年，约 `<2021.11`）** 在 `dask/array/numpy_compat.py` 中使用了 `np.float`，
-该别名在 NumPy 1.20 被废弃、在 NumPy 1.24+ 彻底移除。
-即使使用 NumPy 1.23.x，这一写法也会触发 `AttributeError`，导致所有依赖 `Modeling_Tool` 的 import 失败。
+`GBM_Tool.py` used to run `import lightgbm as lgb` at module top level, and `lightgbm/compat.py` tries an optional import of `dask.array`.
+An **old dask in the environment (older than 2022, roughly `<2021.11`)** uses `np.float` in `dask/array/numpy_compat.py`.
+That alias was deprecated in NumPy 1.20 and removed entirely in NumPy 1.24+.
+Even with NumPy 1.23.x, this usage triggers an `AttributeError`, breaking every import that depends on `Modeling_Tool`.
 
-错误链：
+The error chain:
 
 ```
 from Modeling_Tool.Core import *
-  └─► Modeling_Tool/__init__.py (旧版) → from .Model import ...
-        └─► GBM_Tool.py → import lightgbm as lgb  (模块级)
+  └─► Modeling_Tool/__init__.py (old) → from .Model import ...
+        └─► GBM_Tool.py → import lightgbm as lgb  (module level)
               └─► lightgbm/compat.py → from dask.array import ...
                     └─► dask/array/numpy_compat.py → np.float
                           └─► AttributeError: module 'numpy' has no attribute 'float'
 ```
 
-**已修复版本**
+**Fixed in**
 
-此问题已在源码中通过以下两处修改彻底修复（参见 commit `b0038ac` / `f92505b`）：
+This problem is fully fixed in the source by two changes (see commits `b0038ac` / `f92505b`):
 
-1. **`GBM_Tool.py`**：移除模块级 `import lightgbm as lgb` / `import xgboost as xgb`，改为在每个用到 lightgbm/xgboost 的函数/方法体内部懒加载（通过 `_get_lgb()` / `_get_xgb()` 辅助函数）。
-2. **`Modeling_Tool/__init__.py`**：移除顶层的 `from .Model import (...)` eager 导入块，改用 `__getattr__` 延迟加载（与现有的 `ODPSRunner` 懒加载模式一致）。
+1. **`GBM_Tool.py`**: the module-level `import lightgbm as lgb` / `import xgboost as xgb` were removed; lightgbm/xgboost are now lazy-loaded inside each function or method that uses them (through the `_get_lgb()` / `_get_xgb()` helpers).
+2. **`Modeling_Tool/__init__.py`**: the top-level eager `from .Model import (...)` block was removed in favor of lazy loading through `__getattr__` (consistent with the existing `ODPSRunner` lazy-loading pattern).
 
-修复后，`import Modeling_Tool` 或 `from Modeling_Tool.Core import *` **不再触发** lightgbm → dask 的导入链，只有真正调用 `GradientBoostingModel`、`lgbm_quick_train` 等 Model 符号时才会 import lightgbm/xgboost。
+After the fix, `import Modeling_Tool` or `from Modeling_Tool.Core import *` **no longer triggers** the lightgbm → dask import chain; lightgbm/xgboost are imported only when you actually call Model symbols such as `GradientBoostingModel` or `lgbm_quick_train`.
 
-**临时绕过方案（等待 wheel 更新）**
+**Temporary workarounds (until the wheel is updated)**
 
-如果你使用的是已编译的 wheel 包（`/opt/conda/...`）而非源码安装，源码修复在重新打包前不会生效。可使用以下任一方案临时绕过：
+If you are using a compiled wheel package (`/opt/conda/...`) rather than a source install, the source fix does not take effect until the package is rebuilt. Use any of the following to work around it in the meantime:
 
-=== "方案一：卸载旧版 dask（推荐）"
+=== "Option 1: Uninstall the old dask (recommended)"
 
     ```bash
     pip uninstall dask -y
     ```
 
-    `lightgbm/compat.py` 对 dask 的导入是 `try/except` 包裹的可选依赖，卸掉 dask 后 lightgbm 会跳过它，正常加载。
-    适用于不依赖 dask 的推理/评分场景。
+    The dask import in `lightgbm/compat.py` is an optional dependency wrapped in `try/except`; once dask is removed, lightgbm skips it and loads normally.
+    This suits inference/scoring scenarios that do not depend on dask.
 
-=== "方案二：升级 dask"
+=== "Option 2: Upgrade dask"
 
     ```bash
     pip install "dask[array]>=2022.01" --upgrade
     ```
 
-    dask 在 2021.11 之后修复了 `np.float` 用法。升级后重启 kernel。
-    注意：dask 升级可能带入较多依赖变更，建议在独立环境中测试。
+    dask fixed the `np.float` usage after 2021.11. Restart the kernel after upgrading.
+    Note: upgrading dask can bring in many dependency changes, so test it in an isolated environment.
 
-=== "方案三：按需导入，跳过 Model 子模块"
+=== "Option 3: Import on demand, skipping the Model submodule"
 
     ```python
-    # config.py 中只导入不触发 lightgbm 的模块
+    # In config.py, import only modules that do not trigger lightgbm
     from Modeling_Tool.Core import *
     from Modeling_Tool.Sample import *
     from Modeling_Tool.Eval import *
     from Modeling_Tool.WOE import *
     from Modeling_Tool.Feature import *
-    # 不导入 Modeling_Tool.Model，推理场景通常不需要训练功能
+    # Do not import Modeling_Tool.Model; inference scenarios usually do not need training features
     ```
 
-**受影响的版本组合**
+**Affected version combinations**
 
-| 条件 | 说明 |
+| Condition | Notes |
 |---|---|
-| NumPy 1.20–1.23 + dask < 2021.11 | 触发 `AttributeError: np.float`（警告级，但旧 dask 写法使其崩溃） |
-| NumPy ≥ 1.24 + dask < 2021.11 | 同上，但更严重（`np.float` 已彻底移除） |
-| NumPy ≥ 1.24 + dask ≥ 2022.01 | 正常 |
-| 源码安装最新版 SuperModelingFactory | 已修复，不受影响 |
+| NumPy 1.20–1.23 + dask < 2021.11 | Triggers `AttributeError: np.float` (only a warning level in itself, but the old dask code turns it into a crash) |
+| NumPy ≥ 1.24 + dask < 2021.11 | Same, but more severe (`np.float` has been removed entirely) |
+| NumPy ≥ 1.24 + dask ≥ 2022.01 | Works |
+| Source install of the latest SuperModelingFactory | Fixed; not affected |
 
-### Q2b: 升级到 0.8.2 后，notebook 里多了很多 warning
+### Q2b: After upgrading to 0.8.2, my notebook shows many more warnings
 
-**原因**
+**Cause**
 
-0.8.1 及之前，`Modeling_Tool.WOE.WOE_Monotone_Binner`（`import Modeling_Tool` 时就会加载）和 `Modeling_Tool.Model.Backward_Tool` 在导入时执行 `warnings.filterwarnings("ignore")`。这会在**整个 Python 进程**里屏蔽所有告警：SMF 自己的防护告警（如特殊值箱治理降级、声明了但拟合样本中没出现的特殊值）、你自己代码的告警、第三方库的弃用提示全都看不到。0.8.2 删除了这两处全局设置，告警恢复 Python 默认行为；计算结果与之前完全相同，只是这些提示重新可见。
+In 0.8.1 and earlier, `Modeling_Tool.WOE.WOE_Monotone_Binner` (loaded as soon as you `import Modeling_Tool`) and `Modeling_Tool.Model.Backward_Tool` executed `warnings.filterwarnings("ignore")` at import time. That suppresses all warnings in the **entire Python process**: SMF's own guard warnings (such as special-bin governance downgrades and declared special values that never occur in the fit sample), warnings from your own code, and deprecation notices from third-party libraries all disappeared. 0.8.2 removed both global settings, and warnings are back to Python's default behavior. Computed results are identical to before; these messages are simply visible again.
 
-同理，0.8.1 及之前 `import Modeling_Tool` 还会执行 `pd.set_option('future.no_silent_downcasting', True)`（`Core/Binning_Tool.py`、`Core/kDataFrame.py`、`Core/Slope_Tool.py`、`Core/ODPS_Tool.py` 各一处）。这同样是**进程级**开关：导入 SMF 之后，你自己代码里与 SMF 无关的 `replace()` / `fillna()` 也会改变降级行为并开始报 downcasting 告警。0.8.2 删除了这四处；SMF 自身不依赖该开关（去掉后全量回归无任何 downcasting 告警）。如果你的代码确实需要它，在自己的脚本里显式设置即可。
+Likewise, in 0.8.1 and earlier, `import Modeling_Tool` also executed `pd.set_option('future.no_silent_downcasting', True)` (one occurrence each in `Core/Binning_Tool.py`, `Core/kDataFrame.py`, `Core/Slope_Tool.py`, and `Core/ODPS_Tool.py`). This is also a **process-level** switch: once SMF was imported, unrelated `replace()` / `fillna()` calls in your own code changed their downcasting behavior and began emitting downcasting warnings. 0.8.2 removed all four occurrences; SMF itself does not depend on the switch (the full regression shows no downcasting warnings without it). If your code really needs it, set it explicitly in your own script.
 
-同一批还去掉了 `pd.options.mode.chained_assignment = None`（原先在 `Core/kDataFrame.py`、`Core/Binning_Tool.py`、`Core/ODPS_Tool.py`、`Core/Slope_Tool.py`、`ExcelMaster/Template.py` 导入时设置，`Report/Report_Tool.plot_woe` 调用时再设一次）。它关掉的是 pandas 的 `SettingWithCopyWarning`——**"我改了一个切片、改动没生效"这类真 bug 的报警器**，而且是进程级的，连你自己的代码也一并失聪。
+The same batch also removed `pd.options.mode.chained_assignment = None` (previously set at import time in `Core/kDataFrame.py`, `Core/Binning_Tool.py`, `Core/ODPS_Tool.py`, `Core/Slope_Tool.py`, and `ExcelMaster/Template.py`, and set once more when `Report/Report_Tool.plot_woe` was called). What it turned off is pandas' `SettingWithCopyWarning` — **the alarm for real bugs of the "I modified a slice and the change didn't take effect" kind** — and because it was process-level, your own code lost it too.
 
-它当初被关掉，是因为 SMF 自己在 6 个模块的 9 处触发了它。0.8.2 把这 9 处全部改成在自己的帧上操作，因此该告警可以开着而 SMF 全程不响。**随之而来的行为变化**：
+It had been turned off because SMF itself triggered the warning in 9 places across 6 modules. 0.8.2 changed all 9 to operate on SMF's own frames, so the warning can stay on without SMF ever tripping it. **Resulting behavior changes**:
 
-| 位置 | 以前 | 0.8.2 |
+| Location | Before | 0.8.2 |
 |---|---|---|
-| `run_binning` / `super_binning` | 可能把 `bin_num` / `bin_range` 两列写回你传入的 DataFrame | 只在返回值里，你的表不动 |
-| `get_gains_table`（传 `model` 时） | 在你的表上留下 `_mdl_scr` 临时列 | 不再留下 |
-| `plot_woe` / `plot_woe_group`（**公开 API**） | 把你的列名改成小写，并就地把 `woe`/`iv` 的 inf 替换掉 | 你的表原样不动，图不变 |
-| `scoring` / `select_sample_seed` | 只是触发告警，写入本就落在副本上 | 无变化 |
+| `run_binning` / `super_binning` | Could write the `bin_num` / `bin_range` columns back into the DataFrame you passed in | Only in the return value; your table is untouched |
+| `get_gains_table` (when `model` is passed) | Left a temporary `_mdl_scr` column on your table | No longer leaves it |
+| `plot_woe` / `plot_woe_group` (**public API**) | Lowercased your column names and replaced inf in `woe`/`iv` in place | Your table is left as-is; the plots are unchanged |
+| `scoring` / `select_sample_seed` | Only triggered the warning; the writes already landed on a copy | No change |
 
-如果你的代码依赖上面前三行的旧副作用（例如调用 `plot_woe` 之后按小写列名取数），请显式自己做：`df.columns = [c.lower() for c in df.columns]`。
+If your code depends on the old side effects in the first three rows (for example, looking up columns by lowercase name after calling `plot_woe`), do it explicitly yourself: `df.columns = [c.lower() for c in df.columns]`.
 
-0.8.2 同时清理了 SMF 自身调用触发的弃用与数值提示（seaborn `distplot` / `bw`、WOE/IV 里的 `log(0)`、pandas `concat` / `groupby` 的 FutureWarning、sklearn feature names、xlsxwriter 单格合并、pyodps `Schema`、shap 全局随机数），并修复了其中暴露出的问题（见 0.8.2 更新日志）。现在仍会看到的主要是：
+0.8.2 also cleaned up the deprecation and numerical notices triggered by SMF's own calls (seaborn `distplot` / `bw`, `log(0)` in WOE/IV, pandas `concat` / `groupby` FutureWarnings, sklearn feature names, xlsxwriter single-cell merges, pyodps `Schema`, shap global random state), and fixed the problems this exposed (see the 0.8.2 changelog). The main warnings you may still see are:
 
-| 告警 | 来源 | 说明 |
+| Warning | Source | Notes |
 |---|---|---|
-| `declared special value(s) never occur in the fit sample`、`bins have zero-mass class`、`keep_all_warn` 等 | SMF 防护告警 | 数据或配置需要关注，见 [WOE 指南](guides/woe.md) 与 [特征指南](guides/feature.md) |
-| sklearn `UndefinedMetricWarning` | 单一类别的数据集（如没有坏样本的 OOT） | 该数据集的 AUC / KS 等指标记为 NaN |
-| sklearn 校准时 `sample_weight` 只作用于校准器的提示 | 加权校准 | 加权语义提示，建议阅读 |
-| xgboost `Parameters: { ... } are not used` | 模型参数 | 传给原生训练接口的参数（如 `n_estimators`）没有生效 |
+| `declared special value(s) never occur in the fit sample`, `bins have zero-mass class`, `keep_all_warn`, etc. | SMF guard warnings | Your data or configuration needs attention; see the [WOE guide](guides/woe.md) and the [Feature guide](guides/feature.md) |
+| sklearn `UndefinedMetricWarning` | Single-class datasets (such as an OOT sample with no bad samples) | Metrics such as AUC / KS are recorded as NaN for that dataset |
+| sklearn notice that `sample_weight` applies only to the calibrator during calibration | Weighted calibration | A weighting-semantics notice; worth reading |
+| xgboost `Parameters: { ... } are not used` | Model parameters | Parameters passed to the native training interface (such as `n_estimators`) took no effect |
 
-**只屏蔽不想看的告警**
+**Silence only the warnings you don't want to see**
 
 ```python
 import warnings
 
-warnings.filterwarnings("ignore", message=r".*zero-mass class")   # 按消息正则（从消息开头匹配）
-warnings.filterwarnings("ignore", category=FutureWarning)          # 按类别
+warnings.filterwarnings("ignore", message=r".*zero-mass class")   # by message regex (matched from the start of the message)
+warnings.filterwarnings("ignore", category=FutureWarning)          # by category
 ```
 
-不建议再用不带参数的 `warnings.filterwarnings("ignore")`：它会把 SMF 的防护告警一起屏蔽。
+Avoid the bare `warnings.filterwarnings("ignore")` again: it also silences SMF's guard warnings.
 
 ---
 
-## ODPS 访问密钥配置
+## ODPS Access Key Configuration
 
-### Q3: 如何用 `config.py` 统一管理 ODPS 凭据和包导入
+### Q3: How do I manage ODPS credentials and package imports uniformly with `config.py`?
 
-**痛点**
+**Pain points**
 
-在 Jupyter notebook 或脚本里使用 `ODPSRunner` 时，常见两个问题：
+When using `ODPSRunner` in a Jupyter notebook or script, two problems are common:
 
-1. 每个文件都要重复手写 `os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"] = "..."`，AccessKey 容易被误提交到 Git；
-2. 每个文件都要重复一长串 `from Modeling_Tool.XXX import *`，noisy 且容易漏掉子模块。
+1. Every file repeats `os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"] = "..."` by hand, and an AccessKey can easily be committed to Git by mistake;
+2. Every file repeats a long list of `from Modeling_Tool.XXX import *` lines, which is noisy and easy to get wrong by missing a submodule.
 
-推荐的做法是在**系统级共享路径** `/opt/workspace/.env` 集中管理 AccessKey，项目根目录只放一个 `config.py` 显式加载它。这样多个项目可以共用一份 AK，不用每个仓库都重复配置。所有 notebook 顶端只写一行 `from config import *`，即同时完成凭据加载和包导入。
+The recommended approach is to manage the AccessKey centrally in the **system-level shared path** `/opt/workspace/.env`, and keep a single `config.py` in the project root that loads it explicitly. Multiple projects can then share one AK instead of configuring each repository. Every notebook needs only one line at the top, `from config import *`, which both loads the credentials and imports the package.
 
 ---
 
-**步骤 1：安装 python-dotenv**
+**Step 1: Install python-dotenv**
 
-`Modeling_Tool` 主包不依赖 `python-dotenv`，需要单独装一次：
+The `Modeling_Tool` main package does not depend on `python-dotenv`, so install it separately once:
 
 ```bash
 pip install python-dotenv
@@ -229,41 +229,41 @@ pip install python-dotenv
 
 ---
 
-**步骤 2：创建系统级共享 `.env`**
+**Step 2: Create the system-level shared `.env`**
 
 ```bash
-# 创建目录并交给当前用户
+# Create the directory and hand it to the current user
 sudo mkdir -p /opt/workspace
 sudo chown $USER:$USER /opt/workspace
 
-# 创建文件并锁死权限（只有当前用户可读写）
+# Create the file and lock down its permissions (readable/writable only by the current user)
 touch /opt/workspace/.env
 chmod 600 /opt/workspace/.env
 ```
 
-然后用编辑器写入凭据：
+Then write the credentials with an editor:
 
 ```bash
-# /opt/workspace/.env  —— 所有项目共享一份
+# /opt/workspace/.env  —— one copy shared by all projects
 ALIBABA_CLOUD_ACCESS_KEY_ID=LTAI5tXXXXXXXXXXXXXXXXXX
 ALIBABA_CLOUD_ACCESS_KEY_SECRET=YYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
 ODPS_PROJECT=mex_anls
 ODPS_ENDPOINT=http://service.cn-shanghai.maxcompute.aliyun.com/api
 ```
 
-!!! warning "安全提醒"
-    - `/opt/workspace/.env` 在仓库之外，不可能被 Git 跟踪 —— 但**必须** `chmod 600` 防止同机器其他用户读取；
-    - 不要把 `.env` 通过 Slack/邮件/截图分享 —— 改用密钥管理服务（Vault、阿里云 KMS 等）；
-    - 如果是多用户服务器，考虑改放 `~/.config/smf/.env`，避免跨用户泄露。
+!!! warning "Security reminder"
+    - `/opt/workspace/.env` is outside the repository and cannot be tracked by Git — but you **must** `chmod 600` it to stop other users on the same machine from reading it;
+    - Do not share the `.env` through Slack, email, or screenshots — use a secrets-management service instead (Vault, Alibaba Cloud KMS, etc.);
+    - On a multi-user server, consider `~/.config/smf/.env` instead to avoid cross-user leaks.
 
 ---
 
-**步骤 3：项目根目录的 `.gitignore`（防范性措施）**
+**Step 3: `.gitignore` in the project root (a precaution)**
 
-虽然 `.env` 不在仓库里，但仍建议加上以下行，防止未来某天手滑把 `.env` 复制到项目根后误提交：
+Although `.env` is not in the repository, it is still a good idea to add the following lines, so that if you ever copy `.env` into the project root by accident, it is not committed:
 
 ```gitignore
-# 凭据文件（防范性）
+# Credential files (precaution)
 .env
 .env.local
 .env.*.local
@@ -271,48 +271,49 @@ ODPS_ENDPOINT=http://service.cn-shanghai.maxcompute.aliyun.com/api
 
 ---
 
-**步骤 4：在项目根目录新建 `config.py`**
+**Step 4: Create `config.py` in the project root**
 
 ```python
 # ═══════════════════════════════════════════════════════════════════════════
-# config.py — 项目通用导入 + 环境变量加载
+# config.py — shared project imports + environment variable loading
 # ═══════════════════════════════════════════════════════════════════════════
-# 用法：在任意 notebook / 脚本顶端写一行：
+# Usage: write one line at the top of any notebook / script:
 #
 #     from config import *
 #
-# 即同时完成：
-#   1. 从系统级共享路径 /opt/workspace/.env 加载 ODPS / Aliyun 凭据到 os.environ
-#   2. 导入 Modeling_Tool 全部子模块到当前命名空间
+# which does both of the following:
+#   1. Loads the ODPS / Aliyun credentials from the system-level shared path
+#      /opt/workspace/.env into os.environ
+#   2. Imports all Modeling_Tool submodules into the current namespace
 #
-# 修改 .env 后需重启 Jupyter kernel 才能生效。
-# /opt/workspace/.env 必须 chmod 600，防止同机器其他用户读取。
+# After editing .env, restart the Jupyter kernel for the change to take effect.
+# /opt/workspace/.env must be chmod 600 so other users on the machine cannot read it.
 # ═══════════════════════════════════════════════════════════════════════════
 
 import os
 import sys
 from pathlib import Path
 
-# ── 加载系统级共享 .env ──
+# ── Load the system-level shared .env ──
 from dotenv import load_dotenv
 
 ENV_PATH = Path("/opt/workspace/.env")
 
 if ENV_PATH.is_file():
-    # override=False: 已在环境中的变量（如 K8s 注入）优先于 .env
+    # override=False: variables already in the environment (e.g. injected by K8s) take priority over .env
     load_dotenv(ENV_PATH, override=False)
 else:
     print(f"[config] WARNING: {ENV_PATH} not found; ODPS credentials may be missing.",
           file=sys.stderr)
 
-# ── 导入 Modeling_Tool 全部子模块 ──
-#   Core    — 基础工具: DateTimeUtils, load_model, save_model, calc_iv, calc_woe ...
-#   Sample  — 样本拆分: SampleSplitter, StratifiedSampler, SampleBalancer
-#   Eval    — 模型评估: PerformanceEvaluator, GainsTableCalculator
-#   Feature — 特征分析: proc_means_by_grp, PSICalculator, CorrelationFilter
-#   WOE     — WOE 分箱: WOE_Master, MonotoneWOEBinner, woe_transform
-#   Model   — 模型训练: LRMaster, GradientBoostingModel, BackwardVariableEliminator
-import Modeling_Tool as smf  # 命名空间备份，避免 import * 冲突时仍可用 smf.Model.LRMaster
+# ── Import all Modeling_Tool submodules ──
+#   Core    — basic utilities: DateTimeUtils, load_model, save_model, calc_iv, calc_woe ...
+#   Sample  — sample splitting: SampleSplitter, StratifiedSampler, SampleBalancer
+#   Eval    — model evaluation: PerformanceEvaluator, GainsTableCalculator
+#   Feature — feature analysis: proc_means_by_grp, PSICalculator, CorrelationFilter
+#   WOE     — WOE binning: WOE_Master, MonotoneWOEBinner, woe_transform
+#   Model   — model training: LRMaster, GradientBoostingModel, BackwardVariableEliminator
+import Modeling_Tool as smf  # namespace backup: smf.Model.LRMaster stays available if an import * collides
 
 from Modeling_Tool.Core import *      # noqa: F401,F403
 from Modeling_Tool.Sample import *    # noqa: F401,F403
@@ -324,81 +325,81 @@ from Modeling_Tool.Model import *     # noqa: F401,F403
 
 ---
 
-**步骤 5：在 notebook 里使用**
+**Step 5: Use it in a notebook**
 
 ```python
-# notebook 第一个 cell
+# First cell of the notebook
 from config import *
 
-# 此时已经完成：
-#   1. os.environ 中已加载 ALIBABA_CLOUD_ACCESS_KEY_ID / _SECRET / ODPS_PROJECT / ODPS_ENDPOINT
-#   2. LRMaster / WOE_Master / PerformanceEvaluator 等全部 SMF 类可直接使用
+# At this point:
+#   1. os.environ already holds ALIBABA_CLOUD_ACCESS_KEY_ID / _SECRET / ODPS_PROJECT / ODPS_ENDPOINT
+#   2. All SMF classes such as LRMaster / WOE_Master / PerformanceEvaluator are ready to use
 
-odps = ODPSRunner()                            # 无需再传 access_key，自动从 os.environ 读
+odps = ODPSRunner()                            # no need to pass access_key; it is read from os.environ automatically
 df   = odps.read_sql("SELECT * FROM ... LIMIT 100")
 
-woe  = WOE_Master(...)                          # 直接使用，无需 from Modeling_Tool.WOE import *
+woe  = WOE_Master(...)                          # use directly, no need for from Modeling_Tool.WOE import *
 lr   = LRMaster(params={"C": 1.0})
 ```
 
 ---
 
-**关键设计说明**
+**Key design notes**
 
-=== "为什么放在 `/opt/workspace/.env`"
+=== "Why `/opt/workspace/.env`"
 
-    集中放在 `/opt/workspace/.env` 用**绝对路径**加载，一下子解决三个问题：
+    Keeping the file at `/opt/workspace/.env` and loading it by **absolute path** solves three problems at once:
 
-    1. **多项目共用一份 AK** —— 不用每个仓库都贴一份 `.env`，轮转凭据时只需改一处；
-    2. **不可能随仓库 push 被误提交** —— 根本不在 Git 工作区下；
-    3. **调试友好** —— 路径是硬编码的，出问题时一眼能看出加载的是哪份凭据；Jupyter 启动时不依赖不可靠的 `__file__` 或 CWD。
+    1. **Multiple projects share one AK** — no need to paste a `.env` into every repository, and rotating credentials means changing one place;
+    2. **It cannot be committed by accident with a repo push** — it is not under a Git working tree at all;
+    3. **Easy to debug** — the path is hard-coded, so when something goes wrong you can see at a glance which credentials were loaded; Jupyter startup does not rely on the unreliable `__file__` or CWD.
 
-=== "为什么用 `override=False`"
+=== "Why `override=False`"
 
-    `override=False`（默认值）表示：已经存在于 `os.environ` 的变量**不会被 .env 覆盖**。
-    这是为了在容器化部署（K8s、Docker、CI/CD）时，运维注入的环境变量始终优先于本地 `.env` —— 否则上线时容易被本地凭据意外覆盖。
+    `override=False` (the default) means that variables already present in `os.environ` are **not overwritten by .env**.
+    In containerized deployments (K8s, Docker, CI/CD), this ensures environment variables injected by operations always take priority over the local `.env` — otherwise local credentials could overwrite them by accident at release time.
 
-=== "为什么保留 `import Modeling_Tool as smf`"
+=== "Why keep `import Modeling_Tool as smf`"
 
-    六次 `from ... import *` 存在命名冲突风险（后导入的子模块会静默覆盖前面的同名符号）。
-    保留一份显式命名空间 `smf` 作为 fallback：当遇到命名冲突时，可直接写 `smf.Model.LRMaster` 来精确指定来源。
+    Six `from ... import *` statements carry a naming-collision risk (a submodule imported later silently overrides same-named symbols imported earlier).
+    Keeping an explicit `smf` namespace as a fallback lets you write `smf.Model.LRMaster` to pin down the exact source when a collision happens.
 
-=== "为什么不在 SMF 主包里集成 dotenv"
+=== "Why dotenv is not built into the SMF main package"
 
-    `python-dotenv` 是项目级工程约定，不是建模工具职责。SMF 主包只负责"如果 `os.environ` 里有这些 key 就用它们"，至于这些 key 怎么进入 `os.environ`（dotenv / K8s Secret / 启动脚本 / 手动 export）完全由项目自己决定。
+    `python-dotenv` is a project-level engineering convention, not a modeling-tool responsibility. The SMF main package only does "use these keys if they are in `os.environ`"; how they get into `os.environ` (dotenv / K8s Secret / startup script / manual export) is entirely up to the project.
 
 ---
 
-**常见踩坑**
+**Common pitfalls**
 
-| 现象 | 原因 | 解决 |
+| Symptom | Cause | Fix |
 |---|---|---|
-| `from config import *` 后 `os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"]` 仍为空 | `/opt/workspace/.env` 不存在或路径拼错 | `ls -la /opt/workspace/.env` 确认文件存在；检查 `config.py` 中 `ENV_PATH` 路径是否正确 |
-| `PermissionError: [Errno 13]` 读不了 `.env` | `chmod 600` 后当前用户不是 owner | `ls -la /opt/workspace/.env` 检查拥有者；`sudo chown $USER:$USER /opt/workspace/.env` |
-| 修改 `.env` 后凭据没更新 | Jupyter kernel 已缓存 `os.environ` | 重启 kernel（菜单 Kernel → Restart） |
-| `ImportError: No module named 'dotenv'` | 没装 `python-dotenv` | `pip install python-dotenv` |
-| 部署到 K8s 后被 `.env` 覆盖了正确的凭据 | 使用了 `override=True` | 改回 `override=False`（推荐默认值） |
-| 一个 notebook 同时调多个数据源，AK 用错了 | `os.environ` 是进程级全局状态 | 同进程内多账号场景请直接用 `ODPS(access_id=..., secret_access_key=...)` 显式参数 |
+| After `from config import *`, `os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"]` is still empty | `/opt/workspace/.env` does not exist or the path is wrong | Run `ls -la /opt/workspace/.env` to confirm the file exists; check that `ENV_PATH` in `config.py` is correct |
+| `PermissionError: [Errno 13]` when reading `.env` | After `chmod 600`, the current user is not the owner | Check the owner with `ls -la /opt/workspace/.env`; run `sudo chown $USER:$USER /opt/workspace/.env` |
+| Credentials did not update after editing `.env` | The Jupyter kernel has cached `os.environ` | Restart the kernel (menu: Kernel → Restart) |
+| `ImportError: No module named 'dotenv'` | `python-dotenv` is not installed | `pip install python-dotenv` |
+| The correct credentials were overwritten by `.env` after deploying to K8s | `override=True` was used | Switch back to `override=False` (the recommended default) |
+| One notebook calls several data sources and the wrong AK is used | `os.environ` is process-level global state | For multi-account scenarios in one process, pass explicit arguments such as `ODPS(access_id=..., secret_access_key=...)` |
 
 ---
 
-## 样本权重
+## Sample Weights
 
-### Q4: 何时使用样本权重？`weight_col` 与 `sample_weight` 有何区别？
+### Q4: When should I use sample weights? What is the difference between `weight_col` and `sample_weight`?
 
-典型场景：抽样偏差校正（过采样后给原始样本更高权重）、按贷款余额/金额加权、时间衰减加权等。
+Typical scenarios: correcting sampling bias (giving original samples higher weight after oversampling), weighting by loan balance/amount, time-decay weighting, and so on.
 
-| 参数 | 适用层 | 说明 |
+| Parameter | Layer | Notes |
 |------|--------|------|
-| `weight_col` | 训练（`LRMaster.fit`）、评估（`PerformanceEvaluator`）、DataFrame 类 API | 从 DataFrame 列解析，推荐与业务表字段同名 |
-| `sample_weight` | `GradientBoostingModel.fit`、底层 `calc_roc` / `evaluate_performance` | 直接传一维 numpy 数组 |
+| `weight_col` | Training (`LRMaster.fit`), evaluation (`PerformanceEvaluator`), DataFrame-based APIs | Resolved from a DataFrame column; using the same name as the business table field is recommended |
+| `sample_weight` | `GradientBoostingModel.fit`, low-level `calc_roc` / `evaluate_performance` | Pass a 1-D numpy array directly |
 
-`weight_col` 与 `sample_weight` **不可同时传入**（`resolve_sample_weight` 会报错）。也接受 `wgt` / `wgt_col` 别名。
+`weight_col` and `sample_weight` **cannot be passed together** (`resolve_sample_weight` raises an error). The `wgt` / `wgt_col` aliases are also accepted.
 
-训练用了权重、评估忘记传时，指标会按等权（每行 1）计算，与训练目标不一致。请在训练与评估链路统一传入同一权重列。
+If you trained with weights but forget to pass them at evaluation time, metrics are computed with equal weights (1 per row), which is inconsistent with the training objective. Pass the same weight column consistently through the training and evaluation chain.
 
-详细语义（`N` vs `N_RAW`、加权 AUC/KS/Lift）见 [模型评估 — 样本权重评估](guides/eval.md#样本权重评估) 与 [模型训练 — 样本权重](guides/model.md#样本权重)。
+For the detailed semantics (`N` vs `N_RAW`, weighted AUC/KS/Lift), see [Model Evaluation — Sample-Weighted Evaluation](guides/eval.md#sample-weighted-evaluation) and [Model Training — Sample Weights](guides/model.md#sample-weights).
 
 ---
 
-*如有其他问题，欢迎在 [GitHub Issues](https://github.com/Kyle-J-Sun/SuperModelingFactory/issues) 中提交。*
+*If you have other questions, feel free to submit them in [GitHub Issues](https://github.com/Kyle-J-Sun/SuperModelingFactory/issues).*

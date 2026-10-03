@@ -1,10 +1,10 @@
-# WOE 编码
+# WOE Encoding
 
-WOE（Weight of Evidence）把分类变量或分箱后的连续变量映射为线性可分的数值，是评分卡建模的标准做法。
+WOE (Weight of Evidence) maps categorical variables or binned continuous variables to linearly separable numeric values, and is the standard practice in scorecard modeling.
 
-SuperModelingFactory 在 [`WOE`](../api/woe.md) 子包提供 **主控类 + 单调分箱器 + 转换器 + 绘图器 + 分箱引擎适配器**。
+SuperModelingFactory provides a **master class + monotone binner + transformers + plotters + binning-engine adapter** in the [`WOE`](../api/woe.md) subpackage.
 
-## 1. 主控类 —— `WOE_Master`
+## 1. Master Class — `WOE_Master`
 
 ```python
 from Modeling_Tool import SMF_MISSING_BIN, WOE_Master
@@ -22,19 +22,19 @@ test_woe = woe.transform(test_df)
 oot_woe = woe.transform(oot_df)
 ```
 
-### 向量化执行与宽表性能
+### Vectorized Execution and Wide-Table Performance
 
-`WOE_Master` 的行级计算采用向量化路径：
+`WOE_Master` computes row-level work on a vectorized path:
 
-- 分箱通过 `pandas.cut` 生成 categorical codes，再用 `numpy.take` 一次映射整列的 bin label。
-- WOE 映射按整列 lookup，不使用逐行 `Series.apply()`。
-- 多变量转换会先收集全部 `{feature}_woe` 数组，最后一次性 `concat` 回原表，避免宽表逐列插入引起 DataFrame fragmentation。
-- WOE 和 IV 共用同一次对数计算；`WOEIVCalculator.calc_both()` 不会分别重复计算 WOE 与 IV。
-- `WOE_Master.transform()` 会自动沿用实例的 `missing_ref_value`，训练和推理使用同一个缺失值分箱口径。
+- Binning generates categorical codes through `pandas.cut`, then maps a whole column of bin labels at once with `numpy.take`.
+- WOE mapping is a whole-column lookup, with no row-by-row `Series.apply()`.
+- Multi-variable transforms first collect all `{feature}_woe` arrays and then `concat` them back to the original table in one go, avoiding DataFrame fragmentation from inserting wide-table columns one by one.
+- WOE and IV share a single logarithm computation; `WOEIVCalculator.calc_both()` does not compute WOE and IV separately and redundantly.
+- `WOE_Master.transform()` automatically reuses the instance's `missing_ref_value`, so training and inference use the same missing-value bin basis.
 
-不同变量的分箱边界并不相同，因此 `fit()` / `transform()` 仍保留**变量级循环**；循环内部没有 Python 逐行回调。向量化的含义是按整列运算，而不是强迫所有变量共用一套 bins。
+Different variables have different bin boundaries, so `fit()` / `transform()` still keep a **per-variable loop**; there are no row-by-row Python callbacks inside the loop. Vectorized here means whole-column operations, not forcing every variable to share one set of bins.
 
-已有映射表也可以直接批量转换。独立调用 `mapping_woe()` 时，如训练使用了自定义缺失哨兵，应显式传入同一个值：
+An existing mapping table can also be applied in batch directly. When calling `mapping_woe()` on its own, if training used a custom missing sentinel, pass the same value explicitly:
 
 ```python
 from Modeling_Tool import mapping_woe
@@ -47,7 +47,7 @@ scored = mapping_woe(
 )
 ```
 
-需要同时计算 WOE 与 IV 时，优先使用一次性接口：
+When you need both WOE and IV, prefer the one-shot interface:
 
 ```python
 from Modeling_Tool import WOEIVCalculator
@@ -59,7 +59,7 @@ woe_values, iv_values = WOEIVCalculator(
 ).calc_both()
 ```
 
-### 持久化映射表
+### Persisting the Mapping Table
 
 ```python
 woe.save_mapping_table("./output/woe_mapping.csv")
@@ -68,9 +68,9 @@ from Modeling_Tool import load_mapping_table
 varlist, woe_dict = load_mapping_table("./output/woe_mapping.csv")
 ```
 
-## 2. 贪心单调分箱器 —— `MonotoneWOEBinner`
+## 2. Greedy Monotone Binner — `MonotoneWOEBinner`
 
-如果评分卡需要更强的单调约束，推荐使用 `MonotoneWOEBinner`。
+If the scorecard needs a stronger monotonicity constraint, `MonotoneWOEBinner` is recommended.
 
 ```python
 from Modeling_Tool.WOE.WOE_Monotone_Binner import MonotoneWOEBinner
@@ -91,77 +91,77 @@ bins = binner.get_final_bins()
 edges = binner.get_bin_edges()
 ```
 
-### 方法列表
+### Method List
 
-| 方法 | 说明 |
+| Method | Description |
 |------|------|
-| `fit(df, chi2_binning, chi2_p, n_jobs)` | 训练拟合 |
-| `refine_cate(max_bins)` | 类别特征按坏率聚类合并 |
-| `apply_woe(df, varlist=None)` | WOE 转换；`varlist` 可限制只转换指定变量，适合宽表分块 |
-| `get_final_bins()` | 导出分箱结果（含 WOE/IV） |
-| `load_woe_bins(bins_dict)` | 加载已有分箱 |
-| `get_bin_edges()` | 取分箱边界列表 |
-| `export_woe_report(path)` | 导出 Excel 报告 |
-| `plot_woe_graph(dir, group_name=)` | 输出 WOE 图 PNG |
+| `fit(df, chi2_binning, chi2_p, n_jobs)` | Fit on training data |
+| `refine_cate(max_bins)` | Cluster and merge categorical features by bad rate |
+| `apply_woe(df, varlist=None)` | WOE transform; `varlist` can restrict it to specified variables, suited to wide-table chunking |
+| `get_final_bins()` | Export the binning result (with WOE/IV) |
+| `load_woe_bins(bins_dict)` | Load existing bins |
+| `get_bin_edges()` | Get the list of bin boundaries |
+| `export_woe_report(path)` | Export an Excel report |
+| `plot_woe_graph(dir, group_name=)` | Output WOE plot PNGs |
 
-### Format-A 分箱往返（0.7.2）
+### Format-A Bins Round Trip (0.7.2)
 
-`get_final_bins()` 返回的每个 DataFrame 都带有 `attrs["smf_woe_format_a"]`。其中的精确数值边界、稀疏箱号、类别成员和 `missing_woe` 只有在 metadata 摘要与行身份校验通过时才会被 `load_woe_bins()` 使用；直接传递或 pickle 往返可以保住这些信息，损坏或陈旧 metadata 会安全退回可见标签解析。
+Every DataFrame returned by `get_final_bins()` carries `attrs["smf_woe_format_a"]`. The exact numeric boundaries, sparse bin IDs, category members, and `missing_woe` in it are used by `load_woe_bins()` only when the metadata digest and the row-identity check pass; passing the frame directly or round-tripping through pickle preserves this information, while corrupted or stale metadata safely falls back to parsing the visible labels.
 
-启用了低占比特殊值治理（见下文 SV Bin Governance）的表，attrs 里还会带上每个特殊值箱的 `sv_policy_applied` 决策和拟合时的平滑参数（`sv_decisions`）。这部分有独立的校验摘要，不参与原有 metadata 摘要：旧版本加载器照常验证原有字段，新版本加载后恢复决策，使 by-group 图的组 IV 与拟合时一致。未启用 SV 治理的表 attrs 与旧版完全相同；例外是 `unseen_special_policy="neutral"` 生成了占位箱的表（见下文），它们带 `sv_policy_applied`，决策照常写入。0.8.1 及更早的加载器不认识 `unseen_at_fit`，会整体忽略这份决策（组 IV 按无决策计算），打分不受影响。
+For tables with low-share special-value governance enabled (see SV Bin Governance below), attrs also carries each special-value bin's `sv_policy_applied` decision and the smoothing parameters at fit time (`sv_decisions`). This part has its own validation digest and does not take part in the original metadata digest: old loaders validate the original fields as usual, and new loaders restore the decisions after loading, so the group IV in by-group plots matches fit time. Tables without SV governance have attrs identical to the old version; the exception is tables where `unseen_special_policy="neutral"` produced placeholder bins (see below), which carry `sv_policy_applied` and have their decisions written as usual. Loaders in 0.8.1 and earlier do not recognize `unseen_at_fit` and ignore this decision wholesale (group IV is computed as if there were no decision); scoring is unaffected.
 
-!!! warning "CSV/Excel 不是精确往返载体"
-    CSV/Excel 会丢失 `DataFrame.attrs`。从这两类文件回载时，`bin_label`（默认 `.8g` 显示精度）是唯一事实来源，无法还原文本之外的精确切点、原始稀疏箱号、歧义类别成员或非默认 `missing_woe`。需要精确恢复时，请直接传递 DataFrame 或使用 pickle 等保留 attrs 的格式。
+!!! warning "CSV/Excel is not an exact round-trip carrier"
+    CSV/Excel lose `DataFrame.attrs`. When reloading from these two kinds of files, `bin_label` (default `.8g` display precision) is the only source of truth, so exact cut points beyond the text, original sparse bin IDs, ambiguous category members, or a non-default `missing_woe` cannot be restored. When you need exact recovery, pass the DataFrame directly or use a format that preserves attrs, such as pickle.
 
-类别转换会先做精确匹配，再做受支持的 `str()` dtype 回退。只有两者都失败的值才进入 `_unseen_category_stats`；回退成功的值仍会计入 `_categorical_transform_stats[feature]["fallback_match_rows"]` 并触发既有 tripwire 告警。
+Categorical transforms first do an exact match and then a supported `str()` dtype fallback. Only values that fail both enter `_unseen_category_stats`; values matched by the fallback are still counted in `_categorical_transform_stats[feature]["fallback_match_rows"]` and trigger the existing tripwire warning.
 
-!!! note "Clustered by-group 图片规格"
-    当 `group_name` 非空且 `bar_mode="clustered"` 时，by-group WOE 图固定使用
-    `figsize=(16, 6)` 和 `dpi=200`，以容纳并排柱、分组 WOE 曲线和右侧图例。
-    其他模式仍使用调用方传入的 `figsize` 与 `dpi`。
+!!! note "Clustered by-group image specs"
+    When `group_name` is non-empty and `bar_mode="clustered"`, the by-group WOE plot always uses
+    `figsize=(16, 6)` and `dpi=200`, to fit the side-by-side bars, by-group WOE curves, and the legend on the right.
+    Other modes still use the `figsize` and `dpi` passed in by the caller.
 
-!!! note "By-group 图中的 IV 与 WOE 折线口径"
-    by-group 图的图例（`pooled` / `clustered`）与子图标题（`small_multiples`）中的各组 IV
-    是**组内 IV**，与整体图 IV 同口径，只是样本换成该组：
+!!! note "Basis of the IV and WOE lines in by-group plots"
+    The per-group IV in the by-group plot legend (`pooled` / `clustered`) and the subplot titles (`small_multiples`)
+    is the **within-group IV**, on the same basis as the overall plot's IV, just with the sample replaced by that group:
 
-    - 普通箱：以该组落入普通箱的行的 bad/good 为分母；
-    - 特殊值 / 缺失箱：以该组全部行的 bad/good 为分母，并沿用拟合时每个特殊值箱的治理决策
-      （`sv_policy_applied`），不在组内重新判断占比——`keep` 取经验值（拟合启用平滑时按拟合
-      时的参数平滑），`neutral` 记 0，`merged_into_missing` 并入该组 `[Missing]` 箱；
-    - 组内只有好样本或只有坏样本、且未经 laplace 平滑的箱（普通箱、合并后的 `[Missing]`、
-      未启用平滑的特殊值箱）不计入组 IV，与筛选 IV 的 `iv_guard` 口径一致，避免个别空类箱被
-      eps 放大成虚高的 IV；laplace 平滑过的特殊值箱 WOE 是有限值，即使单类也照常计入。
+    - Ordinary bins: the denominators are the bad/good of the group's rows that fall into ordinary bins;
+    - Special-value / missing bins: the denominators are the bad/good of all the group's rows, and the governance decision made at fit time for each special-value bin
+      (`sv_policy_applied`) is reused, with no re-judging of the share within the group — `keep` takes the empirical value (when fit had smoothing on, it is smoothed with the
+      parameters from fit time), `neutral` counts as 0, and `merged_into_missing` is merged into the group's `[Missing]` bin;
+    - Bins that have only good samples or only bad samples within the group and were not laplace-smoothed (ordinary bins, the merged `[Missing]`,
+      special-value bins without smoothing) are excluded from the group IV, consistent with the `iv_guard` basis of the screening IV, to keep a few empty-class bins from being
+      inflated by eps into an overstated IV; laplace-smoothed special-value bins have a finite WOE and are counted as usual even when single-class.
 
-    拟合样本中未经平滑的箱都两类齐全时，把整份拟合样本当作一个组，组 IV 等于整体 IV。样本少于 5 行或只有
-    单一类别的组显示 `IV=0.000`；类别特征中拟合时未出现的取值不计入普通箱分母。经
-    `get_final_bins()` → `load_woe_bins()`（保留 attrs）加载的分箱同样沿用拟合决策；CSV/Excel
-    回载或格式 B 不带决策，特殊值箱一律按 `keep` 的经验值计入。
+    When all unsmoothed bins in the fit sample have both classes, treating the whole fit sample as one group makes the group IV equal to the overall IV. Groups with fewer than 5 rows or only
+    one class show `IV=0.000`; for categorical features, values that did not appear at fit time are excluded from the ordinary-bin denominators. Bins loaded through
+    `get_final_bins()` → `load_woe_bins()` (with attrs preserved) reuse the fit-time decisions as well; reloading from CSV/Excel
+    or Format B carries no decisions, and special-value bins are always counted with the empirical value of `keep`.
 
-    各组 **WOE 折线**仍以全量 bad/good 为基准。对两类齐全的箱，它等于组内 WOE 加上常数
-    `ln(该组 bad 占全量 bad 的比例 / 该组 good 占全量 good 的比例)`：折线形状与组内一致，
-    上下位置反映该组坏账水平相对整体的高低。
+    The per-group **WOE lines** are still based on the full-sample bad/good. For bins with both classes, a group's line equals the within-group WOE plus the constant
+    `ln(group's share of total bad / group's share of total good)`: the line shape matches the within-group one,
+    and its vertical position reflects the group's bad-debt level relative to the overall.
 
-    0.8.0 及之前的版本中，各组 IV 以全量样本为分母且不含特殊值箱，k 个规模相近的组各自只显示
-    约 1/k 的组内 IV；拟合箱号不连续时，各组柱子与折线还会错位。这些版本产出的 by-group 图
-    不要直接与整体 IV 比较。
+    In 0.8.0 and earlier, each group's IV used the full sample as the denominator and excluded special-value bins, so k similarly sized groups each showed only
+    about 1/k of the within-group IV; when fitted bin IDs were non-contiguous, each group's bars and lines were also misaligned. By-group plots produced by those versions
+    should not be compared directly with the overall IV.
 
-## 3. 统一分箱引擎 —— `as_woe_engine`
+## 3. Unified Binning Engine — `as_woe_engine`
 
-`WOE_Master` 与 `MonotoneWOEBinner` 的内部产物格式不同。`as_woe_engine()` 会把它们转成统一接口，供 PSI、IV、相关性筛选复用。
+`WOE_Master` and `MonotoneWOEBinner` have different internal artifact formats. `as_woe_engine()` converts them to a unified interface for PSI, IV, and correlation screening to reuse.
 
 ```python
 from Modeling_Tool import as_woe_engine
 
-engine = as_woe_engine(binner)   # 也可以传 WOE_Master
+engine = as_woe_engine(binner)   # a WOE_Master can also be passed
 woe_table = engine.get_woe_table(features)
 train_woe = engine.transform(train_df, features)
 ```
 
-更多说明见 [WOE 分箱引擎](woe_binning_engine.md)。
+See [WOE Binning Engine](woe_binning_engine.md) for more.
 
-## 4. 与特征筛选联动
+## 4. Linking with Feature Screening
 
-训练期拟合一次分箱器，后续筛选、监控、建模都复用同一对象：
+Fit the binner once at training time, then reuse the same object for later screening, monitoring, and modeling:
 
 ```python
 from Modeling_Tool import PSICalculator, VarExtractionInsights, CorrelationFilter
@@ -181,7 +181,7 @@ keep_vars = CorrelationFilter(
 train_woe = binner.apply_woe(train_df)
 ```
 
-## 5. 单调性检查
+## 5. Monotonicity Check
 
 ```python
 from Modeling_Tool import is_monotonic, get_overall_woe_table
@@ -192,7 +192,7 @@ for var in features:
     print(var, mono, direction)
 ```
 
-## 6. 单独 WOE 转换
+## 6. Standalone WOE Transforms
 
 ```python
 from Modeling_Tool import woe_transform, woe_transformation
@@ -201,171 +201,171 @@ single_df, single_map = woe_transform(train_df, var="age", dep="bad_flag", nbins
 batch_result = woe_transformation(train_df, varlist=features, dep="bad_flag", nbins=10)
 ```
 
-## 常见问题
+## FAQ
 
-??? question "什么时候选择 MonotoneWOEBinner？"
+??? question "When should I choose MonotoneWOEBinner?"
 
-    当变量会进入评分卡、需要更强可解释性和单调约束时，优先使用 `MonotoneWOEBinner`。
+    When a variable will enter the scorecard and needs stronger interpretability and a monotonicity constraint, prefer `MonotoneWOEBinner`.
 
-??? question "为什么要在筛选阶段传入 binner？"
+??? question "Why pass the binner at the screening stage?"
 
-    因为 PSI / IV / KS 应该基于最终上线的同一套分箱计算，否则筛选指标和建模输入可能不一致。
+    Because PSI / IV / KS should be computed on the same binning that finally goes live; otherwise the screening metrics and the model inputs may be inconsistent.
 
-## 分箱治理（0.6.7+，G08/G09/G17）
+## Binning Governance (0.6.7+, G08/G09/G17)
 
-`MonotoneWOEBinner` 新增三组治理参数，默认全部关闭（`None`/`"auto"`）、行为与旧版逐字节一致：
+`MonotoneWOEBinner` adds three groups of governance parameters, all off by default (`None`/`"auto"`), with behavior byte-for-byte identical to the old version:
 
 ```python
 binner = MonotoneWOEBinner(
     feature_cols=feats, target_col="y",
-    # G08 小箱治理：坏/好样本数下限 + 三态策略
+    # G08 small-bin governance: lower limits on bad/good counts + three-state policy
     min_bad_count=50, min_good_count=50, small_bin_policy="merge",  # merge/warn/raise
-    # G09 方向治理：固定方向 或 参考标签推导；冲突三态
-    monotone_direction={"util_rate": "increasing"},   # 或 "increasing"/"decreasing"/"auto"
-    reference_target="y",                              # 与 monotone_direction 二选一
+    # G09 direction governance: a fixed direction or one derived from a reference label; three-state conflict handling
+    monotone_direction={"util_rate": "increasing"},   # or "increasing"/"decreasing"/"auto"
+    reference_target="y",                              # mutually exclusive with monotone_direction
     direction_conflict_policy="raise",                 # warn/raise/keep
-    # 缺失箱语义：empirical_special / fixed_woe / fail
+    # Missing-bin semantics: empirical_special / fixed_woe / fail
     missing_bin_strategy="fail",
-    # G17 refine 治理：refine 结果箱数低于 min_n_bins 时 warn/enforce/raise
+    # G17 refine governance: warn/enforce/raise when the refined bin count falls below min_n_bins
     refine_min_n_bins_policy="enforce",
 )
 binner.fit(train)
-binner.refine_dtree(train, max_depth=3)   # 0.6.7+：可限制树深
+binner.refine_dtree(train, max_depth=3)   # 0.6.7+: tree depth can be limited
 binner.get_direction_summary()            # feat / direction / direction_basis / is_monotonic
 ```
 
-要点：
+Key points:
 
-- `small_bin_policy="merge"` 向 WOE 更接近的邻箱合并，合并轨迹记录在结果的 `merge_trace`；`raise` 抛 `BinningPolicyViolation`（穿透逐特征容错，不会被吞进日志）。0.7.2 起类别特征也会在初始 `fit()` 阶段执行 `merge/warn/raise`，且 `merge` 不会越过 `min_n_bins`；到达下限仍有违规箱时可从 `_small_bin_stats[feature]["remaining_violation"]` 审计。
-- 方向在 `fit` 前解析：串行与并行 worker 使用同一份 `_expected_direction`，杜绝串并行漂移。
-- 这些参数可经 `monotone_woe_params` 从 FVP / CMP / feature_screen 直通底层 binner。
-- 0.7.1 起，`refine_min_n_bins_policy` 默认 `"warn"`；如需完全关闭该检查，请显式传 `None`。
+- `small_bin_policy="merge"` merges into the neighboring bin whose WOE is closer, with the merge trail recorded in the result's `merge_trace`; `raise` throws `BinningPolicyViolation` (which penetrates the per-feature fault tolerance and is not swallowed into the log). Since 0.7.2, categorical features also run `merge/warn/raise` during the initial `fit()`, and `merge` never goes below `min_n_bins`; if violating bins remain at the lower limit, you can audit them from `_small_bin_stats[feature]["remaining_violation"]`.
+- The direction is resolved before `fit`: serial and parallel workers use the same `_expected_direction`, ruling out serial/parallel drift.
+- These parameters can be passed through `monotone_woe_params` from FVP / CMP / feature_screen straight to the underlying binner.
+- Since 0.7.1, `refine_min_n_bins_policy` defaults to `"warn"`; to turn this check off completely, pass `None` explicitly.
 
-## 低占比特殊值治理（SV Bin Governance，0.8.0）
+## Low-Share Special-Value Governance (SV Bin Governance, 0.8.0)
 
-0.6.7 的 `small_bin_policy` / `min_bin_size` 只治理**普通区间箱**；特殊值（special value，下称 SV）箱一直是**无条件**取经验 WOE 并计入总 IV。当某个 SV 占比极低（例如 `-1` 只占 0.05%）时，`ln(pct_bad/pct_good)` 由极少数样本估计，方差极大、IV 虚高、上线后 PSI 容易漂移。
+The `small_bin_policy` / `min_bin_size` of 0.6.7 govern only **ordinary interval bins**; special-value (hereafter SV) bins have always taken the empirical WOE **unconditionally** and counted toward the total IV. When an SV's share is extremely low (for example `-1` is only 0.05%), `ln(pct_bad/pct_good)` is estimated from very few samples, with huge variance, an overstated IV, and a PSI that easily drifts after going live.
 
-0.8.0 为此引入**两组正交**的 SV 治理开关。四个参数在两个引擎上**同名同义、口径一致**：`MonotoneWOEBinner.__init__` 是构造器参数，`WOE_Master.fit()` / `update_woe()` 是方法参数。
+0.8.0 introduces **two orthogonal** SV governance switches for this. The four parameters have **the same name, meaning, and basis on both engines**: for `MonotoneWOEBinner.__init__` they are constructor parameters, and for `WOE_Master.fit()` / `update_woe()` they are method parameters.
 
-| 参数 | 类型 / 默认 | 取值 | 语义 |
+| Parameter | Type / default | Values | Semantics |
 |------|-------------|------|------|
-| `sv_min_bin_size` | `float = 0.0` | `[0.0, 1.0)` | SV 箱占**全量样本**的占比阈值；`0.0` = 关闭 |
-| `sv_small_policy` | `str = "keep"` | `keep` / `neutral` / `merge_missing` | 占比低于阈值的 SV 箱如何兜底 |
-| `sv_woe_smoothing` | `str = "none"` | `none` / `laplace` | 是否把 SV 箱 WOE 向全局 base rate 收缩 |
-| `sv_smoothing_alpha` | `float = 0.0` | `>= 0.0` | 平滑强度 α；`0.0` = 关闭 |
+| `sv_min_bin_size` | `float = 0.0` | `[0.0, 1.0)` | Threshold on the SV bin's share of the **full sample**; `0.0` = off |
+| `sv_small_policy` | `str = "keep"` | `keep` / `neutral` / `merge_missing` | How SV bins below the threshold are handled |
+| `sv_woe_smoothing` | `str = "none"` | `none` / `laplace` | Whether to shrink the SV bin's WOE toward the global base rate |
+| `sv_smoothing_alpha` | `float = 0.0` | `>= 0.0` | Smoothing strength α; `0.0` = off |
 
-!!! note "默认值严格等于旧行为"
-    四个参数的默认值组合（`0.0` / `"keep"` / `"none"` / `0.0`）与 0.7.2 **逐位一致**，升级 0.8.0 不会改变任何既有产出。非法取值在 `__init__` / `fit()` 入口即抛 `ValueError`，风格与 G08 `small_bin_policy` 一致。
+!!! note "Defaults are strictly equal to the old behavior"
+    The default combination of the four parameters (`0.0` / `"keep"` / `"none"` / `0.0`) is **bit-for-bit identical** to 0.7.2, so upgrading to 0.8.0 does not change any existing output. Illegal values raise `ValueError` at the `__init__` / `fit()` entry, in the same style as the G08 `small_bin_policy`.
 
-### 方式1 —— 低占比兜底（`sv_min_bin_size` + `sv_small_policy`）
+### Mode 1 — Low-Share Fallback (`sv_min_bin_size` + `sv_small_policy`)
 
-占比按 `prop = n_bin / N_total` 计算（**分母不加 eps**），判定用**严格小于** `prop < sv_min_bin_size`；等于阈值**不**触发。
+The share is computed as `prop = n_bin / N_total` (**no eps added to the denominator**), and the test is **strictly less than**: `prop < sv_min_bin_size`; equality does **not** trigger it.
 
-- `keep`（默认）：取经验 WOE，零行为变更。
-- `neutral`：亚阈值 SV 箱 `woe = 0.0`、`iv = 0.0`。最稳，等价于"这个 SV 不提供任何证据"。
-- `merge_missing`：亚阈值 SV 箱的 `bad` / `good` 计数**并入 `[Missing]` 箱**，`[Missing]` 箱随后按经验公式**重算** WOE；被合并行存表的 `woe` 会被**改写为 `[Missing]` 重算后的 WOE**，`iv` 置 `0` 避免重复计入总 IV。若该特征**没有** `[Missing]` 箱 → 降级为 `neutral` 并 `warnings.warn(UserWarning)`。
+- `keep` (default): take the empirical WOE, zero behavior change.
+- `neutral`: the sub-threshold SV bin gets `woe = 0.0` and `iv = 0.0`. The most stable option, equivalent to "this SV provides no evidence at all".
+- `merge_missing`: the `bad` / `good` counts of the sub-threshold SV bin are **merged into the `[Missing]` bin**, and the `[Missing]` bin's WOE is then **recomputed** by the empirical formula; the stored `woe` of the merged row is **rewritten to the `[Missing]` bin's recomputed WOE**, and `iv` is set to `0` to avoid double-counting in the total IV. If the feature has **no** `[Missing]` bin → it degrades to `neutral` with a `warnings.warn(UserWarning)`.
 
-!!! tip "`merge_missing` 不需要改 transform"
-    采用的是 **rewrite-stored-WOE** 方案：被合并 SV 行的存表 WOE 直接写成 `[Missing]` 的 WOE。因此 `apply_woe()` / `mapping_woe()` 照常按 `bin_label → WOE` 查表即可命中正确值，**两个引擎的 transform 路径都没有任何改动**，fit→transform 往返自动一致。
+!!! tip "`merge_missing` needs no change to transform"
+    It uses a **rewrite-stored-WOE** scheme: the stored WOE of the merged SV row is written directly as the `[Missing]` WOE. So `apply_woe()` / `mapping_woe()` simply look up `bin_label → WOE` as usual and hit the correct value; **neither engine's transform path has any change**, and the fit→transform round trip is automatically consistent.
 
-治理结果可从结果表的 `sv_policy_applied` 列审计，取值为
-`keep` / `neutral` / `neutral(fallback)` / `merged_into_missing` / `merge_target`，
-以及 0.8.2 起 `unseen_at_fit`（声明了但拟合样本里没出现的特殊值的占位箱，见下文）。
+The governance result can be audited from the `sv_policy_applied` column of the result table, whose values are
+`keep` / `neutral` / `neutral(fallback)` / `merged_into_missing` / `merge_target`,
+and, from 0.8.2, `unseen_at_fit` (the placeholder bin for a declared special value that did not appear in the fit sample; see below).
 
-### 方式2 —— SV WOE 平滑（`sv_woe_smoothing="laplace"`）
+### Mode 2 — SV WOE Smoothing (`sv_woe_smoothing="laplace"`)
 
-平滑**只作用于 SV 箱**，普通区间箱完全不受影响。采用的是**坏率收缩（bad-rate shrinkage）**：先把箱内坏率向全局坏率收缩，再折回计数占比。
+Smoothing **applies only to SV bins**; ordinary interval bins are completely unaffected. It uses **bad-rate shrinkage**: first shrink the within-bin bad rate toward the global bad rate, then convert back to count shares.
 
 ```
-p = N_bad / (N_bad + N_good)          # 全局坏率
-n_bin = n_bad + n_good                # 箱内样本量
+p = N_bad / (N_bad + N_good)          # global bad rate
+n_bin = n_bad + n_good                # sample size in the bin
 
-r = (n_bad + alpha * p) / (n_bin + alpha)        # 坏率向 p 收缩，alpha 与 n_bin 竞争
+r = (n_bad + alpha * p) / (n_bin + alpha)        # bad rate shrunk toward p; alpha competes with n_bin
 
-pct_bad_smoothed  = n_bin * r       / N_bad      # 折回占比，分母仍是全局 N_bad / N_good
+pct_bad_smoothed  = n_bin * r       / N_bad      # converted back to shares; denominators are still global N_bad / N_good
 pct_good_smoothed = n_bin * (1 - r) / N_good
 
 woe = ln(pct_bad_smoothed / pct_good_smoothed)
 iv  = (pct_bad_smoothed - pct_good_smoothed) * woe
 ```
 
-收敛性质（这也是选用该形式的原因）：
+Convergence properties (and the reason this form was chosen):
 
-- `alpha = 0` → `r` 退化为经验坏率，**逐位还原**旧经验 WOE（回归护栏）。
-- `alpha → ∞` → `r → p`，两个占比之比趋于全局比，`woe → 0`，且是**单调**收缩。
-- α 与 `n_bin` 竞争 ⇒ **样本越少的箱收缩越强**，正是低占比 SV 需要的性质。
+- `alpha = 0` → `r` degenerates to the empirical bad rate, **restoring bit-for-bit** the old empirical WOE (a regression guardrail).
+- `alpha → ∞` → `r → p`, the ratio of the two shares tends to the global ratio, `woe → 0`, with **monotone** shrinkage.
+- α competes with `n_bin` ⇒ **the fewer samples a bin has, the stronger the shrinkage**, exactly the property low-share SVs need.
 
-!!! danger "不要用"人口分母伪计数"形式"
-    早期设计曾把伪计数放在人口分母上（`(n_bad + alpha*p) / (N_bad + alpha)`）。该式 `alpha → ∞` 时收敛到 `logit(p) = ln(p/(1-p)) ≠ 0`，而且**不单调**——加大平滑强度反而可能推高 |WOE|。两个引擎实现的都是上面的坏率收缩式，上方公式为唯一权威定义。
+!!! danger "Do not use the 'population-denominator pseudo-count' form"
+    An early design put the pseudo-count on the population denominator (`(n_bad + alpha*p) / (N_bad + alpha)`). As `alpha → ∞`, that expression converges to `logit(p) = ln(p/(1-p)) ≠ 0`, and it is **not monotone** — increasing the smoothing strength can instead push |WOE| higher. Both engines implement the bad-rate shrinkage form above, and the formula above is the single authoritative definition.
 
-### 正交组合语义（执行顺序固定）
+### Orthogonal Combination Semantics (Fixed Execution Order)
 
-两个开关可独立启用，也可叠加。fit 阶段对每个 SV 箱按固定顺序决策：
+The two switches can be enabled independently or stacked. At fit time, each SV bin is decided in a fixed order:
 
 ```
 1. prop = n_sv / N_total
 2. if sv_small_policy != "keep" and sv_min_bin_size > 0 and prop < sv_min_bin_size:
-       走方式1 兜底（neutral / merge_missing），【不再】走方式2
+       take the Mode 1 fallback (neutral / merge_missing), and [do not] go through Mode 2
    else:
-       若 sv_woe_smoothing == "laplace" 且 alpha > 0 → 走方式2 平滑
-       否则 → 经验 WOE（旧行为）
+       if sv_woe_smoothing == "laplace" and alpha > 0 → take the Mode 2 smoothing
+       otherwise → empirical WOE (old behavior)
 ```
 
-即**方式1 优先**：一个亚阈值箱**永远不会被平滑**，它已经被兜底掉了；方式2 只作用于"占比达标、保留经验 WOE"的 SV 箱。
+That is, **Mode 1 takes priority**: a sub-threshold bin is **never smoothed**, since it has already been handled by the fallback; Mode 2 applies only to SV bins that "meet the share requirement and keep the empirical WOE".
 
-`merge_missing` + `laplace` 同时开启时：合并目标 `[Missing]` 箱按**经验**公式重算（**不**平滑），因为合并后的桶应当反映真实的 post-merge 坏率；其他占比达标的 SV 箱仍照常平滑。
+When `merge_missing` + `laplace` are both enabled: the merge target `[Missing]` bin is recomputed by the **empirical** formula (**not** smoothed), because the merged bucket should reflect the true post-merge bad rate; other SV bins that meet the share requirement are still smoothed as usual.
 
-### `[Missing]` 箱也是受治理的 SV 箱
+### The `[Missing]` Bin Is Also a Governed SV Bin
 
-`[Missing]`（NaN）箱在**两个引擎**里都是一个正常的受治理 SV 箱：占比达标就照常平滑，亚阈值就照常 `neutral` 置零。它唯一的特殊之处是在 `merge_missing` 下**只能当合并目标、不能当合并来源**。
+In **both engines**, the `[Missing]` (NaN) bin is a normal governed SV bin: if its share meets the requirement it is smoothed as usual, and if it is below the threshold it is zeroed by `neutral` as usual. Its only special trait is that under `merge_missing` it **can be only a merge target, not a merge source**.
 
-这与 `missing_bin_strategy`（`empirical_special` / `fixed_woe` / `fail`）**正交**：后者只治理 NaN 缺失箱的语义，前者治理**所有** SV 箱（含 `-1` 这类非 NaN 哨兵值）。
+This is **orthogonal** to `missing_bin_strategy` (`empirical_special` / `fixed_woe` / `fail`): the latter governs only the semantics of the NaN missing bin, while the former governs **all** SV bins (including non-NaN sentinel values such as `-1`).
 
-### 声明了、但拟合样本里没出现的特殊值（`unseen_special_policy`，0.8.2）
+### Declared but Unseen in the Fit Sample (`unseen_special_policy`, 0.8.2)
 
-`special_values` 是一份**声明**：如果训练集里某个特征一行 `-1` 都没有，拟合出来的表里就没有 `[sv=-1]` 箱。`MonotoneWOEBinner(unseen_special_policy=...)` 决定这类取值此后怎么处理：
+`special_values` is a **declaration**: if a feature has not a single `-1` row in the training set, the fitted table has no `[sv=-1]` bin. `MonotoneWOEBinner(unseen_special_policy=...)` decides how such values are handled afterward:
 
-| 取值 | 分箱表 | `apply_woe` 打分、筛选 PSI / IV | by-group 图与组内 IV |
+| Value | Bins table | `apply_woe` scoring, screening PSI / IV | By-group plots and within-group IV |
 |---|---|---|---|
-| `"normal_bin"`（默认，旧行为） | 不建箱 | 按普通数值归箱（`-1` 落入最低箱，例如「0 张卡」） | 与打分一致，按普通数值归箱 |
-| `"neutral"` | 追加占位箱 `[sv=-1]`：n=0、WOE=`missing_woe`、IV=0、`sv_policy_applied="unseen_at_fit"` | 取 `missing_woe`（默认 0，中性） | 单独画出该取值的组内占比，组 IV 不计入 |
+| `"normal_bin"` (default, old behavior) | No bin is created | Binned as an ordinary number (`-1` falls into the lowest bin, e.g. "0 cards") | Consistent with scoring, binned as an ordinary number |
+| `"neutral"` | A placeholder bin `[sv=-1]` is appended: n=0, WOE=`missing_woe`, IV=0, `sv_policy_applied="unseen_at_fit"` | Takes `missing_woe` (default 0, neutral) | The value's within-group share is drawn separately; it is not counted in the group IV |
 
-- 占位箱在全部 SV 治理决策之后追加，不参与小占比兜底、合并与平滑；整体 IV、普通箱边界与 WOE 均不受影响。
-- 占位箱是分箱表里的**可见行**：`get_final_bins()` 导出后，无论经 Format-A attrs 还是 CSV/Excel 回载，打分都保持中性，不依赖加载方的构造参数。
-- 只作用于数值特殊值：声明了 NaN、但拟合时没有缺失值的特征，两种模式下缺失值打分本来就是 `missing_woe`；字符串形式的声明（如 `"-1"`）不建占位箱；类别特征不适用。
-- "某个取值有没有箱"以**拟合表**为准、按数值判定（`-1` 与 `-1.0` 视为同一取值），打分、by-group 图和告警统计用同一套判定；加载方自己声明的 `special_values` 写法不同也不影响。
-- 非整数特殊值（如 `0.5`）只匹配它自己；0.8.1 及之前，特殊值箱标签会被截断出一个整数键，导致取值 `0` 的普通样本也拿到 `[sv=0.5]` 的 WOE，0.8.2 一并修正。
-- by-group 图同样按拟合表拆分特殊值（0.8.2）：表里有 `[Missing]` 箱时，即使加载方没声明 NaN，缺失行也单独成箱（与打分一致；0.8.1 会把这些行从图和组 IV 里丢掉）；表里两行解析成同一数值（如格式 B 按 `special_values=[-1, -1.0]` 造出 `[sv=-1]` 与 `[sv=-1.0]`）时，每行只计入第一个匹配的箱。唯一例外是声明为 `-inf` 且没有箱的取值：打分归入最低箱，图表（`pd.cut`）则不计入这些行。
-- `CreditModelPipeline` 的 monotone 自拟合过去总是默认声明 `-999999`；0.8.2 起只在 WOE 拟合样本里确实出现该值时才声明（`monotone_woe_params` 里显式给出 `special_values` 时照旧）。没出现时声明与否分箱、打分完全一致，因此只是不再为一个不存在的哨兵值告警，也不会在 `neutral` 下给每个特征加占位箱。
+- The placeholder bin is appended after all SV governance decisions, and takes no part in low-share fallback, merging, or smoothing; the overall IV, ordinary-bin boundaries, and WOE are all unaffected.
+- The placeholder bin is a **visible row** in the bins table: after `get_final_bins()` is exported, scoring stays neutral whether reloaded through Format-A attrs or CSV/Excel, and does not depend on the loader's constructor parameters.
+- It applies only to numeric special values: for a feature that declares NaN but had no missing values at fit time, missing values already score as `missing_woe` in both modes; declarations in string form (such as `"-1"`) get no placeholder bin; categorical features are not covered.
+- Whether a value "has a bin" is decided by the **fitted table**, numerically (`-1` and `-1.0` count as the same value); scoring, by-group plots, and warning statistics use the same test, and it is unaffected if the loader declares `special_values` with a different spelling.
+- A non-integer special value (such as `0.5`) matches only itself; in 0.8.1 and earlier, special-value bin labels were truncated to an integer key, so ordinary samples with the value `0` also got the WOE of `[sv=0.5]`, which 0.8.2 fixes as well.
+- By-group plots also split special values by the fitted table (0.8.2): when the table has a `[Missing]` bin, missing rows form their own bin even if the loader did not declare NaN (consistent with scoring; 0.8.1 dropped these rows from the plots and the group IV); when two rows of the table parse to the same numeric value (for example Format B building `[sv=-1]` and `[sv=-1.0]` from `special_values=[-1, -1.0]`), each row is counted only in the first matching bin. The single exception is a value declared as `-inf` with no bin: scoring puts it in the lowest bin, while the plot (`pd.cut`) does not count those rows.
+- The monotone self-fit of `CreditModelPipeline` used to always declare `-999999` by default; since 0.8.2 it declares it only if that value actually appears in the WOE fit sample (unchanged when `special_values` is given explicitly in `monotone_woe_params`). When it does not appear, declaring it or not gives identical binning and scoring, so the only change is that there is no longer a warning for a nonexistent sentinel, and no placeholder bin is added to every feature under `neutral`.
 
-两种模式都会留痕，打分数值不受这部分记录影响：
+Both modes leave a trail, and scoring values are unaffected by these records:
 
-- `fit()`：`binner._unseen_special_at_fit` 记录 `{特征: [取值]}`；`"normal_bin"` 下整次 fit 汇总发一条 `UserWarning`，同时写入 `logger.warning`。
-- `apply_woe()`：`binner._unseen_special_stats` 记录最近一次调用中每个特征命中的取值（按本实例声明的写法，未声明时用表里的数值）、行数、占比与处理方式（`normal_bin` / `neutral` / `mixed`），并发 `RuntimeWarning` + `logger.warning`；`unseen_category_policy="silent"` 时不告警，统计照常记录，`"raise"` 时也只告警、不抛错。
-- `FeatureValidationPipeline` 在每个 split 转换后冻结这份统计：`woe_artifacts["by_target"][target]["unseen_special_stats_by_split"]`，batch/slim 汇总保留在 `woe_artifacts["unseen_special_stats_by_target"]`（与类别 unseen 统计同样的合并规则）。
-- 0.8.1 及之前 `import Modeling_Tool` 会全局屏蔽告警，这些 `warnings.warn` 在普通会话里看不到；0.8.2 起不再屏蔽，见 [FAQ](../faq.md)。
+- `fit()`: `binner._unseen_special_at_fit` records `{feature: [values]}`; under `"normal_bin"`, one `UserWarning` is issued for the whole fit as a summary, and `logger.warning` is also written.
+- `apply_woe()`: `binner._unseen_special_stats` records, for the most recent call, the values hit by each feature (spelled as declared on this instance, or by the numeric value in the table when undeclared), the row count, the share, and how they were handled (`normal_bin` / `neutral` / `mixed`), and issues a `RuntimeWarning` + `logger.warning`; with `unseen_category_policy="silent"` it does not warn but still records the statistics, and with `"raise"` it still only warns and does not raise.
+- `FeatureValidationPipeline` freezes these statistics after each split's transform: `woe_artifacts["by_target"][target]["unseen_special_stats_by_split"]`, with the batch/slim summary kept in `woe_artifacts["unseen_special_stats_by_target"]` (merged by the same rules as the categorical unseen statistics).
+- In 0.8.1 and earlier, `import Modeling_Tool` suppressed warnings globally, so these `warnings.warn` calls were invisible in an ordinary session; since 0.8.2 they are no longer suppressed, see the [FAQ](../faq.md).
 
-!!! warning "默认值计划在 0.9.0 改为 `neutral`"
-    `"normal_bin"` 会让哨兵值（如表示"无记录"的 `-1`）拿到真实取值箱的 WOE。0.8.2 先以可选参数落地，下一个 minor 版本默认改为 `"neutral"`；需要保持旧打分口径的，请显式传 `unseen_special_policy="normal_bin"`。
+!!! warning "The default is planned to change to `neutral` in 0.9.0"
+    `"normal_bin"` lets a sentinel value (such as `-1` meaning "no record") take the WOE of a real value's bin. 0.8.2 first lands it as an optional parameter, and the next minor version changes the default to `"neutral"`; if you need to keep the old scoring basis, pass `unseen_special_policy="normal_bin"` explicitly.
 
-### 用法示例
+### Usage Example
 
 ```python
 binner = MonotoneWOEBinner(
     feature_cols=feats, target_col="y",
     special_values=[-1, -999999, float("nan")],
-    # 占比 < 1% 的 SV 箱直接中性化
+    # SV bins with a share < 1% are neutralized directly
     sv_min_bin_size=0.01,
     sv_small_policy="neutral",       # keep / neutral / merge_missing
-    # 占比达标的 SV 箱做坏率收缩
+    # SV bins that meet the share requirement get bad-rate shrinkage
     sv_woe_smoothing="laplace",      # none / laplace
     sv_smoothing_alpha=50.0,
 )
 binner.fit(train)
-binner.get_final_bins()["risk_score"]   # sv_policy_applied 列记录每个 SV 箱的实际处置
+binner.get_final_bins()["risk_score"]   # the sv_policy_applied column records the actual treatment of each SV bin
 ```
 
-`WOE_Master` 侧同名同义，只是落在 `fit()` 上：
+The `WOE_Master` side has the same names and meanings, only they sit on `fit()`:
 
 ```python
 woe = WOE_Master(train_data=train, varlist=feats, dep="y")
@@ -376,9 +376,9 @@ woe.fit(
 )
 ```
 
-### Pipeline 层暴露
+### Pipeline-Layer Exposure
 
-`CreditModelPipelineConfig` 与 `FeatureValidationPipelineConfig` 的**两个**透传字典都已带上四个 `sv_*` 默认键：`woe_params`（喂 `equal_freq` / `WOE_Master`）和 `monotone_woe_params`（喂 `MonotoneWOEBinner`）。
+**Both** pass-through dicts of `CreditModelPipelineConfig` and `FeatureValidationPipelineConfig` now carry the four `sv_*` default keys: `woe_params` (feeding `equal_freq` / `WOE_Master`) and `monotone_woe_params` (feeding `MonotoneWOEBinner`).
 
 ```python
 from Modeling_Tool import CreditModelPipeline, CreditModelPipelineConfig
@@ -395,23 +395,23 @@ cfg = CreditModelPipelineConfig(
 )
 ```
 
-FVP 的 `config_snapshot` 会原样 dump 这两个字典，`sv_*` 自动进快照，便于复现"某个模型用了什么 SV 治理口径"。
+The FVP `config_snapshot` dumps these two dicts verbatim, so `sv_*` automatically enters the snapshot, which makes it easy to reproduce "which SV governance basis a model used".
 
-!!! warning "维护者注意：FVP 的白名单必须同步"
-    `FeatureValidationPipeline` 的 monotone 分支**不是**直接 `**monotone_woe_params`，而是先过一层
-    `_MONOTONE_INIT_KEYS` 白名单：
+!!! warning "Maintainer note: the FVP allowlist must be kept in sync"
+    The monotone branch of `FeatureValidationPipeline` does **not** pass `**monotone_woe_params` directly; it first goes through
+    the `_MONOTONE_INIT_KEYS` allowlist:
 
     ```python
     init_params = {k: v for k, v in params.items() if k in self._MONOTONE_INIT_KEYS}
     ```
 
-    **不在白名单里的 key 会被静默丢弃，不报错、不告警**——参数看起来传进去了，实际治理完全没生效。
-    四个 `sv_*` 已加入 `_MONOTONE_INIT_KEYS`（同样也加进了
-    `Feature_Screen._MONOTONE_INIT_KEYS`，否则筛选期复用的 WOE 拟合会漏掉治理，导致筛选 IV 与建模 WOE 口径分裂）。
-    今后给 `MonotoneWOEBinner.__init__` 新增任何参数，都必须同步这两份白名单。
-    0.8.2 新增的 `unseen_special_policy` 只属于 monotone 引擎：已加入两份白名单和
-    `monotone_woe_params` 默认字典，不进 `woe_params`。
+    **Keys not on the allowlist are silently dropped, with no error and no warning** — the parameter looks like it was passed in, but the governance actually never took effect.
+    The four `sv_*` keys have been added to `_MONOTONE_INIT_KEYS` (and also to
+    `Feature_Screen._MONOTONE_INIT_KEYS`, otherwise the WOE fit reused at screening time would miss the governance, splitting the screening IV and the modeling WOE onto different bases).
+    From now on, any new parameter added to `MonotoneWOEBinner.__init__` must be added to both allowlists.
+    The `unseen_special_policy` added in 0.8.2 belongs only to the monotone engine: it has been added to both allowlists and to the
+    `monotone_woe_params` default dict, and does not go into `woe_params`.
 
-    `sv_*` 是**构造器**参数，**不要**加进 `_MONOTONE_FIT_KEYS`（`{chi2_binning, chi2_p, chi2_init_size, n_jobs}`），
-    否则会被当成 `fit()` kwarg 传下去而抛 `TypeError`。CM 侧的 monotone fit-only `pop` 名单同理，
-    保持不含 `sv_*` 才能让它们正确进入构造器。
+    `sv_*` are **constructor** parameters; **do not** add them to `_MONOTONE_FIT_KEYS` (`{chi2_binning, chi2_p, chi2_init_size, n_jobs}`),
+    otherwise they would be passed down as `fit()` kwargs and raise `TypeError`. The same goes for the CM-side monotone fit-only `pop` list:
+    keeping it free of `sv_*` is what lets them correctly reach the constructor.

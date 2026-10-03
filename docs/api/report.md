@@ -1,7 +1,7 @@
 # Report
 
-风控报告模板函数 —— 消费建模产物（CSV / PNG），组装最终 Excel。
+Risk-control report template functions — consume modeling artifacts (CSV / PNG) and assemble the final Excel workbook.
 
-## 报告函数集合 — `Report_Tool`
+## Report Function Collection — `Report_Tool`
 
 ::: Report.Report_Tool

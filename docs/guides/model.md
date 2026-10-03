@@ -1,62 +1,62 @@
-# 模型训练
+# Model Training
 
-SuperModelingFactory 在 [`Model`](../api/model.md) 子包封装了**逻辑回归（评分卡首选）、LightGBM、XGBoost、CatBoost** 四大类模型，并提供**后向变量消元**辅助工具。
+SuperModelingFactory wraps four families of models in the [`Model`](../api/model.md) subpackage — **logistic regression (the scorecard first choice), LightGBM, XGBoost, and CatBoost** — and provides a **backward variable elimination** helper.
 
-!!! tip "样本权重"
+!!! tip "Sample weights"
 
-    训练与评估均支持可选的样本权重（`weight_col` / `sample_weight`）。
-    不传权重时行为与历史版本完全一致（向后兼容）。自主仓 [PR #25](https://github.com/Kyle-J-Sun/SuperModelingFactory/pull/25) 起为原生 API。
-    评估侧语义见 [模型评估 — 样本权重](eval.md#样本权重评估)。
+    Both training and evaluation support optional sample weights (`weight_col` / `sample_weight`).
+    Without weights, behavior is exactly the same as in previous versions (backward compatible). A native API since the main repository's [PR #25](https://github.com/Kyle-J-Sun/SuperModelingFactory/pull/25).
+    For the evaluation-side semantics, see [Model Evaluation — Sample Weights](eval.md#sample-weighted-evaluation).
 
-## 1. 逻辑回归 —— `LRMaster`
+## 1. Logistic Regression — `LRMaster`
 
 ```python
 from Modeling_Tool import LRMaster
 
 lr = LRMaster(params={"C": 1.0, "max_iter": 1000, "solver": "lbfgs"})
-# fit 接收 (data, varlist, tgt_name)，而非 (X, y)
+# fit takes (data, varlist, tgt_name), not (X, y)
 lr.fit(train_woe, woe_features, "bad_flag")
 
-# 统计摘要：系数、标准误、z、p-value、置信区间
+# Statistical summary: coefficients, standard errors, z, p-value, confidence intervals
 summary = lr.get_statsmodel_summary()
 print(summary)
 ```
 
-### 样本权重
+### Sample Weights
 
-`fit` 支持从 DataFrame 列名或显式数组传入权重（**二选一**，也接受 `wgt` / `wgt_col` 别名）：
+`fit` supports passing weights as a DataFrame column name or an explicit array (**pick one**; the `wgt` / `wgt_col` aliases are also accepted):
 
 ```python
-# 方式 1：列名（推荐，与评估侧 weight_col 命名一致）
+# Option 1: column name (recommended; same naming as the evaluation-side weight_col)
 lr.fit(train_woe, woe_features, "bad_flag", weight_col="sample_wgt")
 
-# 方式 2：显式数组
+# Option 2: explicit array
 lr.fit(train_woe, woe_features, "bad_flag", sample_weight=train_woe["sample_wgt"].values)
 ```
 
-`stepwise_selection`、`calibrate_model`、`get_aic` / `get_bic` 同样透传权重。
-权重须为非负有限值。
+`stepwise_selection`, `calibrate_model`, and `get_aic` / `get_bic` pass the weights through as well.
+Weights must be non-negative finite values.
 
-### 关键参数（透传 sklearn）
+### Key Parameters (passed through to sklearn)
 
-| 参数 | 默认值 | 说明 |
+| Parameter | Default | Description |
 |------|-------|------|
-| `C` | `1.0` | 正则化强度倒数，越小越强正则 |
+| `C` | `1.0` | Inverse regularization strength; the smaller, the stronger the regularization |
 | `penalty` | `"l2"` | `l1` / `l2` / `elasticnet` |
-| `solver` | `"lbfgs"` | 优化算法 |
-| `max_iter` | `100` | 最大迭代次数 |
+| `solver` | `"lbfgs"` | Optimization algorithm |
+| `max_iter` | `100` | Maximum number of iterations |
 
-### 变量重要性
+### Variable Importance
 
 ```python
-# LR 系数（按绝对值排序）；列为 varlist / coef / importance
+# LR coefficients (sorted by absolute value); columns are varlist / coef / importance
 varimp = lr.get_variable_importance()
 print(varimp[["varlist", "coef", "importance"]])
 ```
 
-### 逐步变量选择
+### Stepwise Variable Selection
 
-`stepwise_selection(data, varlist, tgt_name, ...)` 基于 AIC/BIC 做前向 / 后向 / 双向选择：
+`stepwise_selection(data, varlist, tgt_name, ...)` does forward / backward / bidirectional selection based on AIC/BIC:
 
 ```python
 from Modeling_Tool import LRMaster
@@ -64,30 +64,30 @@ from Modeling_Tool import LRMaster
 lr = LRMaster(params={"C": 1.0})
 selected = lr.stepwise_selection(
     train_woe, woe_features, "bad_flag",
-    criterion="aic",        # 'aic' 或 'bic'
+    criterion="aic",        # 'aic' or 'bic'
     direction="both",       # 'forward' / 'backward' / 'both'
-    weight_col="sample_wgt",  # 可选：加权 AIC/BIC
+    weight_col="sample_wgt",  # optional: weighted AIC/BIC
 )
-print(f"逐步选择保留 {len(selected)} 个变量: {selected}")
+print(f"Stepwise selection kept {len(selected)} variables: {selected}")
 ```
 
-### 标准化（可选）
+### Standardization (Optional)
 
-默认情况下 `LRMaster` **不做**特征标准化（与历史行为一致）。如需在入模前对特征做标准化，
-构造时打开 `standardize=True` 即可，默认使用 `StandardScaler`：
+By default, `LRMaster` **does not** standardize features (consistent with historical behavior). If you want to standardize the features before they enter the model,
+turn on `standardize=True` at construction; `StandardScaler` is used by default:
 
 ```python
 from Modeling_Tool import LRMaster
 
-# 开启标准化（默认 StandardScaler）
+# Turn on standardization (StandardScaler by default)
 lr = LRMaster(params={"C": 1.0, "max_iter": 1000}, standardize=True)
 lr.fit(train_woe, woe_features, "bad_flag")
 
-# 预测时自动用 fit 阶段拟合好的 scaler 变换入参，无需手动标准化
+# At prediction time, the input is automatically transformed with the scaler fitted during fit; no manual standardization needed
 proba = lr.predict_proba(test_woe)
 ```
 
-也可以传入自定义 scaler（**需同时** `standardize=True`），例如 `MinMaxScaler`：
+You can also pass a custom scaler (**together with** `standardize=True`), such as `MinMaxScaler`:
 
 ```python
 from sklearn.preprocessing import MinMaxScaler
@@ -96,38 +96,38 @@ from Modeling_Tool import LRMaster
 lr = LRMaster(
     params={"C": 1.0},
     standardize=True,
-    scaler=MinMaxScaler(),   # 传入的实例会被克隆，原对象不会被修改
+    scaler=MinMaxScaler(),   # the instance passed in is cloned; the original object is not modified
 )
 lr.fit(train_woe, woe_features, "bad_flag")
 ```
 
-#### 行为说明
+#### Behavior Notes
 
-| 方面 | 说明 |
+| Aspect | Description |
 |------|------|
-| 默认值 | `standardize=False`，完全不标准化（向后兼容） |
-| 默认 scaler | `StandardScaler`；可通过 `scaler=` 传自定义（如 `MinMaxScaler()`） |
-| 拟合时机 | scaler 在 `fit` / `stepwise_selection` 时**只在训练特征上拟合一次**，存于 `lr.standardizer` |
-| 推理一致性 | `predict` / `predict_proba` / `calibrate_model` / `get_statsmodel_summary` / `get_aic` / `get_bic` 都用同一个 scaler 变换入参，避免训练 / 推理空间不一致 |
-| `stepwise_selection` | 在标准化空间进行选择；结束后按**最终入选变量**重新拟合 scaler |
-| `clone()` | 只复制 `standardize` 开关与 scaler 原型，**不**复制已拟合的 scaler / model |
+| Default | `standardize=False`, no standardization at all (backward compatible) |
+| Default scaler | `StandardScaler`; a custom one can be passed through `scaler=` (such as `MinMaxScaler()`) |
+| When it is fitted | The scaler is fitted **only once, on the training features**, during `fit` / `stepwise_selection`, and stored in `lr.standardizer` |
+| Inference consistency | `predict` / `predict_proba` / `calibrate_model` / `get_statsmodel_summary` / `get_aic` / `get_bic` all transform their input with the same scaler, avoiding a training / inference space mismatch |
+| `stepwise_selection` | Selection happens in the standardized space; when it finishes, the scaler is refitted on the **finally selected variables** |
+| `clone()` | Copies only the `standardize` switch and the scaler prototype; it does **not** copy the fitted scaler / model |
 
-!!! note "系数解读"
+!!! note "Interpreting coefficients"
 
-    开启标准化后，`get_variable_importance()` 与 `get_statsmodel_summary()` 返回的系数是
-    **标准化空间**下的系数——好处是不同量纲特征的系数大小可直接横向比较；但不再等同于
-    原始单位下「自变量变动 1 个单位」的对数几率变化。
+    With standardization on, the coefficients returned by `get_variable_importance()` and `get_statsmodel_summary()` are
+    coefficients in the **standardized space** — the benefit is that coefficient sizes of features on different scales can be compared directly; but they no longer equal
+    the log-odds change for "a 1-unit change in the predictor" in the original units.
 
-!!! warning "自定义 scaler 需显式开启标准化"
+!!! warning "A custom scaler requires standardization to be turned on explicitly"
 
-    仅传 `scaler=...` 而不设 `standardize=True` 不会启用标准化；自定义 scaler 必须与
-    `standardize=True` 一起使用。
+    Passing only `scaler=...` without `standardize=True` does not enable standardization; a custom scaler must be used together with
+    `standardize=True`.
 
-### 超参网格搜索（holdout）
+### Hyperparameter Grid Search (Holdout)
 
-`grid_search_params(...)` 在 **INS / OOS / OOT holdout** 上做超参网格搜索（而非 k-fold 交叉验证），
-专为评分卡常见的「样本内 / 样本外 / 跨时间」场景设计：对 `param_grid` 的笛卡尔积逐个训练候选模型，
-在每个 eval set 上算 AUC，再按 `objective` 选出最优组合。
+`grid_search_params(...)` runs a hyperparameter grid search on **INS / OOS / OOT holdouts** (rather than k-fold cross-validation),
+designed for the "in-sample / out-of-sample / out-of-time" scenario common in scorecards: it trains a candidate model for each point in the Cartesian product of `param_grid`,
+computes AUC on every eval set, and then picks the best combination according to `objective`.
 
 ```python
 import numpy as np
@@ -135,49 +135,49 @@ from Modeling_Tool import LRMaster
 
 tuner = LRMaster(params={"solver": "lbfgs", "max_iter": 1000})
 results = tuner.grid_search_params(
-    data=ins_fit,                  # 训练候选模型的数据（通常是 INS）
+    data=ins_fit,                  # data used to train candidate models (usually the INS)
     varlist=woe_features,
     tgt_name="bad_flag",
-    eval_sets={"ins": ins_woe, "oos": oos_woe, "oot": oot_woe},  # 有序，按 AUC 评分
-    param_grid={"C": np.logspace(-3, 2, 31)},   # 多个键按笛卡尔积组合
-    objective="oot_gap_penalized",  # 默认：最大化主集 AUC 同时惩罚过拟合 gap
-    primary_set="oot",              # 缺省为 eval_sets 的最后一个键
-    gap_ref_sets=["ins", "oos"],    # 缺省为除 primary_set 外的所有集
-    refit=True,                     # 搜完用最优参数在 data 上重训 self
-    weight_col="sample_wgt",        # 训练集权重列
-    eval_weight_col="sample_wgt",   # 各 eval set 上的加权 AUC 评分
+    eval_sets={"ins": ins_woe, "oos": oos_woe, "oot": oot_woe},  # ordered, scored by AUC
+    param_grid={"C": np.logspace(-3, 2, 31)},   # multiple keys are combined as a Cartesian product
+    objective="oot_gap_penalized",  # default: maximize the primary-set AUC while penalizing the overfitting gap
+    primary_set="oot",              # defaults to the last key of eval_sets
+    gap_ref_sets=["ins", "oos"],    # defaults to all sets except primary_set
+    refit=True,                     # after the search, refit self on data with the best parameters
+    weight_col="sample_wgt",        # training-set weight column
+    eval_weight_col="sample_wgt",   # weighted AUC scoring on each eval set
 )
 
-print(tuner.best_params_)     # 最优参数 dict
-print(tuner.search_results_)  # 完整结果表（= 返回值）
+print(tuner.best_params_)     # best-parameter dict
+print(tuner.search_results_)  # full results table (= return value)
 ```
 
-#### 三种 objective
+#### Three Objectives
 
-| objective | 选择标准 |
+| objective | Selection criterion |
 |---|---|
-| `'oot_gap_penalized'`（默认） | `AUC[primary] - |mean(AUC[gap_refs]) - AUC[primary]|`，即在拉高主集 AUC 的同时惩罚训练/holdout 的 AUC 差（过拟合） |
-| `'max_primary'` | 直接最大化 `AUC[primary]` |
-| callable | 自定义 `f(auc_dict) -> float`，`auc_dict` 为 `{集名: AUC}` |
+| `'oot_gap_penalized'` (default) | `AUC[primary] - |mean(AUC[gap_refs]) - AUC[primary]|`, i.e. raise the primary-set AUC while penalizing the AUC gap between training and holdout (overfitting) |
+| `'max_primary'` | Directly maximize `AUC[primary]` |
+| callable | Custom `f(auc_dict) -> float`, where `auc_dict` is `{set_name: AUC}` |
 
-#### 返回值与副作用
+#### Return Value and Side Effects
 
-- **返回**：按 `score` 降序的结果表，列为参数列 + 每个 eval set 的 `AUC_<名>` +（gap objective 下的）`gap` + `score`。
-- **副作用**：写入 `self.best_params_`、`self.search_results_`，并把最优组合合并进 `self.params`；`refit=True` 时还会用最优参数在 `data` 上重训 `self.model`。
+- **Returns**: a results table sorted by `score` in descending order, with columns: the parameter columns + `AUC_<name>` for each eval set + `gap` (under the gap objective) + `score`.
+- **Side effects**: writes `self.best_params_` and `self.search_results_`, merges the best combination into `self.params`; with `refit=True`, it also refits `self.model` on `data` with the best parameters.
 
-!!! note "holdout 而非 CV；目前仅支持 AUC"
+!!! note "Holdout, not CV; only AUC is supported for now"
 
-    这是基于你显式提供的 `eval_sets` 的 holdout 搜索（不是 k-fold 交叉验证），更贴合风控
-    INS/OOS/OOT 实践。`metric` 目前仅支持 `'auc'`。
+    This is a holdout search based on the `eval_sets` you provide explicitly (not k-fold cross-validation), which fits the risk-control
+    INS/OOS/OOT practice better. `metric` currently supports only `'auc'`.
 
-!!! tip "标准化配置自动继承"
+!!! tip "Standardization config is inherited automatically"
 
-    若该 `LRMaster` 开了 `standardize=True`，每个候选会继承相同配置（各自在 `data` 上拟合 scaler），
-    保证搜索与最终模型处于同一特征空间。
+    If this `LRMaster` has `standardize=True`, every candidate inherits the same configuration (each fits its scaler on `data`),
+    ensuring the search and the final model live in the same feature space.
 
-## 2. 梯度提升模型 —— `GradientBoostingModel`
+## 2. Gradient Boosting Models — `GradientBoostingModel`
 
-LightGBM / XGBoost / CatBoost 的统一接口。
+A unified interface to LightGBM / XGBoost / CatBoost.
 
 ```python
 from Modeling_Tool import GradientBoostingModel
@@ -201,21 +201,21 @@ gbm.fit(
     val_X,   val_y,
 )
 
-# 变量重要性
+# Variable importance
 varimp = gbm.get_feature_importance()
 print(varimp.head(15))
 
-# 预测（返回正类概率，一维）
+# Predict (returns the positive-class probability, 1-D)
 proba = gbm.predict(test_X)
 
-# 校准（可选）
+# Calibration (optional)
 gbm.calibrate(val_X, val_y, method="isotonic")
 ```
 
-### 样本权重
+### Sample Weights
 
-`GradientBoostingModel.fit` 及底层 `LightGBMModel` / `XGBoostModel` / `CatBoostModel`
-支持训练集 `sample_weight`（别名 `wgt`）和验证集 `eval_sample_weight`：
+`GradientBoostingModel.fit` and the underlying `LightGBMModel` / `XGBoostModel` / `CatBoostModel`
+support training-set `sample_weight` (alias `wgt`) and validation-set `eval_sample_weight`:
 
 ```python
 gbm.fit(
@@ -226,10 +226,10 @@ gbm.fit(
 )
 ```
 
-CatBoost 通过 `Pool(weight=...)` 注入权重。`calibrate` 与内部 `roc_auc` / `brier_score`
-评估同样接受 `sample_weight`。
+CatBoost injects the weights through `Pool(weight=...)`. `calibrate` and the internal `roc_auc` / `brier_score`
+evaluation accept `sample_weight` as well.
 
-`lgbm_quick_train` / `xgbm_quick_train` 可用 `val_wgt_col` 指定验证集权重列：
+`lgbm_quick_train` / `xgbm_quick_train` can specify the validation-set weight column with `val_wgt_col`:
 
 ```python
 from Modeling_Tool import lgbm_quick_train
@@ -241,11 +241,11 @@ model = lgbm_quick_train(
 )
 ```
 
-#### CatBoost 示例（`model_type="cat"`）
+#### CatBoost Example (`model_type="cat"`)
 
-CatBoost 走同一套接口，只需把 `model_type` 换成 `"cat"`。统一参数名（`n_estimators` /
-`max_depth`）会自动映射到 CatBoost 原生参数（`iterations` / `depth`），无需改动其余调用代码；
-若数据里有原始类别列，可直接用 `cat_features` 交给 CatBoost 原生处理（无需先做 WOE / one-hot）。
+CatBoost uses the same interface; just change `model_type` to `"cat"`. The unified parameter names (`n_estimators` /
+`max_depth`) are mapped automatically to CatBoost's native parameters (`iterations` / `depth`), with no change to the rest of the calling code;
+if the data has raw categorical columns, you can hand them to CatBoost's native handling through `cat_features` (no need for WOE / one-hot first).
 
 ```python
 from Modeling_Tool import GradientBoostingModel
@@ -253,35 +253,35 @@ from Modeling_Tool import GradientBoostingModel
 cat = GradientBoostingModel(
     model_type="cat",       # CatBoost
     params={
-        "n_estimators": 500,        # 等价于 CatBoost 的 iterations
+        "n_estimators": 500,        # equivalent to CatBoost's iterations
         "learning_rate": 0.05,
-        "max_depth": 6,             # 等价于 CatBoost 的 depth
+        "max_depth": 6,             # equivalent to CatBoost's depth
         "l2_leaf_reg": 3.0,
         "subsample": 0.8,
         "early_stopping_rounds": 30,
         "eval_metric": "AUC",
-        "cat_features": ["city_grade"],   # 可选：直接传原始类别列
+        "cat_features": ["city_grade"],   # optional: pass raw categorical columns directly
     },
 )
 cat.fit(train_X, train_y, val_X, val_y)
 
-# 与 lgb / xgb 完全一致的下游用法
+# Downstream usage identical to lgb / xgb
 varimp = cat.get_feature_importance()
 proba = cat.predict(test_X)
 ```
 
-### 关键参数
+### Key Parameters
 
-| 参数 | 默认值 | 说明 |
+| Parameter | Default | Description |
 |------|-------|------|
 | `model_type` | `"lgb"` | `"lgb"` / `"xgb"` / `"cat"` |
-| `n_estimators` | `100` | 树数量 |
-| `learning_rate` | `0.1` | 学习率 |
-| `max_depth` | `-1` | 最大深度（-1=不限） |
-| `early_stopping_rounds` | `None` | 早停轮数 |
-| `eval_metric` | `"auc"` | 评估指标 |
+| `n_estimators` | `100` | Number of trees |
+| `learning_rate` | `0.1` | Learning rate |
+| `max_depth` | `-1` | Maximum depth (-1 = unlimited) |
+| `early_stopping_rounds` | `None` | Early-stopping rounds |
+| `eval_metric` | `"auc"` | Evaluation metric |
 
-### 单独使用 LightGBMModel / XGBoostModel / CatBoostModel
+### Using LightGBMModel / XGBoostModel / CatBoostModel Directly
 
 ```python
 from Modeling_Tool import LightGBMModel, XGBoostModel, CatBoostModel
@@ -296,11 +296,11 @@ cat = CatBoostModel(params={"n_estimators": 200, "max_depth": 6})
 cat.fit(train_X, train_y, val_X, val_y)
 ```
 
-### CatBoost 标准建模 —— `CatBoostModel`
+### Standard CatBoost Modeling — `CatBoostModel`
 
-`CatBoostModel` 既可单独使用，也可通过 `GradientBoostingModel("cat", ...)` 以统一接口调用。
-它最大的特点是**原生处理类别特征**：通过 `cat_features` 指定原始类别列（列名或列索引），
-CatBoost 会用 ordered target statistics 内部编码，无需事先做 WOE / one-hot。
+`CatBoostModel` can be used on its own, or called through the unified interface via `GradientBoostingModel("cat", ...)`.
+Its biggest feature is **native handling of categorical features**: specify raw categorical columns (column names or indices) through `cat_features`,
+and CatBoost encodes them internally with ordered target statistics, with no need for WOE / one-hot beforehand.
 
 ```python
 from Modeling_Tool import CatBoostModel
@@ -313,7 +313,7 @@ cat = CatBoostModel(
         "l2_leaf_reg": 3.0,
         "early_stopping_rounds": 30,
         "eval_metric": "AUC",
-        "cat_features": ["city_grade"],   # 原始类别列，免编码
+        "cat_features": ["city_grade"],   # raw categorical columns, no encoding needed
     },
 )
 cat.fit(train_X, train_y, val_X, val_y)
@@ -322,12 +322,12 @@ varimp = cat.get_feature_importance()
 proba = cat.predict(test_X)
 ```
 
-!!! note "WOE 流水线里通常不需要 `cat_features`"
+!!! note "The WOE pipeline usually doesn't need `cat_features`"
 
-    评分卡标准流程会先把所有特征 WOE 编码成数值列，此时入模特征已无原始类别列，
-    可不传 `cat_features`。仅当你直接把原始类别列喂给 CatBoost 时才需要它。
+    The standard scorecard flow first WOE-encodes all features into numeric columns, so the model features no longer contain raw categorical columns,
+    and `cat_features` can be omitted. You need it only when you feed raw categorical columns directly to CatBoost.
 
-### 快速训练函数
+### Quick Training Functions
 
 ```python
 from Modeling_Tool import lgbm_quick_train, xgbm_quick_train
@@ -336,57 +336,57 @@ model = lgbm_quick_train(train_X, train_y, val_X, val_y,
                          params={"n_estimators": 200})
 ```
 
-### 增量学习（Warm-start）
+### Incremental Learning (Warm-start)
 
-在已有模型基础上、用新数据继续训练，而非从头开始。`GradientBoostingModel`
-提供一套**同时兼容 lgb 和 xgb** 的接口：用旧模型的 log-odds 输出作为 `init_score`
-在新数据上继续学习，打分时再把「旧模型 margin + 新模型贡献」融合成最终概率。
+Continue training on new data from an existing model, instead of starting from scratch. `GradientBoostingModel`
+provides an interface that is **compatible with both lgb and xgb**: the old model's log-odds output is used as `init_score`
+to continue learning on the new data, and at scoring time "old model margin + new model contribution" is fused into the final probability.
 
-#### lgb / xgb 的差异
+#### Differences between lgb / xgb
 
-| 环节 | XGBoost | LightGBM |
+| Step | XGBoost | LightGBM |
 |------|---------|----------|
-| 取原始 margin（log-odds） | `predict(X, output_margin=True)` | `predict(X, raw_score=True)` |
-| 训练时传偏移 | `fit(X, y, base_margin=...)` | `fit(X, y, init_score=...)` |
-| 预测时直接加偏移 | 原生支持 | **不支持** |
+| Get the raw margin (log-odds) | `predict(X, output_margin=True)` | `predict(X, raw_score=True)` |
+| Pass an offset at training time | `fit(X, y, base_margin=...)` | `fit(X, y, init_score=...)` |
+| Add the offset directly at prediction time | Natively supported | **Not supported** |
 
-`GradientBoostingModel` 把这些差异封装在内部：对外统一用 `init_score`，预测融合统一走
-`sigmoid(base_margin + 新模型 raw score)`——这是唯一对两种框架行为一致的做法（LightGBM
-在预测期并不支持注入 init_score）。
+`GradientBoostingModel` hides these differences internally: externally it uses `init_score` uniformly, and the prediction fusion uniformly goes through
+`sigmoid(base_margin + new-model raw score)` — the only approach that behaves the same for both frameworks (LightGBM
+does not support injecting init_score at prediction time).
 
-#### 三步用法
+#### Three-Step Usage
 
 ```python
 from Modeling_Tool import GradientBoostingModel
 
-# 1) 用旧模型取 base margin（log-odds），作为增量训练的起点
+# 1) Get the base margin (log-odds) from the old model, as the starting point for incremental training
 base_margin_train = init_model.get_base_margin(train_X)
 
-# 2) 增量训练：把 base margin 当作 init_score 传入（lgb / xgb 统一用 init_score）
-new_model = GradientBoostingModel("xgb", params)   # "lgb" 同理
+# 2) Incremental training: pass the base margin as init_score (lgb / xgb both use init_score)
+new_model = GradientBoostingModel("xgb", params)   # same for "lgb"
 new_model.fit(train_X, train_y, val_X, val_y, init_score=base_margin_train)
 
-# 3) 融合预测：sigmoid(base_margin + 新模型 raw score)
+# 3) Fused prediction: sigmoid(base_margin + new-model raw score)
 base_margin_score = init_model.get_base_margin(score_X)
 proba = new_model.predict_with_base_margin(score_X, base_margin_score, return_prob=True)
-# return_prob=False 则返回融合后的原始 log-odds
+# return_prob=False returns the fused raw log-odds
 ```
 
-!!! note "偏移只作用于训练集"
+!!! note "The offset applies only to the training set"
 
-    与常见生产实现一致，`init_score` 偏移只注入训练集；验证集未加偏移，因此早停的
-    eval 指标是在「未加偏移」的空间上评估的。如需严格一致，可后续透传 lgb 的
-    `eval_init_score` / xgb 的 `base_margin_eval_set`。
+    Consistent with common production implementations, the `init_score` offset is injected only into the training set; the validation set gets no offset, so the early-stopping
+    eval metric is evaluated in the "no-offset" space. If you need strict consistency, you can later pass through lgb's
+    `eval_init_score` / xgb's `base_margin_eval_set`.
 
-!!! tip "init_model 应是 GradientBoostingModel"
+!!! tip "init_model should be a GradientBoostingModel"
 
-    `get_base_margin` / `predict_with_base_margin` 是 `GradientBoostingModel` 的实例
-    方法，因此基准模型 `init_model` 也应是 `GradientBoostingModel`（而非裸
-    `LGBMClassifier` / `XGBClassifier`）。
+    `get_base_margin` / `predict_with_base_margin` are instance
+    methods of `GradientBoostingModel`, so the base model `init_model` should also be a `GradientBoostingModel` (not a bare
+    `LGBMClassifier` / `XGBClassifier`).
 
-## 3. 后向变量消元 —— `BackwardVariableEliminator`
+## 3. Backward Variable Elimination — `BackwardVariableEliminator`
 
-基于**累计重要性阈值**逐步剔除变量，常用于**轻量级变量筛选**。
+Removes variables step by step based on a **cumulative importance threshold**, commonly used for **lightweight variable screening**.
 
 ```python
 from Modeling_Tool import BackwardVariableEliminator
@@ -398,38 +398,38 @@ eliminator = BackwardVariableEliminator(
     oot_data=oot_woe,
     params={"n_estimators": 100, "learning_rate": 0.1},
     y="bad_flag",
-    weight_col="sample_wgt",              # 训练集权重列
-    validation_weight_col="sample_wgt",   # 验证集权重列
-    results_output_dir="./output/",   # 构造器参数，非 fit 参数
+    weight_col="sample_wgt",              # training-set weight column
+    validation_weight_col="sample_wgt",   # validation-set weight column
+    results_output_dir="./output/",   # constructor parameter, not a fit parameter
     modelsave_dir="./models/",
 )
 
 eliminator.fit(x=woe_features)
 result = eliminator.analyze()
-print(result)   # 后向消元每轮的变量数与性能
+print(result)   # number of variables and performance at each backward-elimination round
 ```
 
-底层 `backward_lgbm` / `backward_xgbm` 同样接受 `weight_col` 与 `validation_weight_col`，
-训练与性能汇总（`get_perf_summary`）均按权重计算。
+The underlying `backward_lgbm` / `backward_xgbm` also accept `weight_col` and `validation_weight_col`,
+and both training and the performance summary (`get_perf_summary`) are computed by weight.
 
-### 工作原理
+### How It Works
 
-1. 用全部特征训练一轮 LGB，记录每个特征的 gain 重要性
-2. 剔除**累计重要性 < 阈值**的变量（如 `< 0.001`）
-3. 重复 1–2 直至剩余变量数达下限或 AUC 不再提升
+1. Train one round of LGB with all features, and record each feature's gain importance
+2. Remove variables whose **cumulative importance < threshold** (such as `< 0.001`)
+3. Repeat 1–2 until the number of remaining variables reaches the lower limit or AUC stops improving
 
-## 4. 模型持久化
+## 4. Model Persistence
 
 ```python
 from Modeling_Tool import save_model, load_model
 
 save_model(gbm._model.model, "./models/gbm_v1.pkl")
 
-# 加载
+# Load
 loaded = load_model("./models/gbm_v1.pkl")
 ```
 
-## 5. 评分函数
+## 5. Scoring Function
 
 ```python
 from Modeling_Tool import scoring
@@ -442,7 +442,7 @@ scores = scoring(
 )
 ```
 
-## 模型对比实践
+## Model Comparison in Practice
 
 ```python
 from Modeling_Tool import (
@@ -477,82 +477,82 @@ for name, model in models.items():
                     .add_dataset("test",  test_woe).evaluate()
     results[name] = perf
 
-# 对比 KS / AUC
+# Compare KS / AUC
 for name, perf in results.items():
     print(f"{name}: AUC={perf['AUC'].mean():.4f}  KS={perf['KS'].mean():.4f}")
 ```
 
-## 常见问题
+## FAQ
 
-??? question "LightGBM 训练报 `categorical_feature` 错误"
+??? question "LightGBM training raises a `categorical_feature` error"
 
-    确保类别列在 DataFrame 中是 `category` dtype，或在 params 中设置：
+    Make sure the categorical column has the `category` dtype in the DataFrame, or set it in params:
 
     ```python
     params["categorical_feature"] = ["city_grade"]
     ```
 
-??? question "CatBoost 的参数别名：`n_estimators` / `max_depth` 还是 `iterations` / `depth`？"
+??? question "CatBoost parameter aliases: `n_estimators` / `max_depth`, or `iterations` / `depth`?"
 
-    `GradientBoostingModel("cat", ...)` 与 `CatBoostModel` 接受**统一参数名**，让三种 GBM
-    共用同一套配置：`n_estimators` 会映射到 CatBoost 原生的 `iterations`，`max_depth` 映射到
-    `depth`。你也可以直接写 CatBoost 原生名（`iterations` / `depth`），二者择一即可。
-    建议**不要同时**传别名与原生名，以免产生歧义；其余参数（`learning_rate`、`l2_leaf_reg`、
-    `early_stopping_rounds`、`eval_metric` 等）按 CatBoost 原生名透传。
+    `GradientBoostingModel("cat", ...)` and `CatBoostModel` accept **unified parameter names**, so the three GBMs
+    can share one configuration: `n_estimators` maps to CatBoost's native `iterations`, and `max_depth` maps to
+    `depth`. You can also write CatBoost's native names directly (`iterations` / `depth`); either one works.
+    Avoid passing an alias and its native name **together**, to prevent ambiguity; other parameters (`learning_rate`, `l2_leaf_reg`,
+    `early_stopping_rounds`, `eval_metric`, etc.) are passed through under CatBoost's native names.
 
-??? question "CatBoost 如何处理类别特征？"
+??? question "How does CatBoost handle categorical features?"
 
-    CatBoost 原生支持类别特征：在 params 里用 `cat_features` 指定原始类别列（列名或列索引），
-    CatBoost 会用 ordered target statistics 内部编码，**无需** WOE / one-hot 预处理：
+    CatBoost supports categorical features natively: specify raw categorical columns (column names or indices) with `cat_features` in params,
+    and CatBoost encodes them internally with ordered target statistics, with **no** WOE / one-hot preprocessing needed:
 
     ```python
     cat = GradientBoostingModel("cat", {
         "n_estimators": 300,
-        "cat_features": ["city_grade", "channel"],   # 原始类别列
+        "cat_features": ["city_grade", "channel"],   # raw categorical columns
     })
     cat.fit(train_X, train_y, val_X, val_y)
     ```
 
-    注意：训练集与验证 / 打分数据必须含有相同的列；若已走 WOE 流水线（特征均为数值），
-    则通常不需要 `cat_features`。
+    Note: the training set and the validation / scoring data must contain the same columns; if you are already on the WOE pipeline (all features numeric),
+    `cat_features` is usually not needed.
 
-??? question "变量重要性总和不为 1"
+??? question "Variable importance doesn't sum to 1"
 
-    `get_feature_importance(importance_type='gain')` 返回归一化的相对值，
-    `sum` 应为 1.0；若返回 `split`，则按分裂次数加权。
+    `get_feature_importance(importance_type='gain')` returns normalized relative values,
+    and the `sum` should be 1.0; if it returns `split`, the values are weighted by split count.
 
-??? question "开启标准化后系数变了很多 / 解读不一样"
+??? question "After turning on standardization, the coefficients changed a lot / are interpreted differently"
 
-    这是预期行为。`standardize=True` 后模型在标准化空间训练，`get_variable_importance()`
-    与 `get_statsmodel_summary()` 给出的是标准化系数；如需原始单位下的系数，请关闭标准化
-    （`standardize=False`，默认）后重新训练。
+    This is expected. With `standardize=True` the model is trained in the standardized space, and `get_variable_importance()`
+    and `get_statsmodel_summary()` give standardized coefficients; if you need coefficients in the original units, turn standardization off
+    (`standardize=False`, the default) and retrain.
 
-??? question "如何做超参搜索 / 交叉验证"
+??? question "How do I do hyperparameter search / cross-validation?"
 
-    `LRMaster` 内置了基于 holdout 的网格搜索 `grid_search_params(...)`（见上文「超参网格搜索」）。
-    若想用 k-fold 交叉验证，或为 `GradientBoostingModel` 做超参搜索，可用 sklearn 的
-    `cross_val_score` 自行包装（注意 GBM 取底层估计器用 `model._model.model`，LR 用 `model.model`）：
+    `LRMaster` has a built-in holdout-based grid search, `grid_search_params(...)` (see "Hyperparameter Grid Search" above).
+    If you want k-fold cross-validation, or hyperparameter search for `GradientBoostingModel`, you can wrap it yourself with sklearn's
+    `cross_val_score` (note that for GBM you get the underlying estimator with `model._model.model`, and for LR with `model.model`):
 
     ```python
     from sklearn.model_selection import cross_val_score
     scores = cross_val_score(model._model.model, X, y, cv=5, scoring="roc_auc")
     ```
 
-    GBM 超参搜索见 [GBM 超参搜索](gbm_param_search.md)。
+    For GBM hyperparameter search, see [GBM Hyperparameter Search](gbm_param_search.md).
 
-??? question "何时使用样本权重？`weight_col` 与 `sample_weight` 有何区别？"
+??? question "When should I use sample weights? What is the difference between `weight_col` and `sample_weight`?"
 
-    典型场景：抽样偏差校正（如过采样后给原始样本更高权重）、按金额/余额加权、
-    按时间衰减加权等。`weight_col` 从 DataFrame 列解析（推荐，与评估侧一致）；
-    `sample_weight` 直接传 numpy 数组。二者不可同时传入。
-    评估侧统一用 `weight_col`；底层绘图函数用 `sample_weight` 键（见 [模型评估](eval.md)）。
+    Typical scenarios: correcting sampling bias (such as giving original samples higher weight after oversampling), weighting by amount/balance,
+    time-decay weighting, and so on. `weight_col` is resolved from a DataFrame column (recommended, consistent with the evaluation side);
+    `sample_weight` takes a numpy array directly. The two cannot be passed together.
+    The evaluation side uniformly uses `weight_col`; low-level plotting functions use the `sample_weight` key (see [Model Evaluation](eval.md)).
 
-## LR p 值后向淘汰（0.6.7+，G07）
+## LR p-value Backward Elimination (0.6.7+, G07)
 
 ```python
 CreditModelPipelineConfig(
     train_models=["lr"],
-    lr_elimination_mode="pvalue",     # None(默认) 关闭
+    lr_elimination_mode="pvalue",     # None (default) disables it
     lr_elimination_params={
         "pvalue_threshold": 0.05, "min_features": 1,
         "max_iterations": 20, "tie_breaker": "pvalue",
@@ -560,7 +560,7 @@ CreditModelPipelineConfig(
 )
 ```
 
-初次拟合后循环：取最大系数 p 值（scipy Fisher 信息，与最终 sklearn LR 完全同口径），
-超阈值则剔除该特征重拟合，直到全部达标或触到 `min_features`/`max_iterations`。
-轨迹进 `result.feature_selection_summary["lr_elimination"]` 并落 `lr_pvalue_elimination.csv`；
-`models["lr"]` 的特征列表即缩减后的终版，评估/解释自动跟随。
+After the initial fit, it loops: take the largest coefficient p-value (scipy Fisher information, on exactly the same basis as the final sklearn LR),
+and if it exceeds the threshold, drop that feature and refit, until all pass or `min_features`/`max_iterations` is reached.
+The trajectory goes into `result.feature_selection_summary["lr_elimination"]` and is written to `lr_pvalue_elimination.csv`;
+the feature list of `models["lr"]` is the reduced final one, and evaluation/explanation follow it automatically.

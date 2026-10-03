@@ -1,14 +1,14 @@
 # ChangeLog
 
-SuperModelingFactory 各版本迭代总览。所有 `0.3.x` 发布在成型的发版流程之前,合并在 [v0.3.x 汇总](v0.3.md) 里;从 `0.4.0` 开始每个版本单独一页,包含完整的修复清单、行为变更说明与向后兼容影响。
+An overview of every SuperModelingFactory release. All `0.3.x` releases predate the established release process and are consolidated in the [v0.3.x summary](v0.3.md); starting with `0.4.0`, each version has its own page with the full list of fixes, behavior-change notes, and backward-compatibility impact.
 
-## 发版策略
+## Release Policy
 
-- **Patch 版本 (`0.x.Y`)**:纯硬化释放,零 API 移除,健康输入零数值差异。以字母编号:HIGH (H/N)、MEDIUM (M/N)、LOW (L/N)。
-- **Minor 版本 (`0.X.0`)**:包含至少一处 **行为变更**(默认值翻转、返回值语义调整、必填字段变化)。任何 breaking default 必须先在上一 patch 通过 opt-in 参数落地,再在下一 minor 翻默认(参考 0.3.19 → 0.4.0 的 `cross_vars` 模式,以及计划中的 0.4.2 `missing_policy` 翻默认)。
-- **Major 版本 (`X.0.0`)**:重大架构调整。目前无计划。
+- **Patch versions (`0.x.Y`)**: pure hardening releases with zero API removals and zero numerical differences on healthy inputs. Batches are labeled by severity: HIGH (H/N), MEDIUM (M/N), LOW (L/N).
+- **Minor versions (`0.X.0`)**: include at least one **behavior change** (a flipped default, a change in return-value semantics, or a changed required field). Any breaking default must first land behind an opt-in parameter in the previous patch release, and only then be flipped in the next minor (see the `cross_vars` pattern from 0.3.19 → 0.4.0, and the planned flip of the 0.4.2 `missing_policy` default).
+- **Major versions (`X.0.0`)**: major architectural changes. None are currently planned.
 
-## 版本索引
+## Version Index
 
 <div class="grid cards" markdown>
 - :material-tag: **[v0.8.2](v0.8.2.md)** - Seven defect batches: `unseen_special_policy` for declared-but-unseen special values, warnings visible at import again, SMF's own warning noise and the bugs behind it, single-class evaluation, bool features in binning/WOE/FVP, and no more process-wide pandas option changes or writes into the caller's DataFrame
@@ -63,28 +63,28 @@ SuperModelingFactory 各版本迭代总览。所有 `0.3.x` 发布在成型的�
 
 - :material-tag: **[v0.5.0](v0.5.0.md)** — 2026-07-07
 
-    MEDIUM batch —— **PSI `missing_policy` 默认翻转（breaking）** + 6 个上游公开 API 暴露 kwarg，`MonotoneWOEBinner.apply_woe` 新增 `unseen_category_policy` 与 `_unseen_category_stats`
+    MEDIUM batch — **PSI `missing_policy` default flipped (breaking)**, 6 upstream public APIs now expose the kwarg, and `MonotoneWOEBinner.apply_woe` gains `unseen_category_policy` and `_unseen_category_stats`
 
 - :material-tag: **[v0.4.2](v0.4.2.md)** — 2026-07-06
 
-    HIGH hotfix batch —— ODPS 原子上传、`split_df` `exclude_cols` 语义修正、`HardCutoffInferrer` NaN 守卫、`Weighted_Screen` 缺失分箱、`PSI_Tool.missing_policy` 新参数
+    HIGH hotfix batch — atomic ODPS upload, `split_df` `exclude_cols` semantics fix, `HardCutoffInferrer` NaN guard, `Weighted_Screen` missing bin, new `PSI_Tool.missing_policy` parameter
 
 - :material-tag: **[v0.4.1](v0.4.1.md)** — 2026-07-06
 
-    LOW hygiene batch —— 拒绝推断默认 cutoff NaN 处理、`predict_positive` shape/长度/finite 校验、`feature_validation` 混合 Interval+NaN groupby 稳定性
+    LOW hygiene batch — NaN handling for the default reject-inference cutoff, `predict_positive` shape/length/finite validation, and `feature_validation` stability for mixed Interval+NaN groupby
 
 - :material-tag: **[v0.4.0](v0.4.0.md)** — 2026-07-06
 
-    MEDIUM hygiene batch #2 —— `cross_vars` 默认变更(**breaking**)、object 列 numeric 强转 opt-in、相关性计算向量化、样本分析 dry-run 等六项
+    MEDIUM hygiene batch #2 — `cross_vars` default change (**breaking**), opt-in numeric coercion for object columns, vectorized correlation computation, sample-analysis dry-run, and two more items
 
-- :material-history: **[v0.3.x 汇总](v0.3.md)** — 2026-06-30 之前
+- :material-history: **[v0.3.x Summary](v0.3.md)** — before 2026-06-30
 
-    0.3.4 → 0.3.18,涵盖 WOE 分箱引擎、统一 `feature_screen`、加权 screen、`FeatureScreeningArtifact`、Pipeline 硬化批次 H1-H4、hygiene 批次 M2-M4
+    0.3.4 → 0.3.18, covering the WOE binning engine, unified `feature_screen`, weighted screen, `FeatureScreeningArtifact`, Pipeline hardening batches H1-H4, and hygiene batches M2-M4
 
 </div>
 
-## 关联信息
+## Related Links
 
-- [SMF 主仓 Releases](https://github.com/Kyle-J-Sun/SuperModelingFactory/releases)
-- [完整 tag 列表](https://github.com/Kyle-J-Sun/SuperModelingFactory/tags)
-- API 破坏性变更、行为翻转均在对应版本页明确标注,搜索关键词 "**breaking change**" 或 "**行为变更**"。
+- [SMF main repo Releases](https://github.com/Kyle-J-Sun/SuperModelingFactory/releases)
+- [Full tag list](https://github.com/Kyle-J-Sun/SuperModelingFactory/tags)
+- API breaking changes and behavior flips are called out explicitly on the corresponding version page; search for "**breaking change**" or "**behavior change**".

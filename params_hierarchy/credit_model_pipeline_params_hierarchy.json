@@ -4,25 +4,25 @@
   "hierarchy": {
     "required": [
       {
-        "level1": "基础输入与输出",
+        "level1": "Basic Input and Output",
         "level2": [
           {
-            "name": "输出与运行控制",
+            "name": "Output and Run Control",
             "params": {
-              "output_dir": "输出目录，默认 output",
-              "random_state": "全局随机种子",
-              "write_outputs": "是否输出 CSV/图片/解释性文件",
-              "write_excel": "是否输出 Excel 报告",
-              "plot_outputs": "是否输出 WOE/perf/explain 图片"
+              "output_dir": "Output directory, default output",
+              "random_state": "Global random seed",
+              "write_outputs": "Whether to output CSV/image/explainability files",
+              "write_excel": "Whether to output the Excel report",
+              "plot_outputs": "Whether to output WOE/perf/explain images"
             }
           },
           {
-            "name": "字段边界",
+            "name": "Field Boundaries",
             "params": {
-              "target_col": "建模目标字段，默认 badflag",
-              "feature_cols": "原始入模特征；为空时自动选择数值列并排除 target/split/oot/weight",
-              "weight_col": "样本权重字段；会传给 GBM 训练、param_search 和评估",
-              "extra_eval_datasets": "额外评估数据集字典；key 不能与 ins/oos/oot 冲突"
+              "target_col": "Modeling target field, default badflag",
+              "feature_cols": "Raw model input features; when empty, numeric columns are selected automatically, excluding target/split/oot/weight",
+              "weight_col": "Sample-weight field; passed to GBM training, param_search, and evaluation",
+              "extra_eval_datasets": "Dict of extra evaluation datasets; keys must not conflict with ins/oos/oot"
             }
           }
         ]
@@ -30,297 +30,297 @@
     ],
     "optional": [
       {
-        "level1": "样本切分",
+        "level1": "Sample Splitting",
         "level2": [
           {
-            "name": "已有切分字段",
+            "name": "Existing Split Fields",
             "params": {
-              "split_col": "推荐切分字段；支持 ins/oos/oot，优先级最高",
-              "sample_col": "兼容旧切分字段，默认 sample_ind",
-              "oot_col": "OOT flag 字段；无 split/sample 字段时使用"
+              "split_col": "Recommended split field; supports ins/oos/oot, highest priority",
+              "sample_col": "Compatible legacy split field, default sample_ind",
+              "oot_col": "OOT flag field; used when there is no split/sample field"
             },
             "rules": [
-              "split_col 优先于 sample_col",
-              "split_col 必须包含非空 ins 和 oos；0.7.0 默认缺少真实 oot 时不合成，显式 synthesize_missing_oot=true 才使用 oos 副本",
-              "无 split/sample 时，先用 oot_col 拆 OOT，再用 split_config 拆 INS/OOS"
+              "split_col takes precedence over sample_col",
+              "split_col must contain non-empty ins and oos; since 0.7.0, no OOT is synthesized by default when a real oot is missing, and an OOS copy is used only with an explicit synthesize_missing_oot=true",
+              "When there is no split/sample, OOT is split off first with oot_col, and INS/OOS are then split with split_config"
             ]
           },
           {
-            "name": "随机切分配置",
+            "name": "Random Split Configuration",
             "params": {
               "split_config": {
-                "test_size": "OOS 比例，默认 0.3",
-                "stratify": "是否按 target_col 分层",
-                "random_state": "切分随机种子；为空时继承顶层 random_state"
+                "test_size": "OOS share, default 0.3",
+                "stratify": "Whether to stratify by target_col",
+                "random_state": "Split random seed; when empty, inherits the top-level random_state"
               }
             }
           }
         ]
       },
       {
-        "level1": "特征筛选与 FeatureValidation 复用",
+        "level1": "Feature Screening and FeatureValidation Reuse",
         "level2": [
           {
-            "name": "内置筛选",
+            "name": "Built-in Screening",
             "params": {
               "feature_selection": {
-                "psi_enabled": "是否做 PSI 筛选",
-                "psi_threshold": "PSI 阈值",
-                "psi_compare_splits": "PSI 对比样本集，默认 ['oos']",
-                "iv_enabled": "是否做 IV 筛选",
-                "iv_threshold": "IV 阈值",
-                "corr_enabled": "是否做相关性筛选",
-                "corr_threshold": "相关性阈值",
-                "corr_max_iterations": "相关性筛选最大迭代轮数",
-                "corr_block_size": "加权相关性矩阵的特征列块大小，默认 256"
+                "psi_enabled": "Whether to run PSI screening",
+                "psi_threshold": "PSI threshold",
+                "psi_compare_splits": "PSI comparison sample sets, default ['oos']",
+                "iv_enabled": "Whether to run IV screening",
+                "iv_threshold": "IV threshold",
+                "corr_enabled": "Whether to run correlation screening",
+                "corr_threshold": "Correlation threshold",
+                "corr_max_iterations": "Maximum number of iteration rounds for correlation screening",
+                "corr_block_size": "Feature-column block size of the weighted correlation matrix, default 256"
               }
             }
           },
           {
-            "name": "筛选产物复用",
+            "name": "Reuse of Screening Artifacts",
             "params": {
-              "screening_artifact": "显式传入 FeatureScreeningArtifact",
-              "feature_validation_result": "传入 FeatureValidationPipelineResult 后转成 screening artifact",
-              "feature_selection_mode": "run/from_artifact/skip；控制是重新筛选、复用产物还是跳过筛选",
-              "reuse_screening_woe": "是否复用 screening artifact 中的 WOE artifact"
+              "screening_artifact": "Pass a FeatureScreeningArtifact explicitly",
+              "feature_validation_result": "After passing a FeatureValidationPipelineResult, it is converted into a screening artifact",
+              "feature_selection_mode": "run/from_artifact/skip; controls whether to re-screen, reuse the artifact, or skip screening",
+              "reuse_screening_woe": "Whether to reuse the WOE artifact in the screening artifact"
             },
             "rules": [
-              "screening_artifact 优先于 feature_validation_result",
-              "from_artifact 依赖已有筛选产物",
-              "skip 会绕过筛选，直接使用 feature_cols"
+              "screening_artifact takes precedence over feature_validation_result",
+              "from_artifact depends on an existing screening artifact",
+              "skip bypasses screening and uses feature_cols directly"
             ]
           },
           {
-            "name": "筛选期 WOE 引擎复用（G00）",
+            "name": "WOE Engine Reuse from the Screening Stage (G00)",
             "params": {
-              "screening_artifact": "FVP/独立筛选产物；筛选自拟合的 monotone 引擎会随 artifact 附带，CM 侧 _reuse_screening_woe 直接复用不再重拟合（WOE_Master 只附表+警告）"
+              "screening_artifact": "FVP/standalone screening artifact; the monotone engine self-fitted by screening is attached with the artifact, and the CM-side _reuse_screening_woe reuses it directly without refitting (WOE_Master attaches only the table + a warning)"
             }
           }
         ]
       },
       {
-        "level1": "WOE 分箱",
+        "level1": "WOE Binning",
         "level2": [
           {
-            "name": "WOE 总配置",
+            "name": "Overall WOE Configuration",
             "params": {
-              "woe_engine": "equal_freq 或 monotone，默认 equal_freq",
-              "woe_fit_query": "WOE fit 前对 INS 样本的过滤条件",
+              "woe_engine": "equal_freq or monotone, default equal_freq",
+              "woe_fit_query": "Filter condition applied to the INS sample before the WOE fit",
               "woe_params": {
-                "nbins": "equal_freq 分箱数",
-                "equal_freq": "是否等频",
-                "min_bin_prop": "最小箱占比",
-                "woe_suffix": "WOE 后缀，可选",
-                "sv_min_bin_size": "0.8.0 SV 箱占比阈值 [0.0,1.0)，默认 0.0 关闭",
-                "sv_small_policy": "0.8.0 keep(默认)/neutral/merge_missing，亚阈值 SV 箱兜底",
-                "sv_woe_smoothing": "0.8.0 none(默认)/laplace，SV 箱 WOE 坏率收缩",
-                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭"
+                "nbins": "Number of equal_freq bins",
+                "equal_freq": "Whether equal-frequency",
+                "min_bin_prop": "Minimum bin share",
+                "woe_suffix": "WOE suffix, optional",
+                "sv_min_bin_size": "0.8.0 SV bin share threshold [0.0,1.0), default 0.0 = off",
+                "sv_small_policy": "0.8.0 keep (default)/neutral/merge_missing, fallback for sub-threshold SV bins",
+                "sv_woe_smoothing": "0.8.0 none (default)/laplace, bad-rate shrinkage of SV bin WOE",
+                "sv_smoothing_alpha": "0.8.0 smoothing strength α>=0, default 0.0 = off"
               },
               "monotone_woe_params": {
-                "n_init_bins": "monotone 初始箱数",
-                "min_bin_size": "monotone 最小箱占比",
-                "min_n_bins": "monotone 最小箱数",
-                "sv_min_bin_size": "0.8.0 SV 箱占比阈值 [0.0,1.0)，默认 0.0 关闭",
-                "sv_small_policy": "0.8.0 keep(默认)/neutral/merge_missing，亚阈值 SV 箱兜底",
-                "sv_woe_smoothing": "0.8.0 none(默认)/laplace，SV 箱 WOE 坏率收缩",
-                "sv_smoothing_alpha": "0.8.0 平滑强度 α>=0，默认 0.0 关闭",
-                "unseen_special_policy": "0.8.2 normal_bin(默认)/neutral，声明但拟合样本中未出现的数值特殊值：按普通值归箱 / 占位箱取 missing_woe"
+                "n_init_bins": "Initial number of monotone bins",
+                "min_bin_size": "Minimum monotone bin share",
+                "min_n_bins": "Minimum number of monotone bins",
+                "sv_min_bin_size": "0.8.0 SV bin share threshold [0.0,1.0), default 0.0 = off",
+                "sv_small_policy": "0.8.0 keep (default)/neutral/merge_missing, fallback for sub-threshold SV bins",
+                "sv_woe_smoothing": "0.8.0 none (default)/laplace, bad-rate shrinkage of SV bin WOE",
+                "sv_smoothing_alpha": "0.8.0 smoothing strength α>=0, default 0.0 = off",
+                "unseen_special_policy": "0.8.2 normal_bin (default)/neutral; numeric special values declared but absent from the fit sample: binned as ordinary values / a placeholder bin takes missing_woe"
               }
             }
           },
           {
-            "name": "WOE 与模型特征来源",
+            "name": "WOE and Model Feature Source",
             "params": {
-              "gbm_feature_source": "woe/raw 或按模型配置的 dict；LR 永远使用 WOE"
+              "gbm_feature_source": "woe/raw, or a dict configured per model; LR always uses WOE"
             },
             "rules": [
-              "默认所有模型使用 WOE 特征，保持旧行为",
-              "gbm_feature_source='raw' 时 lgb/xgb/cat 使用原始特征",
-              "dict key 只允许 lgb/xgb/cat，value 只允许 raw/woe",
-              "raw 模式不自动做类别编码"
+              "By default all models use WOE features, keeping the old behavior",
+              "With gbm_feature_source='raw', lgb/xgb/cat use raw features",
+              "dict keys may only be lgb/xgb/cat, and values may only be raw/woe",
+              "raw mode does no automatic categorical encoding"
             ]
           }
         ]
       },
       {
-        "level1": "模型训练",
+        "level1": "Model Training",
         "level2": [
           {
-            "name": "模型集合与参数",
+            "name": "Model Set and Parameters",
             "params": {
-              "train_models": "要训练的模型列表，默认 lr/lgb/xgb/cat",
-              "model_params": "各模型参数覆盖，例如 {'lgb': {...}, 'lr': {...}}"
+              "train_models": "List of models to train, default lr/lgb/xgb/cat",
+              "model_params": "Per-model parameter overrides, e.g. {'lgb': {...}, 'lr': {...}}"
             }
           },
           {
-            "name": "LR 参数搜索",
+            "name": "LR Parameter Search",
             "params": {
-              "lr_search_enabled": "是否对 LR 做 grid_search_params",
-              "lr_search_param_grid": "LR 参数网格，默认 C=[0.01,0.1,1.0,10.0]",
-              "lr_search_params": "LR search 额外参数覆盖",
-              "use_lr_search_params": "是否把搜索到的 best_params 合并进最终 LR 训练"
+              "lr_search_enabled": "Whether to run grid_search_params for LR",
+              "lr_search_param_grid": "LR parameter grid, default C=[0.01,0.1,1.0,10.0]",
+              "lr_search_params": "Extra parameter overrides for the LR search",
+              "use_lr_search_params": "Whether to merge the found best_params into the final LR training"
             },
             "rules": [
-              "只有 train_models 包含 lr 且 lr_search_enabled=true 时运行",
-              "搜索在 WOE 特征上进行"
+              "Runs only when train_models contains lr and lr_search_enabled=true",
+              "The search runs on WOE features"
             ]
           },
           {
             "name": "GBM warm-start",
             "params": {
-              "warm_start_enabled": "是否启用前置分 warm-start",
-              "warm_start_score_col": "前置分字段",
-              "warm_start_score_type": "probability 或 log_odds",
-              "warm_start_models": "应用 warm-start 的模型，默认 lgb/xgb",
-              "warm_start_on_unsupported": "遇到不支持模型时 skip 或 raise",
-              "warm_start_apply_to_optuna": "warm-start 是否参与 GBM optuna refit/search"
+              "warm_start_enabled": "Whether to enable prior-score warm-start",
+              "warm_start_score_col": "Prior-score field",
+              "warm_start_score_type": "probability or log_odds",
+              "warm_start_models": "Models to apply warm-start to, default lgb/xgb",
+              "warm_start_on_unsupported": "skip or raise when an unsupported model is encountered",
+              "warm_start_apply_to_optuna": "Whether warm-start takes part in the GBM optuna refit/search"
             },
             "rules": [
-              "warm_start_enabled=true 时必须提供 warm_start_score_col",
-              "当前只支持 lgb/xgb；cat 默认 skip",
-              "probability 会先裁剪再转 log_odds"
+              "warm_start_score_col must be provided when warm_start_enabled=true",
+              "Currently only lgb/xgb are supported; cat is skipped by default",
+              "probability is clipped first and then converted to log_odds"
             ]
           },
           {
-            "name": "LR p 值淘汰（G07）",
+            "name": "LR p-value Elimination (G07)",
             "params": {
-              "lr_elimination_mode": "None(默认关) 或 \"pvalue\"：拟合后按系数 p 值逐个剔除并重拟合",
-              "lr_elimination_params": "pvalue_threshold=0.05 / min_features=1 / max_iterations=20 / tie_breaker=\"pvalue\"；trace 落 feature_selection_summary['lr_elimination'] 与 lr_pvalue_elimination.csv"
+              "lr_elimination_mode": "None (off by default) or \"pvalue\": after fitting, remove features one by one by coefficient p-value and refit",
+              "lr_elimination_params": "pvalue_threshold=0.05 / min_features=1 / max_iterations=20 / tie_breaker=\"pvalue\"; the trace goes to feature_selection_summary['lr_elimination'] and lr_pvalue_elimination.csv"
             }
           }
         ]
       },
       {
-        "level1": "OOT 治理（候选阶段防泄漏）",
+        "level1": "OOT Governance (Leakage Prevention in the Candidate Stage)",
         "level2": [
           {
             "name": "OOT governance",
             "params": {
-              "candidate_mode": "候选模式一键收紧：禁 OOT（forbidden_splits 并入 oot）、不合成 OOT、评估只留 ins/oos、search 只用 oos、backward 不读 OOT；与显式相反配置冲突时直接报错",
-              "synthesize_missing_oot": "缺 OOT 时是否用 OOS 副本代替；0.7.0 默认 false，splits 不含 oot、全部下游自动跳过；显式 true 才合成并发 UserWarning",
-              "evaluation_splits": "评估 split 白名单；0.7.0 默认 [ins, oos]，perf/图/Excel 不默认消费 OOT（extra_eval_datasets 不受限）；显式列表可覆盖",
-              "forbidden_splits": "硬闸：任何组件（search/backward/评估，含 optuna_params/backward_params 里带入的）将要消费被禁 split 时抛 ValueError",
-              "search_eval_splits": "LR search 与 Optuna 的 eval_sets 来源；0.7.0 默认 [oos]，不默认将 OOT 用于候选调参；显式列表严格校验存在性",
-              "search_objective_when_no_oot": "search eval 集不含 oot 且未显式设 objective 时的回退目标，默认 max_primary",
-              "backward_validation_split": "backward 的 validation 来源，默认 oos",
-              "backward_report_splits": "backward test_data_dict 来源；0.7.0 默认 []，避免逐轮报告读取 OOT；显式列表可覆盖"
+              "candidate_mode": "One-switch candidate-mode tightening: forbid OOT (forbidden_splits gets oot merged in), do not synthesize OOT, evaluate only ins/oos, search uses only oos, and backward does not read OOT; conflicts with explicitly opposite configuration raise an error directly",
+              "synthesize_missing_oot": "Whether to substitute an OOS copy when OOT is missing; default false since 0.7.0, so splits contain no oot and all downstream steps skip automatically; only an explicit true synthesizes it and issues a UserWarning",
+              "evaluation_splits": "Evaluation split allowlist; default [ins, oos] since 0.7.0, so perf/plots/Excel do not consume OOT by default (extra_eval_datasets is not restricted); an explicit list can override it",
+              "forbidden_splits": "Hard gate: raises ValueError whenever any component (search/backward/evaluation, including ones brought in through optuna_params/backward_params) is about to consume a forbidden split",
+              "search_eval_splits": "Source of eval_sets for LR search and Optuna; default [oos] since 0.7.0, so OOT is not used for candidate tuning by default; an explicit list is strictly checked for existence",
+              "search_objective_when_no_oot": "Fallback objective when the search eval sets do not include oot and no objective is set explicitly, default max_primary",
+              "backward_validation_split": "Validation source for backward, default oos",
+              "backward_report_splits": "Source of backward test_data_dict; default [] since 0.7.0, to keep the per-round report from reading OOT; an explicit list can override it"
             },
             "rules": [
-              "run 产物（Result.split_governance 与模型 metadata）记录 candidate_mode/oot_synthesized/oot_withheld，验收时据此分辨 OOT 真伪",
-              "candidate_mode 下数据里的真实 OOT 会被切出但全程不消费（oot_withheld=true）"
+              "The run artifacts (Result.split_governance and the model metadata) record candidate_mode/oot_synthesized/oot_withheld, so that acceptance can tell whether the OOT is real",
+              "Under candidate_mode, a real OOT in the data is split off but never consumed throughout (oot_withheld=true)"
             ]
           }
         ]
       },
       {
-        "level1": "评估治理（多标签 / 特殊分 / 方向 / 权重）",
+        "level1": "Evaluation Governance (Multi-Label / Special Scores / Direction / Weights)",
         "level2": [
           {
             "name": "Evaluation governance",
             "params": {
-              "eval_target_cols": "额外评估标签列表；有效标签集=[target_col]+eval_target_cols 去重。同一份模型分数只计算一次、复用于所有标签；perf 表纵向拼接并新增 tgt_name 列（未设置时输出结构与旧版完全一致）",
-              "all_missing_score_value": "全部入模原始特征缺失的行分数覆写值（如 -1）；判定口径与 Core.scoring 的 all_missing_spec_value 完全一致，并连同判定用原始特征清单写入模型 artifact metadata；生产侧用 Core.scoring(all_missing_spec_value=metadata值) 即可对齐",
-              "special_score_values": "特殊分数（如 [-1]）独立成评估箱：不参与分位边界，gains 表单独成行，AUC/KS/avgScore 等排序指标基于非特殊行；unweighted/weighted 同口径",
-              "gains_ascending": "0.7.0 默认 true：summary、Gains、weighted Gains 与评估图统一分数升序（bin 1=低分低风险）；显式 false 可保留降序口径",
-              "eval_weight_col": "评估阶段权重列：inherit（默认）=沿用 weight_col；null=评估不加权（训练加权不再隐式影响评估、search/backward 的 eval 权重同步）；其他字符串=显式指定评估权重列"
+              "eval_target_cols": "List of extra evaluation labels; the effective label set = [target_col] + eval_target_cols, de-duplicated. The same model scores are computed only once and reused for all labels; the perf tables are stacked vertically with a new tgt_name column (when not set, the output structure is exactly the same as the old version)",
+              "all_missing_score_value": "Score override value (e.g. -1) for rows where all raw model input features are missing; the criterion is exactly the same as Core.scoring's all_missing_spec_value, and it is written into the model artifact metadata together with the raw feature list used for the criterion; on the production side, Core.scoring(all_missing_spec_value=metadata value) is enough to align",
+              "special_score_values": "Special scores (e.g. [-1]) form their own evaluation bin: they take no part in the quantile boundaries, the gains table gives them a separate row, and ranking metrics such as AUC/KS/avgScore are based on the non-special rows; unweighted/weighted use the same basis",
+              "gains_ascending": "Default true since 0.7.0: summary, Gains, weighted Gains, and evaluation plots uniformly use ascending score order (bin 1 = low score, low risk); an explicit false keeps the descending basis",
+              "eval_weight_col": "Weight column for the evaluation stage: inherit (default) = reuse weight_col; null = unweighted evaluation (training weights no longer implicitly affect evaluation, and the eval weights of search/backward are kept in step); another string = explicitly specify the evaluation weight column"
             },
             "rules": [
-              "所有评估标签必须存在于输入数据与每个 extra_eval_datasets 帧",
-              "all_missing_score_value 与 special_score_values 配套使用时，-1 覆写行自动落入 special 独立箱",
-              "gains_ascending 同时控制表格与 evaluate_performance 分布图方向，避免同一 run 的图表口径漂移"
+              "All evaluation labels must exist in the input data and in every extra_eval_datasets frame",
+              "When all_missing_score_value is used together with special_score_values, rows overridden with -1 automatically fall into the separate special bin",
+              "gains_ascending controls the direction of both the tables and the evaluate_performance distribution plots, avoiding basis drift between the charts of the same run"
             ]
           }
         ]
       },
       {
-        "level1": "逐步回归、Optuna 与解释性",
+        "level1": "Stepwise Regression, Optuna, and Explainability",
         "level2": [
           {
             "name": "Backward",
             "params": {
-              "backward_enabled": "是否运行 backward feature selection",
-              "backward_model": "逐步回归使用的模型，默认 lgb",
-              "backward_params": "逐步回归参数覆盖",
-              "use_backward_features": "最终模型是否使用 backward 选择后的特征"
+              "backward_enabled": "Whether to run backward feature selection",
+              "backward_model": "Model used for stepwise regression, default lgb",
+              "backward_params": "Stepwise regression parameter overrides",
+              "use_backward_features": "Whether the final model uses the features selected by backward"
             },
             "rules": [
-              "backward 默认在 WOE 特征上运行",
-              "GBM raw 模式且 use_backward_features=true 时，会把选出的 _woe 特征映射回原始列"
+              "backward runs on WOE features by default",
+              "In GBM raw mode with use_backward_features=true, the selected _woe features are mapped back to the raw columns"
             ]
           },
           {
             "name": "Optuna",
             "params": {
-              "optuna_models": "需要做 Optuna 的 GBM 模型，默认 lgb/xgb/cat",
-              "optuna_n_trials": "Optuna trial 数",
-              "optuna_params": "Optuna search_spaces/common/fit_kwargs 等覆盖参数"
+              "optuna_models": "GBM models to run Optuna on, default lgb/xgb/cat",
+              "optuna_n_trials": "Number of Optuna trials",
+              "optuna_params": "Override parameters such as Optuna search_spaces/common/fit_kwargs"
             }
           },
           {
-            "name": "解释性",
+            "name": "Explainability",
             "params": {
-              "explain_models": "需要跑 SHAP/LIME/PDP 等解释性的模型列表",
-              "explain_params": "解释性参数，例如 sample_n/background_n/owen_*",
-              "owen_enabled": "是否跑 Owen coalition 解释",
-              "business_prior_groups": "Owen 业务先验分组"
+              "explain_models": "List of models to run explainability such as SHAP/LIME/PDP on",
+              "explain_params": "Explainability parameters, e.g. sample_n/background_n/owen_*",
+              "owen_enabled": "Whether to run the Owen coalition explanation",
+              "business_prior_groups": "Owen business prior groups"
             }
           }
         ]
       },
       {
-        "level1": "性能评估与模型落盘",
+        "level1": "Performance Evaluation and Model Persistence",
         "level2": [
           {
             "name": "PerformanceEvaluator",
             "params": {
-              "perf_pct_bins": "性能评估分箱数",
-              "perf_min_bin_prop": "性能评估最小箱占比"
+              "perf_pct_bins": "Number of bins for performance evaluation",
+              "perf_min_bin_prop": "Minimum bin share for performance evaluation"
             }
           },
           {
-            "name": "模型持久化",
+            "name": "Model Persistence",
             "params": {
-              "save_models": "是否保存模型 pkl 和 WOE artifact",
-              "model_output_dir": "模型输出目录；为空时使用 output_dir/models",
-              "model_include_metadata": "是否保存 metadata envelope",
-              "save_woe_artifacts": "是否保存 WOE table/engine 等 artifact"
+              "save_models": "Whether to save the model pkl and WOE artifacts",
+              "model_output_dir": "Model output directory; when empty, output_dir/models is used",
+              "model_include_metadata": "Whether to save the metadata envelope",
+              "save_woe_artifacts": "Whether to save artifacts such as the WOE table/engine"
             }
           }
         ]
       }
     ]
   },
-  "requirement_note": "必填类别包含运行建模必须确认的数据字段入口；输出路径等虽然有默认值，但保留在原一级类别中。",
+  "requirement_note": "The required category contains the data-field entry points that must be confirmed to run modeling; output paths and the like have defaults, but stay in their original first-level categories.",
   "underlying_method_params": {
     "split_config": {
       "source": "Modeling_Tool.Sample.Sample_Split.SampleSplitter",
       "constructor": {
         "test_size": {
           "default": 0.3,
-          "meaning": "测试/OOS 样本比例"
+          "meaning": "Test/OOS sample share"
         },
         "random_state": {
           "default": null,
-          "meaning": "随机种子"
+          "meaning": "Random seed"
         },
         "stratify": {
           "default": true,
-          "meaning": "是否按 target 分层抽样"
+          "meaning": "Whether to sample stratified by target"
         }
       },
       "methods": {
         "split_df": {
           "target": {
             "required": true,
-            "meaning": "分层目标字段"
+            "meaning": "Stratification target field"
           },
           "exclude_cols": {
             "default": null,
-            "meaning": "不参与切分策略的列，不会从输出 DataFrame 删除"
+            "meaning": "Columns that take no part in the split strategy; they are not removed from the output DataFrame"
           },
           "test_size": {
             "default": null,
-            "meaning": "覆盖 constructor test_size"
+            "meaning": "Overrides the constructor test_size"
           }
         }
       }
@@ -386,7 +386,7 @@
         },
         "corr_block_size": {
           "default": 256,
-          "meaning": "加权 pairwise Pearson 每个矩阵块包含的特征列数"
+          "meaning": "Number of feature columns in each matrix block of the weighted pairwise Pearson"
         },
         "on_empty_stage": {
           "default": "keep_all_warn",
@@ -437,50 +437,50 @@
         },
         "remove_exist_dir": {
           "default": false,
-          "meaning": "初始化时是否删除已有图目录"
+          "meaning": "Whether to delete an existing plot directory at initialization"
         }
       },
       "fit": {
         "nbins": {
           "default": 10,
-          "meaning": "分箱数"
+          "meaning": "Number of bins"
         },
         "equal_freq": {
           "default": true,
-          "meaning": "是否等频"
+          "meaning": "Whether equal-frequency"
         },
         "tree_binning_seed": {
           "default": null,
-          "meaning": "传入整数时启用树分箱并指定随机种子"
+          "meaning": "When an integer is passed, tree binning is enabled and the integer is the random seed"
         },
         "chi2_config": {
           "default": null,
-          "meaning": "卡方分箱配置，通常为 (init_equi_bins, chi2_p)"
+          "meaning": "Chi-square binning configuration, usually (init_equi_bins, chi2_p)"
         },
         "precision": {
           "default": 5,
-          "meaning": "边界/报表精度"
+          "meaning": "Boundary/report precision"
         },
         "min_bin_prop": {
           "default": 0.05,
-          "meaning": "最小箱占比"
+          "meaning": "Minimum bin share"
         },
         "include_missing": {
           "default": true,
-          "meaning": "是否单独包含缺失箱"
+          "meaning": "Whether to include the missing bin separately"
         },
         "fillna": {
           "default": null,
-          "meaning": "缺失填充值；None 时使用 missing_ref_value"
+          "meaning": "Missing fill value; when None, missing_ref_value is used"
         },
         "spec_values": {
           "default": [],
-          "meaning": "特殊值列表"
+          "meaning": "List of special values"
         },
         "sv_min_bin_size": {
           "default": 0.0,
           "allowed": "[0.0, 1.0)",
-          "meaning": "0.8.0 SV 箱占比阈值；prop = n_bin / N_total（分母不加 eps），严格小于该值才触发兜底；0.0 关闭"
+          "meaning": "0.8.0 SV bin share threshold; prop = n_bin / N_total (no eps added to the denominator), and the fallback triggers only when strictly below this value; 0.0 = off"
         },
         "sv_small_policy": {
           "default": "keep",
@@ -489,7 +489,7 @@
             "neutral",
             "merge_missing"
           ],
-          "meaning": "0.8.0 亚阈值 SV 箱兜底：keep=旧行为；neutral=WOE/IV 置 0；merge_missing=计数并入 [Missing] 箱后重算，被合并行存表 WOE 改写为 [Missing] WOE 且 IV 置 0，无 [Missing] 箱时降级 neutral 并 warn"
+          "meaning": "0.8.0 fallback for sub-threshold SV bins: keep = old behavior; neutral = WOE/IV set to 0; merge_missing = counts merged into the [Missing] bin and recomputed, the stored WOE of merged rows is rewritten to the [Missing] WOE with IV set to 0, and when there is no [Missing] bin it degrades to neutral with a warning"
         },
         "sv_woe_smoothing": {
           "default": "none",
@@ -497,12 +497,12 @@
             "none",
             "laplace"
           ],
-          "meaning": "0.8.0 SV 箱 WOE 平滑；laplace 用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 再折回占比，仅作用于 SV 箱，普通箱不动"
+          "meaning": "0.8.0 SV bin WOE smoothing; laplace uses bad-rate shrinkage r=(n_bad+α·p)/(n_bin+α) and then converts back to shares, applying only to SV bins and leaving ordinary bins untouched"
         },
         "sv_smoothing_alpha": {
           "default": 0.0,
           "allowed": ">= 0.0",
-          "meaning": "0.8.0 平滑强度 α；0.0 逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱内样本越少收缩越强"
+          "meaning": "0.8.0 smoothing strength α; 0.0 is bit-for-bit equivalent to the old empirical WOE, and as α→∞ the WOE shrinks monotonically to 0, with stronger shrinkage the fewer samples a bin has"
         }
       }
     },
@@ -511,47 +511,47 @@
       "constructor": {
         "feature_cols": {
           "controlled_by_pipeline": true,
-          "meaning": "数值特征；categorical_features 会从中剔除"
+          "meaning": "Numeric features; categorical_features are removed from them"
         },
         "target_col": {
           "controlled_by_pipeline": true
         },
         "n_init_bins": {
           "default": 20,
-          "meaning": "初始等频箱数"
+          "meaning": "Initial number of equal-frequency bins"
         },
         "min_bin_size": {
           "default": 0.03,
-          "meaning": "每箱最小样本占比"
+          "meaning": "Minimum sample share per bin"
         },
         "min_n_bins": {
           "default": 2,
-          "meaning": "最终普通箱数下限"
+          "meaning": "Lower limit on the final number of ordinary bins"
         },
         "eps": {
           "default": 1e-06,
-          "meaning": "WOE 平滑项，防止 log(0)"
+          "meaning": "WOE smoothing term, to prevent log(0)"
         },
         "missing_woe": {
           "default": 0.0,
-          "meaning": "未作为 special_values 的 NaN 对应 WOE"
+          "meaning": "WOE for NaN not declared as special_values"
         },
         "special_values": {
           "default": null,
-          "meaning": "需要单独成箱的特殊值"
+          "meaning": "Special values that need their own bin"
         },
         "cate_feats": {
           "default": null,
-          "meaning": "类别特征；Pipeline 由 categorical_features 映射"
+          "meaning": "Categorical features; the Pipeline maps them from categorical_features"
         },
         "bin_label_decimals": {
           "default": null,
-          "meaning": "分箱边界展示小数位"
+          "meaning": "Number of decimal places shown for bin boundaries"
         },
         "sv_min_bin_size": {
           "default": 0.0,
           "allowed": "[0.0, 1.0)",
-          "meaning": "0.8.0 SV 箱占比阈值；prop = n_bin / N_total（分母不加 eps），严格小于该值才触发兜底；0.0 关闭"
+          "meaning": "0.8.0 SV bin share threshold; prop = n_bin / N_total (no eps added to the denominator), and the fallback triggers only when strictly below this value; 0.0 = off"
         },
         "sv_small_policy": {
           "default": "keep",
@@ -560,7 +560,7 @@
             "neutral",
             "merge_missing"
           ],
-          "meaning": "0.8.0 亚阈值 SV 箱兜底：keep=旧行为；neutral=WOE/IV 置 0；merge_missing=计数并入 [Missing] 箱后重算，被合并行存表 WOE 改写为 [Missing] WOE 且 IV 置 0，无 [Missing] 箱时降级 neutral 并 warn。处置结果见结果表 sv_policy_applied 列"
+          "meaning": "0.8.0 fallback for sub-threshold SV bins: keep = old behavior; neutral = WOE/IV set to 0; merge_missing = counts merged into the [Missing] bin and recomputed, the stored WOE of merged rows is rewritten to the [Missing] WOE with IV set to 0, and when there is no [Missing] bin it degrades to neutral with a warning. See the sv_policy_applied column of the result table for the treatment result"
         },
         "sv_woe_smoothing": {
           "default": "none",
@@ -568,124 +568,124 @@
             "none",
             "laplace"
           ],
-          "meaning": "0.8.0 SV 箱 WOE 平滑；laplace 用坏率收缩 r=(n_bad+α·p)/(n_bin+α) 再折回占比，仅作用于 SV 箱，普通箱不动"
+          "meaning": "0.8.0 SV bin WOE smoothing; laplace uses bad-rate shrinkage r=(n_bad+α·p)/(n_bin+α) and then converts back to shares, applying only to SV bins and leaving ordinary bins untouched"
         },
         "sv_smoothing_alpha": {
           "default": 0.0,
           "allowed": ">= 0.0",
-          "meaning": "0.8.0 平滑强度 α；0.0 逐位等价旧经验 WOE，α→∞ 时 WOE 单调收缩到 0，箱内样本越少收缩越强"
+          "meaning": "0.8.0 smoothing strength α; 0.0 is bit-for-bit equivalent to the old empirical WOE, and as α→∞ the WOE shrinks monotonically to 0, with stronger shrinkage the fewer samples a bin has"
         }
       },
       "fit": {
         "chi2_binning": {
           "default": false,
-          "meaning": "贪婪单调分箱后是否再做卡方合并"
+          "meaning": "Whether to do a chi-square merge after the greedy monotone binning"
         },
         "chi2_p": {
           "default": 0.99,
-          "meaning": "卡方检验置信度阈值"
+          "meaning": "Confidence threshold for the chi-square test"
         },
         "chi2_init_size": {
           "default": 1000,
-          "meaning": "卡方计算时分层抽样上限"
+          "meaning": "Upper limit of stratified sampling in the chi-square computation"
         },
         "n_jobs": {
           "default": 1,
-          "meaning": "并行数；-1 表示所有可用 CPU"
+          "meaning": "Parallelism; -1 means all available CPUs"
         }
       },
       "refine_cate": {
         "features": {
           "default": null,
-          "pipeline_default": "categorical_features 中存在于 fit_features 的列",
-          "meaning": "要聚类的类别特征"
+          "pipeline_default": "Columns of categorical_features that exist in fit_features",
+          "meaning": "Categorical features to cluster"
         },
         "max_bins": {
           "default": 5,
-          "meaning": "类别聚类后的最大箱数"
+          "meaning": "Maximum number of bins after categorical clustering"
         },
         "min_bin_size": {
           "default": 0.0,
-          "meaning": "低于该样本占比的小箱会优先合并"
+          "meaning": "Small bins below this sample share are merged first"
         },
         "badrate_tol": {
           "default": null,
-          "meaning": "相邻类别坏账率差阈值；None 表示不启用"
+          "meaning": "Threshold on the bad-rate difference between adjacent categories; None means not enabled"
         }
       },
       "refine_dtree": {
         "df": {
           "controlled_by_pipeline": true,
-          "meaning": "WOE fit 使用的训练数据"
+          "meaning": "Training data used for the WOE fit"
         },
         "features": {
           "default": null,
-          "pipeline_default": "数值特征列表",
-          "meaning": "要重分箱的数值特征"
+          "pipeline_default": "List of numeric features",
+          "meaning": "Numeric features to re-bin"
         },
         "max_bins": {
           "default": 6,
-          "meaning": "决策树最大叶子数，即分箱上限"
+          "meaning": "Maximum number of decision-tree leaves, i.e. the bin upper limit"
         },
         "min_samples_leaf": {
           "default": 0.05,
-          "meaning": "叶子最小样本占比或绝对样本量"
+          "meaning": "Minimum leaf sample share or absolute sample count"
         },
         "monotone": {
           "default": true,
-          "meaning": "树分箱后是否强制 WOE 单调"
+          "meaning": "Whether to force WOE monotonicity after tree binning"
         },
         "n_jobs": {
           "default": 1,
-          "meaning": "并行进程数；-1 表示所有可用 CPU"
+          "meaning": "Number of parallel processes; -1 means all available CPUs"
         }
       },
       "refine_chi2": {
         "df": {
           "controlled_by_pipeline": true,
-          "meaning": "WOE fit 使用的训练数据"
+          "meaning": "Training data used for the WOE fit"
         },
         "features": {
           "default": null,
-          "pipeline_default": "数值特征列表",
-          "meaning": "要做卡方后合并的数值特征"
+          "pipeline_default": "List of numeric features",
+          "meaning": "Numeric features to run the post-chi-square merge on"
         },
         "chi2_p": {
           "default": 0.99,
-          "meaning": "卡方检验置信度阈值"
+          "meaning": "Confidence threshold for the chi-square test"
         },
         "chi2_init_size": {
           "default": 1000,
-          "meaning": "卡方计算时分层抽样上限"
+          "meaning": "Upper limit of stratified sampling in the chi-square computation"
         },
         "n_jobs": {
           "default": 1,
-          "meaning": "并行数；-1 表示所有可用 CPU"
+          "meaning": "Parallelism; -1 means all available CPUs"
         }
       },
-      "pipeline_note": "CreditModelPipeline 当前把 monotone_woe_params 直接传给 MonotoneWOEBinner 构造器，并仅显式读取 chi2_binning 传给 fit；除默认构造器参数外的 fit-only key 需谨慎。fit-only pop 名单为 {chi2_binning, chi2_p, chi2_init_size, n_jobs}，四个 sv_* 属于构造器参数、不在该名单内，因此会正确进入 __init__；切勿把 sv_* 加进 fit-only 名单，否则会抛 TypeError。"
+      "pipeline_note": "CreditModelPipeline currently passes monotone_woe_params directly to the MonotoneWOEBinner constructor, and explicitly reads only chi2_binning to pass to fit; fit-only keys other than the default constructor parameters need care. The fit-only pop list is {chi2_binning, chi2_p, chi2_init_size, n_jobs}; the four sv_* keys are constructor parameters and are not on that list, so they correctly enter __init__; never add sv_* to the fit-only list, otherwise a TypeError will be raised."
     },
     "model_params": {
       "passes_to": "Modeling_Tool.Model.GBM_Tool.GradientBoostingModel / LRMaster",
       "accepted_params": {
         "lr": {
           "passes_to": "LRMaster(params=...)",
-          "library": "sklearn.linear_model.LogisticRegression 参数，例如 C/penalty/solver/max_iter/class_weight"
+          "library": "sklearn.linear_model.LogisticRegression parameters, e.g. C/penalty/solver/max_iter/class_weight"
         },
         "lgb": {
-          "passes_to": "lightgbm.LGBMClassifier 参数，例如 n_estimators/learning_rate/num_leaves/max_depth/subsample/colsample_bytree/reg_alpha/reg_lambda/n_jobs/early_stopping_rounds/eval_metric"
+          "passes_to": "lightgbm.LGBMClassifier parameters, e.g. n_estimators/learning_rate/num_leaves/max_depth/subsample/colsample_bytree/reg_alpha/reg_lambda/n_jobs/early_stopping_rounds/eval_metric"
         },
         "xgb": {
-          "passes_to": "xgboost.XGBClassifier 参数，例如 n_estimators/learning_rate/max_depth/min_child_weight/subsample/colsample_bytree/reg_alpha/reg_lambda/n_jobs/eval_metric"
+          "passes_to": "xgboost.XGBClassifier parameters, e.g. n_estimators/learning_rate/max_depth/min_child_weight/subsample/colsample_bytree/reg_alpha/reg_lambda/n_jobs/eval_metric"
         },
         "cat": {
-          "passes_to": "catboost.CatBoostClassifier 参数，例如 iterations/learning_rate/depth/l2_leaf_reg/random_seed/eval_metric/allow_writing_files/train_dir"
+          "passes_to": "catboost.CatBoostClassifier parameters, e.g. iterations/learning_rate/depth/l2_leaf_reg/random_seed/eval_metric/allow_writing_files/train_dir"
         }
       }
     },
     "lr_search_params": {
       "passes_to": "LRMaster.grid_search_params",
-      "validation": "仅接受 objective/primary_set/gap_ref_sets/metric/refit/verbose；这是 holdout 搜索，不接受 cv",
+      "validation": "Accepts only objective/primary_set/gap_ref_sets/metric/refit/verbose; this is a holdout search and does not accept cv",
       "accepted_params": {
         "objective": {
           "default": "oot_gap_penalized",
@@ -716,19 +716,19 @@
           "default": false
         },
         "weight_col": {
-          "default": "顶层 weight_col"
+          "default": "Top-level weight_col"
         },
         "eval_weight_col": {
-          "default": "顶层 weight_col"
+          "default": "Top-level weight_col"
         }
       },
-      "param_grid": "lr_search_param_grid 传入 LRMaster.grid_search_params(param_grid=...)"
+      "param_grid": "lr_search_param_grid is passed to LRMaster.grid_search_params(param_grid=...)"
     },
     "optuna_params": {
       "passes_to": "GradientBoostingModel.param_search",
       "accepted_params": {
         "search_spaces": {
-          "default": "Pipeline 内置 lgb/xgb/cat search space"
+          "default": "The Pipeline's built-in lgb/xgb/cat search space"
         },
         "common": {
           "engine": {
@@ -758,12 +758,12 @@
             "default": false
           },
           "random_state": {
-            "default": "顶层 random_state"
+            "default": "Top-level random_state"
           }
         },
         "fit_kwargs": {
           "default": {},
-          "meaning": "透传给 GBM fit；warm_start_apply_to_optuna=true 时会注入 init_score"
+          "meaning": "Passed through to the GBM fit; when warm_start_apply_to_optuna=true, init_score is injected"
         }
       }
     },
@@ -775,7 +775,7 @@
         },
         "varreduct_params": {
           "default": null,
-          "meaning": "底层 lgb/xgb 参数"
+          "meaning": "Underlying lgb/xgb parameters"
         },
         "stopping_metric": {
           "default": "auc"
@@ -811,11 +811,11 @@
       "accepted_params": {
         "sample_n": {
           "default": 500,
-          "meaning": "解释性评估样本数"
+          "meaning": "Number of samples for the explainability evaluation"
         },
         "background_n": {
           "default": 200,
-          "meaning": "SHAP background 样本数"
+          "meaning": "Number of SHAP background samples"
         },
         "owen_threshold": {
           "default": 0.35

@@ -1,10 +1,10 @@
-# 模型注册与版本管理
+# Model Registry and Versioning
 
-`save_model(...)` / `load_model(...)` 支持保存带 metadata 的 SMF model artifact，用于记录模型版本、特征列表、WOE 映射表路径、训练样本时间窗以及 AUC / KS 等上线所需信息。
+`save_model(...)` / `load_model(...)` can save an SMF model artifact together with metadata, recording the information needed for deployment: model version, feature list, WOE mapping table path, training-sample time window, and AUC / KS metrics.
 
-这个功能不是数据库式模型注册中心；它先提供一个**本地标准 artifact schema**，方便后续扩展到目录式 registry、模型发布、回滚和审批流。
+This is not a database-style model registry; it first provides a **standard local artifact schema**, to make later extension toward a directory-based registry, model release, rollback, and approval workflows straightforward.
 
-## 1. 保存带 metadata 的模型
+## 1. Save a Model with Metadata
 
 ```python
 from Modeling_Tool import save_model
@@ -33,15 +33,15 @@ save_model(
 )
 ```
 
-默认 `include_metadata=True`，因此保存的是 SMF artifact envelope，而不是裸模型对象。
+`include_metadata=True` is the default, so what gets saved is the SMF artifact envelope, not a bare model object.
 
-!!! tip "推荐字段"
+!!! tip "Recommended fields"
 
-    生产模型建议至少保存：`model_name`、`model_version`、`feature_cols`、`woe_mapping_path`、`train_window`、`metrics`。
+    For production models, save at least: `model_name`, `model_version`, `feature_cols`, `woe_mapping_path`, `train_window`, `metrics`.
 
-## 2. 默认加载仍返回模型对象
+## 2. Loading Still Returns the Model Object by Default
 
-为了兼容旧代码，`load_model(path)` 默认只返回模型本体：
+For compatibility with old code, `load_model(path)` returns only the model itself by default:
 
 ```python
 from Modeling_Tool import load_model
@@ -50,7 +50,7 @@ model = load_model("./models/credit_risk_lgb_v20260627.pkl")
 proba = model.predict_proba(score_df[woe_features])[:, 1]
 ```
 
-如果需要 metadata：
+If you need the metadata:
 
 ```python
 model, metadata = load_model(
@@ -62,7 +62,7 @@ print(metadata["model_version"])
 print(metadata["metrics"]["oot"])
 ```
 
-## 3. 只读取 metadata
+## 3. Read Only the Metadata
 
 ```python
 from Modeling_Tool import load_model_metadata
@@ -71,11 +71,11 @@ metadata = load_model_metadata("./models/credit_risk_lgb_v20260627.pkl")
 print(metadata["feature_cols"])
 ```
 
-旧格式裸模型文件没有 metadata，`load_model_metadata(...)` 会返回空 dict `{}`。
+Old-format bare model files have no metadata, so `load_model_metadata(...)` returns an empty dict `{}`.
 
-## 4. Artifact 结构
+## 4. Artifact Structure
 
-SMF artifact 的内部结构如下：
+The internal structure of an SMF artifact is as follows:
 
 ```python
 {
@@ -104,11 +104,11 @@ SMF artifact 的内部结构如下：
 }
 ```
 
-`metadata=...` 中传入的自定义字段会覆盖或补充自动生成字段。
+Custom fields passed through `metadata=...` override or supplement the automatically generated fields.
 
-## 5. 兼容旧模型
+## 5. Compatibility with Old Models
 
-旧文件如果是直接 `joblib.dump(model, path)` 保存的裸模型：
+If an old file is a bare model saved directly with `joblib.dump(model, path)`:
 
 ```python
 model = load_model("./models/legacy_model.pkl")
@@ -116,17 +116,17 @@ model, metadata = load_model("./models/legacy_model.pkl", return_metadata=True)
 assert metadata == {}
 ```
 
-如果确实需要继续保存裸模型：
+If you really need to keep saving bare models:
 
 ```python
 save_model(model, "./models/raw_model.pkl", include_metadata=False)
 ```
 
-!!! warning "joblib.load 与 load_model 的区别"
+!!! warning "Difference between joblib.load and load_model"
 
-    新 artifact 文件用 `joblib.load(path)` 直接读取时会得到一个 dict envelope；推荐生产代码统一使用 `load_model(path)`，它会自动识别新旧格式并默认返回模型对象。
+    Reading a new artifact file directly with `joblib.load(path)` gives you a dict envelope; production code should consistently use `load_model(path)`, which recognizes both the new and old formats automatically and returns the model object by default.
 
-## 6. 建议的模型目录结构
+## 6. Suggested Model Directory Layout
 
 ```text
 models/
@@ -136,4 +136,4 @@ models/
     └── README.md
 ```
 
-当前版本只负责 artifact 标准化；如果需要更完整的模型注册中心，可在此 schema 基础上继续扩展 `ModelRegistry`、模型卡、审批状态和回滚指针。
+The current version only standardizes the artifact; if you need a fuller model registry, you can extend this schema with a `ModelRegistry`, model cards, approval status, and rollback pointers.

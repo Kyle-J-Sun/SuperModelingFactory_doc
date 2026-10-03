@@ -1,19 +1,19 @@
 # ExcelMaster
 
-通用 Excel 报告引擎 —— 封装 xlsxwriter，提供**光标流式写入 + 图表 + 条件格式**。
+General-purpose Excel reporting engine — wraps xlsxwriter and provides **cursor-based streaming writes + charts + conditional formatting**.
 
-## 格式定义 — `ExcelFormatTool`
+## Format Definitions — `ExcelFormatTool`
 
 ::: ExcelMaster.ExcelFormatTool
 
-## 核心引擎 — `ExcelMaster`
+## Core Engine — `ExcelMaster`
 
 ::: ExcelMaster.ExcelMaster
 
-## 报告模板 — `Template`
+## Report Templates — `Template`
 
 ::: ExcelMaster.Template
 
-## 工具函数 — `Utility`
+## Utility Functions — `Utility`
 
 ::: ExcelMaster.Utility

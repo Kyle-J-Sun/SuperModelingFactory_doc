@@ -1,21 +1,21 @@
-# 快速上手
+# Quickstart
 
-5 分钟跑通一条完整的评分卡训练流水线。本节使用 **合成数据** 演示，不依赖任何外部数据源。
+Run a complete scorecard training pipeline in 5 minutes. This section uses **synthetic data** and does not depend on any external data source.
 
-## 0. 准备
+## 0. Setup
 
 ```bash
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-# 假设当前在 SuperModelingFactory 仓库根目录
+# Assumes the current directory is the SuperModelingFactory repository root
 ```
 
-如果要运行模型解释示例，请安装可选解释依赖：
+To run the model explainability example, install the optional explainability dependencies:
 
 ```bash
 pip install 'supermodelingfactory[explain]'
 ```
 
-## 1. 造一份合成样本
+## 1. Create a Synthetic Sample
 
 ```python
 import numpy as np
@@ -33,16 +33,16 @@ data = pd.DataFrame({
     "n_overdue":  rng.poisson(0.3, n),
 })
 
-# 合成一个与特征相关的坏样本率
+# Synthesize a bad rate that is correlated with the features
 logit = -6 + 0.02 * (data["score_b"] - 600) + 0.001 * (data["income"] - data["income"].mean())
 prob = 1 / (1 + np.exp(-logit))
 data["bad_flag"] = rng.binomial(1, prob)
 
 print(data.head())
-print("坏样本率：", data["bad_flag"].mean())
+print("Bad rate:", data["bad_flag"].mean())
 ```
 
-## 2. 样本切分
+## 2. Sample Splitting
 
 ```python
 from Modeling_Tool import SampleSplitter
@@ -53,7 +53,7 @@ train_df, test_df = splitter.split_df(data, target="bad_flag")
 print(f"train={len(train_df)}  test={len(test_df)}")
 ```
 
-## 3. WOE 编码
+## 3. WOE Encoding
 
 ```python
 from Modeling_Tool import WOE_Master
@@ -67,7 +67,7 @@ test_woe  = woe.transform(test_df)
 print(train_woe[[f"{f}_woe" for f in features]].head())
 ```
 
-## 4. 训练逻辑回归
+## 4. Train a Logistic Regression
 
 ```python
 from Modeling_Tool import LRMaster
@@ -75,14 +75,14 @@ from Modeling_Tool import LRMaster
 woe_features = [f"{f}_woe" for f in features]
 
 lr = LRMaster(params={"C": 1.0, "max_iter": 1000, "solver": "lbfgs"})
-# fit 接收 (data, varlist, tgt_name)
+# fit takes (data, varlist, tgt_name)
 lr.fit(train_woe, woe_features, "bad_flag")
 
 coef = lr.get_statsmodel_summary()
 print(coef)
 ```
 
-## 5. 训练 LightGBM
+## 5. Train LightGBM
 
 ```python
 from Modeling_Tool import GradientBoostingModel
@@ -103,12 +103,12 @@ gbm.fit(
 )
 ```
 
-!!! tip "也可以一行切换到 XGBoost / CatBoost"
+!!! tip "Switch to XGBoost / CatBoost in one line"
 
-    `GradientBoostingModel` 是统一接口，把 `"lgb"` 换成 `"xgb"` 或 `"cat"` 即可在不改其余代码的
-    情况下训练 XGBoost / CatBoost，例如 `GradientBoostingModel("cat", {"n_estimators": 200})`。
+    `GradientBoostingModel` is a unified interface. Replace `"lgb"` with `"xgb"` or `"cat"` to train
+    XGBoost / CatBoost without changing any other code, for example `GradientBoostingModel("cat", {"n_estimators": 200})`.
 
-## 6. 模型评估
+## 6. Model Evaluation
 
 ```python
 from Modeling_Tool import PerformanceEvaluator
@@ -124,14 +124,15 @@ perf = evaluator.evaluate()
 print(perf[["index", "KS", "AUC", "Top10%_TargetRate"]])
 ```
 
-!!! tip "样本带权重？"
+!!! tip "Weighted samples?"
 
-    若 DataFrame 含 `sample_wgt` 等权重列，在 `fit` / `PerformanceEvaluator` / `GainsTableCalculator`
-    等处传入 `weight_col="sample_wgt"` 即可；训练与评估请使用同一列名。详见
-    [模型训练 — 样本权重](guides/model.md#样本权重) 与
-    [模型评估 — 样本权重评估](guides/eval.md#样本权重评估)。
+    If the DataFrame contains a weight column such as `sample_wgt`, pass `weight_col="sample_wgt"` to
+    `fit` / `PerformanceEvaluator` / `GainsTableCalculator` and similar entry points; use the same column
+    name for training and evaluation. See
+    [Model Training — Sample Weights](guides/model.md#sample-weights) and
+    [Model Evaluation — Sample-Weighted Evaluation](guides/eval.md#sample-weighted-evaluation).
 
-## 7. 模型解释
+## 7. Model Explainability
 
 ```python
 from Modeling_Tool import ModelExplainer
@@ -177,7 +178,7 @@ print(lime_local.head(10))
 print(lime_global.head(10))
 ```
 
-## 8. 生成 Excel 报告
+## 8. Generate the Excel Report
 
 ```python
 from ExcelMaster.ExcelMaster import ExcelMaster
@@ -185,22 +186,22 @@ from ExcelMaster.ExcelMaster import ExcelMaster
 em = ExcelMaster("model_report.xlsx", verbose=False)
 ws = em.add_worksheet("Performance")
 
-em.merge_col(ws, ncols=5, text="LightGBM 模型性能汇总")
+em.merge_col(ws, ncols=5, text="LightGBM Model Performance Summary")
 em.write_dataframe(
     ws, perf,
-    title="性能指标",
+    title="Performance Metrics",
     titleformat="BLUE_H2",
     headerformat="ORANGE_H4",
     valueformat="NUM%.4",
 )
 em.close_workbook()
 
-print("已生成 model_report.xlsx")
+print("Generated model_report.xlsx")
 ```
 
-## 完整脚本
+## Complete Script
 
-将以上片段合并：
+Combining the snippets above:
 
 ```python
 import numpy as np
@@ -211,7 +212,7 @@ from Modeling_Tool import (
 )
 from ExcelMaster.ExcelMaster import ExcelMaster
 
-# 1) 数据
+# 1) Data
 rng = np.random.default_rng(42)
 n = 5000
 data = pd.DataFrame({
@@ -227,7 +228,7 @@ data["bad_flag"] = rng.binomial(1, 1 / (1 + np.exp(-logit)))
 
 features = ["age", "income", "score_b", "city_grade", "n_overdue"]
 
-# 2) 切分
+# 2) Split
 train_df, test_df = SampleSplitter(test_size=0.3, random_state=42, stratify=True) \
                      .split_df(data, target="bad_flag")
 
@@ -242,14 +243,14 @@ gbm = GradientBoostingModel("lgb", {"n_estimators": 200, "learning_rate": 0.05})
 gbm.fit(train_woe[woe_features], train_woe["bad_flag"],
         test_woe[woe_features],  test_woe["bad_flag"])
 
-# 5) 评估
+# 5) Evaluate
 perf = PerformanceEvaluator(
     tgt_name="bad_flag",
     model=gbm._model.model,
     feature_cols=woe_features,
 ).add_dataset("train", train_woe).add_dataset("test", test_woe).evaluate()
 
-# 6) 解释
+# 6) Explain
 explain_x = test_woe[woe_features]
 background_x = train_woe[woe_features].sample(n=min(1000, len(train_woe)), random_state=42)
 focus_feature = woe_features[0]
@@ -263,19 +264,19 @@ ale_curve = explainer.ale(explain_x, focus_feature, bins=20)
 lime_local = explainer.lime_explain_instance(explain_x.iloc[0], X_train=background_x, num_features=10)
 lime_global = explainer.lime_global_importance(explain_x, X_train=background_x, sample_size=50)
 
-# 7) 报告
+# 7) Report
 em = ExcelMaster("model_report.xlsx", verbose=False)
 ws = em.add_worksheet("Performance")
-em.write_dataframe(ws, perf, title="模型性能",
+em.write_dataframe(ws, perf, title="Model Performance",
                    titleformat="BLUE_H2",
                    headerformat="ORANGE_H4",
                    valueformat="NUM%.4")
 em.close_workbook()
 ```
 
-## 下一步
+## Next Steps
 
-- 想了解每一步的更多选项，请阅读 [端到端流水线](pipeline.md)
-- 想深入模型解释方法，请阅读 [模型解释](guides/explainability.md)
-- 想看所有公开 API 的详细说明，请跳转到 [API 参考](api/index.md)
-- 想直接生成可直接部署的脚本，请参考各 [用户指南](guides/index.md) 中的代码片段
+- For more options at each step, read [End-to-End Pipelines](pipeline.md)
+- For a deeper look at explainability methods, read [Model Explainability](guides/explainability.md)
+- For detailed descriptions of every public API, go to the [API Reference](api/index.md)
+- To build deployable scripts, see the code snippets in each [User Guide](guides/index.md)

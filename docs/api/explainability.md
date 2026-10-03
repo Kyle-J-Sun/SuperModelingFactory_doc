@@ -1,14 +1,14 @@
 # Modeling_Tool.Explainability
 
-模型解释层 — 基于 [SHAP](https://shap.readthedocs.io/) 的统一解释器，支持 LightGBM / XGBoost / 逻辑回归，以及任意带 `predict_proba` 的估计器。
+Model explainability layer — a unified explainer built on [SHAP](https://shap.readthedocs.io/), supporting LightGBM / XGBoost / logistic regression, and any estimator with `predict_proba`.
 
-!!! note "可选依赖"
-    本模块依赖 `shap`，采用**懒加载**（只有真正计算解释时才导入），因此 `import Modeling_Tool` 不会拉起 shap。安装：
+!!! note "Optional dependency"
+    This module depends on `shap` and uses **lazy loading** (it is imported only when an explanation is actually computed), so `import Modeling_Tool` does not pull in shap. Install it with:
 
     ```bash
     pip install 'supermodelingfactory[explain]'
     ```
 
-## 模型解释器 — `Model_Explainer`
+## Model Explainer — `Model_Explainer`
 
 ::: Modeling_Tool.Explainability.Model_Explainer

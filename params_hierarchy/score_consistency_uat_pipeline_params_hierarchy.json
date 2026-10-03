@@ -4,29 +4,29 @@
   "hierarchy": {
     "required": [
       {
-        "level1": "数据来源",
+        "level1": "Data Source",
         "level2": [
           {
-            "name": "SQL 模式",
+            "name": "SQL Mode",
             "params": {
-              "sql_dir": "SQL 文件目录",
-              "offline_sql": "离线数据 SQL 文件名",
-              "online_sql": "线上数据 SQL 文件名",
-              "sqlrunner": "自定义 SQLRunner；为空时默认创建 ODPSRunner",
-              "env_path": "可选 .env 路径；提供时加载环境变量",
-              "n_process": "SQL/检查并行数；auto/null 表示 CPU 核数减一"
+              "sql_dir": "SQL file directory",
+              "offline_sql": "Offline data SQL file name",
+              "online_sql": "Online data SQL file name",
+              "sqlrunner": "Custom SQLRunner; when empty, an ODPSRunner is created by default",
+              "env_path": "Optional .env path; environment variables are loaded when provided",
+              "n_process": "SQL/check concurrency; auto/null means the CPU core count minus one"
             }
           },
           {
-            "name": "DataFrame 模式",
+            "name": "DataFrame Mode",
             "params": {
-              "offline_data": "离线 DataFrame，可通过 config 或 run() 传入",
-              "online_data": "线上 DataFrame，可通过 config 或 run() 传入"
+              "offline_data": "Offline DataFrame, which can be passed through config or run()",
+              "online_data": "Online DataFrame, which can be passed through config or run()"
             },
             "rules": [
-              "只要 offline_data 或 online_data 任一存在，即进入 DataFrame 模式",
-              "DataFrame 模式必须同时提供 offline_data 和 online_data",
-              "offline_data/online_data 都必须包含 flow_id"
+              "DataFrame mode is entered as soon as either offline_data or online_data exists",
+              "DataFrame mode must provide both offline_data and online_data",
+              "Both offline_data/online_data must contain flow_id"
             ]
           }
         ]
@@ -34,80 +34,80 @@
     ],
     "optional": [
       {
-        "level1": "基础运行与输出",
+        "level1": "Basic Run and Output",
         "level2": [
           {
-            "name": "输出控制",
+            "name": "Output Control",
             "params": {
-              "output_dir": "输出目录，默认 output/score_consistency_uat",
-              "random_state": "随机种子，当前主要保留为配置一致性",
-              "write_outputs": "是否输出 CSV 明细",
-              "write_excel": "是否调用 checker.export_excel 输出 Excel"
+              "output_dir": "Output directory, default output/score_consistency_uat",
+              "random_state": "Random seed, currently kept mainly for configuration consistency",
+              "write_outputs": "Whether to output CSV details",
+              "write_excel": "Whether to call checker.export_excel to output Excel"
             }
           }
         ]
       },
       {
-        "level1": "一致性校验规则",
+        "level1": "Consistency Check Rules",
         "level2": [
           {
-            "name": "主模型分",
+            "name": "Main Model Score",
             "params": {
-              "main_model_score_col": "主模型分字段",
-              "tol_score": "主模型分容忍误差"
+              "main_model_score_col": "Main model score field",
+              "tol_score": "Main model score tolerance"
             }
           },
           {
-            "name": "特征与时间字段",
+            "name": "Features and Time Fields",
             "params": {
-              "tol_feat": "普通特征数值容忍误差",
-              "time_featlist": "时间字段列表",
-              "tol_time_seconds": "时间字段秒级容忍误差",
-              "comparison_block_size": "宽表逐 flow 一致性比较的特征列块大小，默认 128"
+              "tol_feat": "Tolerance for ordinary numeric features",
+              "time_featlist": "List of time fields",
+              "tol_time_seconds": "Second-level tolerance for time fields",
+              "comparison_block_size": "Feature-column block size for the wide-table per-flow consistency comparison, default 128"
             }
           },
           {
-            "name": "子模型",
+            "name": "Sub-Models",
             "params": {
-              "include_submodel_scores": "是否检查子模型分",
-              "submodel_pairs": "子模型 offline/online 字段映射"
+              "include_submodel_scores": "Whether to check sub-model scores",
+              "submodel_pairs": "Sub-model offline/online field mapping"
             }
           }
         ]
       },
       {
-        "level1": "报表配置",
+        "level1": "Report Configuration",
         "level2": [
           {
-            "name": "Excel 输出",
+            "name": "Excel Output",
             "params": {
-              "excel_output_path": "Excel 输出路径；为空时使用 output_dir/report/Score_Consistency_UAT_Report.xlsx",
-              "excel_font": "Excel 字体",
-              "info_list": "per-flow 报告中额外展示的信息列"
+              "excel_output_path": "Excel output path; when empty, output_dir/report/Score_Consistency_UAT_Report.xlsx is used",
+              "excel_font": "Excel font",
+              "info_list": "Extra information columns shown in the per-flow report"
             }
           }
         ]
       },
       {
-        "level1": "对象列数值转换",
+        "level1": "Numeric Conversion of Object Columns",
         "level2": [
           {
             "name": "numeric coercion",
             "params": {
-              "numeric_coercion_mode": "safe/aggressive/off；默认 safe",
-              "numeric_coercion_min_ratio": "safe 模式下对象列转数值的最小可解析比例"
+              "numeric_coercion_mode": "safe/aggressive/off; default safe",
+              "numeric_coercion_min_ratio": "Minimum parsable share for converting an object column to numeric in safe mode"
             },
             "rules": [
-              "safe 模式只有可解析比例达到 numeric_coercion_min_ratio 才转换",
-              "aggressive 模式会强制转换，无法解析的值变 NaN 并记录 warning",
-              "off 模式不做对象列数值转换"
+              "In safe mode, conversion happens only when the parsable share reaches numeric_coercion_min_ratio",
+              "aggressive mode forces conversion, values that cannot be parsed become NaN, and a warning is logged",
+              "off mode does no numeric conversion of object columns"
             ]
           }
         ]
       }
     ]
   },
-  "requirement_note": "必填类别包含 UAT 必须选择的数据来源；SQL 模式和 DataFrame 模式二选一。",
+  "requirement_note": "The required category contains the data source that UAT must choose; pick one of SQL mode and DataFrame mode.",
   "underlying_method_params": {
     "UATConfig": {
       "passes_to": "Modeling_Tool.UAT.UAT_Consistency_Checker.UATConfig",
@@ -157,7 +157,7 @@
         "comparison_block_size": {
           "config_key": "comparison_block_size",
           "default": 128,
-          "meaning": "向量化比较每个列块的字段数"
+          "meaning": "Number of fields in each column block of the vectorized comparison"
         }
       }
     },
@@ -174,7 +174,7 @@
         },
         "numeric_coercion_min_ratio": {
           "default": 0.99,
-          "meaning": "safe 模式下对象列转数值的最低可解析比例"
+          "meaning": "Minimum parsable share for converting an object column to numeric in safe mode"
         }
       }
     }

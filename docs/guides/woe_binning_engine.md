@@ -1,54 +1,54 @@
-# WOE 分箱引擎
+# WOE Binning Engine
 
-从 `0.1.4` 起，特征筛选工具支持复用已拟合的 WOE 分箱引擎。这样 PSI、IV、KS、相关性去冗余与最终建模使用的是同一套分箱，不会再出现“筛选时一套分箱，建模时另一套分箱”的偏差。
+Starting with `0.1.4`, the feature screening tools can reuse an already-fitted WOE binning engine. This way, PSI, IV, KS, correlation de-redundancy, and the final model all use the same binning, so you no longer get the discrepancy of "one binning at screening time, another at modeling time".
 
 ```mermaid
 flowchart TD
-    A[原始特征] --> B{选择分箱引擎}
+    A[Raw features] --> B{Choose binning engine}
     B -->|WOE_Master| C1[fit WOE_Master]
     B -->|MonotoneWOEBinner| C2[fit MonotoneWOEBinner]
-    C1 --> D[PSI / IV / 相关性筛选\n传入 binning_engine 或 woe_binner]
+    C1 --> D[PSI / IV / correlation screening\npass binning_engine or woe_binner]
     C2 --> D
     D --> E[WOE transform]
-    E --> F[模型训练]
-    F --> G[监控 PSI\n复用同一分箱引擎]
+    E --> F[Model training]
+    F --> G[Monitoring PSI\nreuses the same binning engine]
 ```
 
-## 为什么需要统一引擎
+## Why a Unified Engine Is Needed
 
-过去 `PSICalculator`、`VarExtractionInsights`、`CorrelationFilter` 会各自重新分箱或默认使用 `WOE_Master`。如果生产模型实际采用 `MonotoneWOEBinner`，筛选指标就可能和最终 WOE 编码不一致。
+Previously, `PSICalculator`, `VarExtractionInsights`, and `CorrelationFilter` each re-binned independently or defaulted to `WOE_Master`. If the production model actually used `MonotoneWOEBinner`, the screening metrics could disagree with the final WOE encoding.
 
-统一分箱引擎后：
+With a unified binning engine:
 
-- PSI 使用训练期同一套分箱边界比较分布漂移。
-- IV / KS 使用同一套 WOE 分箱计算变量解释力。
-- 相关性去冗余时，保留变量的决策指标与最终建模一致。
-- 默认不传新参数时，旧行为保持不变。
+- PSI compares distribution drift using the same bin boundaries as at training time.
+- IV / KS measure variable explanatory power using the same WOE bins.
+- During correlation de-redundancy, the decision metrics for which variable to keep match the final model.
+- When the new parameters are not passed, the old behavior is unchanged.
 
-## 引擎对比
+## Engine Comparison
 
-| 维度 | `WOE_Master` | `MonotoneWOEBinner` |
+| Dimension | `WOE_Master` | `MonotoneWOEBinner` |
 |------|-------------|---------------------|
-| 适用场景 | 快速探索、通用 WOE 编码 | 评分卡上线、强单调约束 |
-| 单调性 | 依赖分箱结果 | 贪心合并到单调 |
-| 类别特征 | 按既有逻辑自动处理 | `cate_feats` + `refine_cate()` |
-| 持久化产物 | mapping table | `get_final_bins()` |
-| 转换方法 | `transform()` | `apply_woe()` |
-| 统一入口 | `as_woe_engine(woe)` | `as_woe_engine(binner)` |
+| Use case | Quick exploration, general WOE encoding | Scorecard deployment, strong monotonicity constraint |
+| Monotonicity | Depends on the binning result | Greedily merged until monotone |
+| Categorical features | Handled automatically by existing logic | `cate_feats` + `refine_cate()` |
+| Persisted artifact | mapping table | `get_final_bins()` |
+| Transform method | `transform()` | `apply_woe()` |
+| Unified entry point | `as_woe_engine(woe)` | `as_woe_engine(binner)` |
 
-## 统一适配器
+## Unified Adapter
 
 ```python
 from Modeling_Tool import as_woe_engine
 
-engine = as_woe_engine(binner)   # binner 可以是 WOE_Master 或 MonotoneWOEBinner
+engine = as_woe_engine(binner)   # binner can be a WOE_Master or a MonotoneWOEBinner
 woe_table = engine.get_woe_table(features)
 train_woe = engine.transform(train_df, features)
 ```
 
-大多数用户不需要直接操作 adapter，只需要把已拟合对象传给筛选工具。
+Most users do not need to operate the adapter directly; just pass the fitted object to the screening tools.
 
-## Monotone 路径示例
+## Monotone Path Example
 
 ```python
 from Modeling_Tool import PSICalculator, VarExtractionInsights, CorrelationFilter
@@ -65,12 +65,12 @@ binner = MonotoneWOEBinner(
 )
 binner.fit(train_df, chi2_binning=True, chi2_p=0.95)
 
-# 1) PSI：复用 Monotone 分箱
+# 1) PSI: reuse the Monotone binning
 psi = PSICalculator(buckets=10, binning_engine=binner)
 psi_table = psi.calculate(train_df, oot_df, features)
 stable_features = psi_table.loc[psi_table["psi"] < 0.1, "var"].tolist()
 
-# 2) IV / KS：复用同一 binner
+# 2) IV / KS: reuse the same binner
 insights = VarExtractionInsights(
     data=train_df,
     dep="bad_flag",
@@ -81,7 +81,7 @@ insights = VarExtractionInsights(
 iv_report = insights.get_var_analysis_report(train_df, stable_features)
 keep_by_iv = iv_report.loc[iv_report["iv"].between(0.02, 0.5), "var"].tolist()
 
-# 3) 相关性：高相关变量保留谁，也用同一套 IV/KS 指标
+# 3) Correlation: which of two highly correlated variables to keep is also decided with the same IV/KS metrics
 keep_vars = CorrelationFilter(
     data=train_df,
     dep="bad_flag",
@@ -90,12 +90,12 @@ keep_vars = CorrelationFilter(
     woe_binner=binner,
 ).remove_highly_correlated(keep_by_iv)
 
-# 4) 建模转换
+# 4) Modeling transform
 train_woe = binner.apply_woe(train_df)
 oot_woe = binner.apply_woe(oot_df)
 ```
 
-超宽表或单变量分析可通过 `varlist` 限制转换范围，避免每次重复转换全部已拟合变量：
+For very wide tables or single-variable analysis, you can limit the transform scope through `varlist`, avoiding repeated transformation of all fitted variables each time:
 
 ```python
 age_income_woe = binner.apply_woe(train_df, varlist=["age", "income"])
@@ -106,7 +106,7 @@ bins = as_woe_engine(binner).assign_bins_frame(
 )
 ```
 
-## WOE_Master 路径示例
+## WOE_Master Path Example
 
 ```python
 from Modeling_Tool import WOE_Master, PSICalculator, VarExtractionInsights
@@ -127,16 +127,16 @@ iv_report = insights.get_var_analysis_report(train_df, features)
 train_woe = woe.transform(train_df)
 ```
 
-## 常见问题
+## FAQ
 
-??? question "不传 `binning_engine` 会怎样？"
+??? question "What happens if I don't pass `binning_engine`?"
 
-    行为与旧版本一致：`PSICalculator` 仍按自身配置重新分箱，`VarExtractionInsights` 和 `CorrelationFilter` 仍走原有默认逻辑。
+    Behavior matches the old versions: `PSICalculator` still re-bins according to its own configuration, and `VarExtractionInsights` and `CorrelationFilter` still follow their original default logic.
 
-??? question "为什么 PSI 要复用建模分箱？"
+??? question "Why should PSI reuse the modeling bins?"
 
-    监控 PSI 的目标是检查线上样本相对训练样本在同一套特征映射下是否漂移。如果每次按当前数据重新分箱，PSI 会被分箱变化稀释，无法准确反映部署风险。
+    The goal of monitoring PSI is to check whether online samples drift relative to training samples under the same feature mapping. If you re-bin on the current data each time, the PSI is diluted by the bin changes and cannot accurately reflect deployment risk.
 
-??? question "`CorrelationFilter` 应该传 raw 数据还是 WOE 数据？"
+??? question "Should `CorrelationFilter` receive raw data or WOE data?"
 
-    推荐传 raw 数据，并传入同一个 `woe_binner`。相关性矩阵仍基于输入变量计算，但变量保留决策所需的 IV/KS 会复用该分箱引擎。
+    Raw data is recommended, together with the same `woe_binner`. The correlation matrix is still computed from the input variables, but the IV/KS needed for deciding which variable to keep reuses that binning engine.

@@ -1,34 +1,34 @@
 # SuperModelingFactory
 
-> **面向信用评分卡开发的端到端 Python 建模工具链**
+> **An end-to-end Python modeling toolchain for credit scorecard development**
 
-SuperModelingFactory 整合了信贷风控建模全流程所需的三大能力：
+SuperModelingFactory brings together three capabilities needed across the full credit-risk modeling workflow:
 
-| 子项目 | 功能定位 | 核心能力 |
+| Sub-project | Role | Core capabilities |
 |--------|---------|---------|
-| **[Modeling_Tool](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/Modeling_Tool)** | 建模引擎 | 数据分箱、WOE 编码、特征分析、模型训练与评估、样本管理 |
-| **[ExcelMaster](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/ExcelMaster)** | 报告引擎 | 程序化 Excel 工作簿生成，支持图表、条件格式、光标流式写入 |
-| **[Report](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/Report)** | 报告模板 | 模型性能报告、WOE 图批量导出、多模型对比报告 |
+| **[Modeling_Tool](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/Modeling_Tool)** | Modeling engine | Data binning, WOE encoding, feature analysis, model training and evaluation, sample management |
+| **[ExcelMaster](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/ExcelMaster)** | Reporting engine | Programmatic Excel workbook generation with charts, conditional formatting, and cursor-based streaming writes |
+| **[Report](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/Report)** | Report templates | Model performance reports, bulk WOE plot export, multi-model comparison reports |
 
 ---
 
-## 它能帮你做什么
+## What It Helps You Do
 
-!!! tip "典型场景"
+!!! tip "Typical scenarios"
 
-    - 从一张行为评分样本出发，**5 分钟产出评分卡训练样本**
-    - 用 **WOE / IV / PSI** 做特征筛选与稳定性监控
-    - 训练 **逻辑回归 / LightGBM / XGBoost / CatBoost** 模型并自动出 Gains / ROC / KS 报告
-    - 支持**样本权重**训练与评估（`weight_col` / `sample_weight`，按余额/过采样校正等场景）
-    - 处理**拒绝推断**与**分布偏移**问题
-    - 通过 **ExcelMaster** 一键导出格式化的中文建模报告
-    - 用 **UAT 模块**做线上线下分数一致性校验
+    - Start from a behavior-scoring sample and **produce a scorecard training sample in 5 minutes**
+    - Use **WOE / IV / PSI** for feature screening and stability monitoring
+    - Train **Logistic Regression / LightGBM / XGBoost / CatBoost** models and automatically produce Gains / ROC / KS reports
+    - Support **sample-weighted** training and evaluation (`weight_col` / `sample_weight`, for balance weighting, oversampling correction, and similar scenarios)
+    - Handle **reject inference** and **distribution shift**
+    - Export formatted modeling reports in one click with **ExcelMaster**
+    - Check online/offline score consistency with the **UAT module**
 
 ---
 
-## 快速一览
+## Quick Overview
 
-=== "样本切分"
+=== "Sample splitting"
 
     ```python
     from Modeling_Tool import SampleSplitter
@@ -36,7 +36,7 @@ SuperModelingFactory 整合了信贷风控建模全流程所需的三大能力�
     train_df, test_df = splitter.split_df(data, target='bad_flag')
     ```
 
-=== "WOE 编码"
+=== "WOE encoding"
 
     ```python
     from Modeling_Tool import WOE_Master
@@ -46,7 +46,7 @@ SuperModelingFactory 整合了信贷风控建模全流程所需的三大能力�
     test_woe  = woe.transform(test_df)
     ```
 
-=== "模型训练"
+=== "Model training"
 
     ```python
     from Modeling_Tool import GradientBoostingModel
@@ -55,68 +55,68 @@ SuperModelingFactory 整合了信贷风控建模全流程所需的三大能力�
               test_woe[features],  test_woe['bad_flag'])
     ```
 
-=== "Excel 报告"
+=== "Excel report"
 
     ```python
     from ExcelMaster.ExcelMaster import ExcelMaster
     em = ExcelMaster('model_report.xlsx', verbose=False)
     ws = em.add_worksheet('Performance')
-    em.write_dataframe(ws, perf, title='模型性能', titleformat='BLUE_H2')
+    em.write_dataframe(ws, perf, title='Model Performance', titleformat='BLUE_H2')
     em.insert_image(ws, 'roc_curve.png', figScale=(600, 400))
     em.close_workbook()
     ```
 
 ---
 
-## 文档导航
+## Documentation Map
 
 <div class="grid cards" markdown>
 
-- :material-rocket-launch: **[快速上手](quickstart.md)**
+- :material-rocket-launch: **[Quickstart](quickstart.md)**
 
-    5 分钟跑通你的第一个评分卡训练流水线。
+    Run your first scorecard training pipeline in 5 minutes.
 
-- :material-package-variant: **[安装](installation.md)**
+- :material-package-variant: **[Installation](installation.md)**
 
-    核心依赖、可选依赖、MaxCompute 接入。
+    Core dependencies, optional dependencies, MaxCompute access.
 
-- :material-graph: **[架构](architecture.md)**
+- :material-graph: **[Architecture](architecture.md)**
 
-    模块依赖图、设计原则、命名规范。
+    Module dependency graph, design principles, naming conventions.
 
-- :material-pipe: **[端到端流水线](pipeline.md)**
+- :material-pipe: **[End-to-End Pipelines](pipeline.md)**
 
-    从样本切分到 Excel 报告的完整建模流程。
+    The complete modeling workflow, from sample splitting to Excel report.
 
-- :material-book-open-variant: **[用户指南](guides/index.md)**
+- :material-book-open-variant: **[User Guides](guides/index.md)**
 
-    按场景分册：样本 / WOE / 特征 / 模型 / 评估 / UAT / 报告。
+    Organized by scenario: sample / WOE / feature / model / evaluation / UAT / report.
 
-- :material-api: **[API 参考](api/index.md)**
+- :material-api: **[API Reference](api/index.md)**
 
-    所有公开类、方法、函数的详细说明。
+    Detailed descriptions of every public class, method, and function.
 
 </div>
 
 ---
 
-## 适用对象
+## Who It's For
 
-- **信贷风控建模师**：开发 A 卡、B 卡、C 卡、反欺诈模型
-- **模型验证 / 审计**：UAT 一致性、PSI 监控、变量解释性
-- **数据科学家**：复用分箱 / WOE / 后向消元 / 拒绝推断等模块
-- **建模平台开发**：把 SuperModelingFactory 作为底层库进行二次封装
+- **Credit-risk modelers**: develop application (A-card), behavior (B-card), and collection (C-card) scorecards and anti-fraud models
+- **Model validation / audit**: UAT consistency, PSI monitoring, variable interpretability
+- **Data scientists**: reuse modules for binning / WOE / backward elimination / reject inference
+- **Modeling platform developers**: build on SuperModelingFactory as the underlying library
 
 ---
 
-## 版本
+## Version
 
 - **Version**: 0.7.2
 - **Author**: Jingkai Sun
-- **License**: [Business Source License 1.1](https://github.com/Kyle-J-Sun/SuperModelingFactory/blob/main/LICENSE)（2030-06-24 后转 Apache 2.0，商业使用须联系作者授权）
+- **License**: [Business Source License 1.1](https://github.com/Kyle-J-Sun/SuperModelingFactory/blob/main/LICENSE) (converts to Apache 2.0 after 2030-06-24; contact the author for a commercial-use license)
 
 ---
 
-## 下一步
+## Next Steps
 
-👉 [快速上手](quickstart.md) → [安装](installation.md) → [架构](architecture.md)
+👉 [Quickstart](quickstart.md) → [Installation](installation.md) → [Architecture](architecture.md)

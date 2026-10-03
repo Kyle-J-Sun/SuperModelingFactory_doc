@@ -1,5 +1,5 @@
 site_name: SuperModelingFactory
-site_description: 面向信用评分卡开发的端到端建模工具链 — 样本管理、WOE 编码、特征筛选、模型训练、性能评估、Excel 报告一键生成。
+site_description: An end-to-end modeling toolchain for credit scorecard development — sample management, WOE encoding, feature screening, model training, performance evaluation, and one-click Excel reports.
 site_author: Jingkai Sun
 site_url: https://kyle-j-sun.github.io/SuperModelingFactory_doc/
 
@@ -7,11 +7,11 @@ docs_dir: docs
 site_dir: site
 
 # ----------------------------------------------------------------------------
-# 主题 — Material Design
+# Theme — Material Design
 # ----------------------------------------------------------------------------
 theme:
   name: material
-  language: zh
+  language: en
   features:
     - navigation.tabs
     - navigation.tabs.sticky
@@ -34,25 +34,25 @@ theme:
       accent: indigo
       toggle:
         icon: material/brightness-7
-        name: 切换到深色模式
+        name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: indigo
       accent: indigo
       toggle:
         icon: material/brightness-4
-        name: 切换到浅色模式
+        name: Switch to light mode
   icon:
     repo: fontawesome/brands/git-alt
 
 # ----------------------------------------------------------------------------
-# 仓库 / 源码
+# Repository / source
 # ----------------------------------------------------------------------------
 repo_url: https://github.com/Kyle-J-Sun/SuperModelingFactory
 edit_uri: edit/main/docs/
 
 # ----------------------------------------------------------------------------
-# Markdown 扩展
+# Markdown extensions
 # ----------------------------------------------------------------------------
 markdown_extensions:
   - admonition
@@ -91,7 +91,7 @@ markdown_extensions:
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 # ----------------------------------------------------------------------------
-# 插件
+# Plugins
 # ----------------------------------------------------------------------------
 plugins:
   - search
@@ -120,34 +120,34 @@ plugins:
           load_external_modules: false
 
 # ----------------------------------------------------------------------------
-# 导航
+# Navigation
 # ----------------------------------------------------------------------------
 nav:
-  - 首页: index.md
-  - 安装: installation.md
-  - 快速上手: quickstart.md
-  - 架构: architecture.md
-  - 端到端流水线:
-      - 顶层封装流水线: pipeline_one_click.md
-      - 端到端建模流水线: pipeline.md
-  - 用户指南:
+  - Home: index.md
+  - Installation: installation.md
+  - Quickstart: quickstart.md
+  - Architecture: architecture.md
+  - End-to-End Pipelines:
+      - Top-Level Pipelines: pipeline_one_click.md
+      - End-to-End Modeling Pipeline: pipeline.md
+  - User Guides:
       - guides/index.md
-      - 样本管理: guides/sample.md
-      - ODPS 数据抽取: guides/odps.md
-      - 数据一致性对比: guides/proc_compare.md
+      - Sample Management: guides/sample.md
+      - ODPS Data Extraction: guides/odps.md
+      - Data Consistency Comparison: guides/proc_compare.md
       - Pipeline GUI Schema: guides/pipeline_gui_schema.md
-      - WOE 编码: guides/woe.md
-      - WOE 分箱引擎: guides/woe_binning_engine.md
-      - 特征筛选: guides/feature.md
-      - 模型训练: guides/model.md
-      - GBM 超参搜索: guides/gbm_param_search.md
-      - 模型注册与版本管理: guides/model_registry.md
-      - 模型评估: guides/eval.md
-      - 模型解释: guides/explainability.md
-      - 拒绝推断与分布适配: guides/reject_inference.md
-      - 线上线下一致性校验: guides/uat.md
-      - Excel 报告生成: guides/excel_report.md
-  - API 参考:
+      - WOE Encoding: guides/woe.md
+      - WOE Binning Engine: guides/woe_binning_engine.md
+      - Feature Screening: guides/feature.md
+      - Model Training: guides/model.md
+      - GBM Hyperparameter Search: guides/gbm_param_search.md
+      - Model Registry and Versioning: guides/model_registry.md
+      - Model Evaluation: guides/eval.md
+      - Model Explainability: guides/explainability.md
+      - Reject Inference and Distribution Adaptation: guides/reject_inference.md
+      - Online/Offline Consistency Check: guides/uat.md
+      - Excel Report Generation: guides/excel_report.md
+  - API Reference:
       - api/index.md
       - Modeling_Tool.Core: api/core.md
       - Modeling_Tool.WOE: api/woe.md
@@ -159,7 +159,7 @@ nav:
       - Modeling_Tool.UAT: api/uat.md
       - ExcelMaster: api/excelmaster.md
       - Report: api/report.md
-  - 常见问题: faq.md
+  - FAQ: faq.md
   - ChangeLog:
       - changelog/index.md
       - v0.8.2: changelog/v0.8.2.md
@@ -189,9 +189,9 @@ nav:
       - v0.4.2: changelog/v0.4.2.md
       - v0.4.1: changelog/v0.4.1.md
       - v0.4.0: changelog/v0.4.0.md
-      - v0.3.x 汇总: changelog/v0.3.md
+      - v0.3.x Summary: changelog/v0.3.md
 
 # ----------------------------------------------------------------------------
-# 版权
+# Copyright
 # ----------------------------------------------------------------------------
 copyright: Copyright &copy; 2026 Jingkai Sun

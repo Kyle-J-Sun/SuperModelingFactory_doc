@@ -1,29 +1,29 @@
-# 模型解释
+# Model Explainability
 
-SuperModelingFactory 在 [`Explainability`](../api/explainability.md) 子包提供统一解释器 `ModelExplainer`。它支持 SHAP、Owen Value、PDP、ICE、ALE 和 LIME，用同一个入口解释 SMF 模型或原生 sklearn / LightGBM / XGBoost 模型。
+SuperModelingFactory provides a unified explainer, `ModelExplainer`, in the [`Explainability`](../api/explainability.md) subpackage. It supports SHAP, Owen Value, PDP, ICE, ALE, and LIME, explaining SMF models or native sklearn / LightGBM / XGBoost models through a single entry point.
 
-!!! note "安装可选依赖"
+!!! note "Install the optional dependencies"
 
-    SHAP、Owen Value 与 LIME 需要可选解释依赖：
+    SHAP, Owen Value, and LIME require the optional explainability dependencies:
 
     ```bash
     pip install 'supermodelingfactory[explain]'
     ```
 
-    `ModelExplainer` 采用懒加载：`from Modeling_Tool import ModelExplainer` 不会立即导入 `shap` 或 `lime`，只有调用对应方法时才加载依赖。
+    `ModelExplainer` uses lazy loading: `from Modeling_Tool import ModelExplainer` does not import `shap` or `lime` immediately; the dependencies are loaded only when the corresponding method is called.
 
-## 方法对比
+## Method Comparison
 
-| 方法 | 类型 | 适合回答的问题 | 依赖 |
+| Method | Type | Questions it answers | Dependency |
 |------|------|----------------|------|
-| SHAP | 全局 + 局部归因 | 哪些变量贡献最大？单样本为什么高风险？ | `shap` |
-| Owen Value | 分组归因 | 逾期、多头、负债等业务模块整体贡献是多少？ | `shap` |
-| PDP | 全局平均效应 | 某变量上升时，平均预测风险怎么变？ | 内置 |
-| ICE | 个体响应曲线 | 不同样本对同一变量的响应是否一致？ | 内置 |
-| ALE | 累计局部效应 | 特征相关性较强时，如何更稳健地看边际影响？ | 内置 |
-| LIME | 局部代理模型 | 单样本附近，局部线性解释是什么？ | `lime` |
+| SHAP | Global + local attribution | Which variables contribute the most? Why is a single sample high-risk? | `shap` |
+| Owen Value | Group attribution | What is the overall contribution of business modules such as delinquency, multi-lending, and debt? | `shap` |
+| PDP | Global average effect | When a variable increases, how does the average predicted risk change? | Built in |
+| ICE | Individual response curves | Do different samples respond consistently to the same variable? | Built in |
+| ALE | Accumulated local effects | When features are strongly correlated, how can marginal impact be viewed more robustly? | Built in |
+| LIME | Local surrogate model | Near a single sample, what is the local linear explanation? | `lime` |
 
-## 1. 创建解释器
+## 1. Create an Explainer
 
 ```python
 from Modeling_Tool import GradientBoostingModel, ModelExplainer
@@ -46,7 +46,7 @@ exp = ModelExplainer(
 )
 ```
 
-## 2. SHAP 归因
+## 2. SHAP Attribution
 
 ```python
 exp.explain(test_woe[woe_features])
@@ -63,11 +63,11 @@ print(contrib)
 print("base value:", contrib.attrs["base_value"])
 ```
 
-## 3. Owen Value：分组归因
+## 3. Owen Value: Group Attribution
 
-普通 SHAP 把每个特征视为独立玩家。强相关变量会分摊同一个风险信号，例如多个逾期变量的单特征贡献都显得“不够突出”。Owen Value 先把特征放进 coalition，再在 coalition 内部分摊贡献，因此更适合输出业务模块级 reason code。
+Plain SHAP treats every feature as an independent player. Strongly correlated variables share the same risk signal, so, for example, the single-feature contribution of each of several delinquency variables looks "not prominent enough". Owen Value first puts features into coalitions and then distributes contribution within each coalition, which makes it better suited to producing business-module-level reason codes.
 
-### 3.1 构建 Coalition Structure
+### 3.1 Build the Coalition Structure
 
 ```python
 from Modeling_Tool import build_coalition_structure
@@ -89,11 +89,11 @@ cs = build_coalition_structure(
 print(cs["summary"][["n_features", "mean_abs_corr", "max_abs_corr"]])
 ```
 
-融合逻辑是：业务先验优先，其余特征使用 Spearman 相关距离的自动聚类兜底。`prior_groups` 可以包含当前数据中不存在的变量名，工具会自动忽略；但同一个有效特征不能同时出现在多个先验组里。
+The fusion logic is: business priors take precedence, and the remaining features fall back to automatic clustering on Spearman correlation distance. `prior_groups` may contain variable names that do not exist in the current data (they are ignored automatically), but one effective feature cannot appear in more than one prior group.
 
-#### 使用 MIC 捕捉非线性关联
+#### Capturing Nonlinear Association with MIC
 
-默认 `corr_method="spearman"` 基于秩相关，适合单调关系。若变量之间存在明显非线性关联（例如 `x` 与 `x²`），可改用 **Maximal Information Coefficient (MIC)**：
+The default `corr_method="spearman"` is based on rank correlation and suits monotonic relationships. If there is clear nonlinear association between variables (for example `x` and `x²`), switch to the **Maximal Information Coefficient (MIC)**:
 
 ```python
 cs = build_coalition_structure(
@@ -103,21 +103,21 @@ cs = build_coalition_structure(
 )
 ```
 
-!!! note "MIC 可选依赖"
+!!! note "MIC optional dependency"
 
-    MIC 需要额外安装 `minepy`（GPLv3，含 C 扩展）：
+    MIC requires the extra `minepy` package (GPLv3, with C extensions):
 
     ```bash
     pip install 'supermodelingfactory[mic]'
     ```
 
-    - `corr_method="MIC"` 大小写不敏感（`"mic"` 亦可）。
-    - `threshold` 仍作用于 `1 - MIC` 距离：MIC 越高，特征越容易分到同一组。
-    - `summary` 中的 `mean_abs_corr` / `max_abs_corr` 在 MIC 模式下表示组内平均/最大 MIC。
-    - MIC 需对所有特征两两计算，复杂度约为特征对数量级，通常比 Spearman 慢得多。
-    - `minepy` 目前在 Python 3.11+ 上存在已知构建问题；若安装失败，请使用 Python 3.10 环境，或回退 `corr_method="spearman"`。
+    - `corr_method="MIC"` is case-insensitive (`"mic"` also works).
+    - `threshold` still applies to the `1 - MIC` distance: the higher the MIC, the more easily features are placed in the same group.
+    - In MIC mode, `mean_abs_corr` / `max_abs_corr` in `summary` mean the within-group average/maximum MIC.
+    - MIC must be computed for every pair of features, so its cost scales with the number of feature pairs and is usually much slower than Spearman.
+    - `minepy` currently has a known build problem on Python 3.11+; if installation fails, use a Python 3.10 environment, or fall back to `corr_method="spearman"`.
 
-### 3.2 通过 ModelExplainer 计算 Owen Value
+### 3.2 Compute Owen Value with ModelExplainer
 
 ```python
 owen_exp = exp.explain_owen(
@@ -127,20 +127,20 @@ owen_exp = exp.explain_owen(
     max_evals=500,
 )
 
-# 组级全局重要性
+# Group-level global importance
 owen_group = exp.owen_group_importance(normalize=True)
 print(owen_group[["group", "n_features", "mean_abs_owen", "importance_pct"]])
 
-# 单样本模块级 reason code
+# Module-level reason code for a single sample
 local_reason = exp.owen_explain_instance(test_woe[woe_features].iloc[0])
 print(local_reason[["group", "owen_value", "abs_owen_value", "features"]])
 ```
 
-`model_output="log_odds"` 适合信贷 reason code，因为组贡献可以直接解释为对 log-odds 的加减影响；如果希望解释正类概率，使用默认的 `model_output="probability"`。
+`model_output="log_odds"` suits credit reason codes, because a group's contribution can be read directly as an additive effect on the log-odds; if you want to explain the positive-class probability, use the default `model_output="probability"`.
 
-### 3.3 一步式调用
+### 3.3 One-Step Call
 
-如果不需要单独检查分组，也可以直接在 `explain_owen()` 里传入先验分组：
+If you don't need to inspect the grouping separately, you can also pass the prior groups directly into `explain_owen()`:
 
 ```python
 exp.explain_owen(
@@ -152,7 +152,7 @@ exp.explain_owen(
 print(exp.owen_group_importance().head())
 ```
 
-## 4. PDP：平均边际影响
+## 4. PDP: Average Marginal Effect
 
 ```python
 pdp = exp.partial_dependence(
@@ -168,7 +168,7 @@ print(pdp.head())
 exp.pdp_plot(test_woe[woe_features], feature="age_woe", show=False, save_path="pdp_age.png")
 ```
 
-## 5. ICE：个体响应曲线
+## 5. ICE: Individual Response Curves
 
 ```python
 ice = exp.ice(
@@ -184,7 +184,7 @@ print(ice.head())
 exp.ice_plot(test_woe[woe_features], feature="age_woe", centered=True, show=False, save_path="ice_age.png")
 ```
 
-## 6. ALE：累计局部效应
+## 6. ALE: Accumulated Local Effects
 
 ```python
 ale = exp.ale(
@@ -198,9 +198,9 @@ print(ale.head())
 exp.ale_plot(test_woe[woe_features], feature="income_woe", bins=20, show=False, save_path="ale_income.png")
 ```
 
-当前 ALE 支持数值型单特征。对于类别变量，建议先使用 WOE 编码后的数值列解释。
+ALE currently supports a single numeric feature. For categorical variables, explain the WOE-encoded numeric column instead.
 
-## 7. LIME：局部代理解释
+## 7. LIME: Local Surrogate Explanation
 
 ```python
 lime_one = exp.lime_explain_instance(
@@ -221,58 +221,58 @@ lime_global = exp.lime_global_importance(
 print(lime_global)
 ```
 
-!!! warning "性能建议"
+!!! warning "Performance advice"
 
-    PDP / ICE / ALE / LIME / Owen Value 都会反复调用模型预测。PDP、ICE、ALE 会先堆叠网格样本，再按 `prediction_batch_size` 分批预测；默认 `100000`，可调小以降低峰值内存。生产数据较大时，也建议使用 `sample_size`、`background_data.sample(...)` 或 `max_evals` 控制解释成本。
+    PDP / ICE / ALE / LIME / Owen Value all call model prediction repeatedly. PDP, ICE, and ALE first stack the grid samples and then predict in batches of `prediction_batch_size`; the default is `100000`, and you can lower it to reduce peak memory. With large production data, also use `sample_size`, `background_data.sample(...)`, or `max_evals` to control the cost of explanation.
 
-## 常见问题
+## FAQ
 
-??? question "Owen Value 和 SHAP 有什么关系？"
+??? question "How are Owen Value and SHAP related?"
 
-    Owen Value 是带 coalition structure 的 Shapley 分配。实现上使用 `shap.PartitionExplainer`，先尊重特征分组，再在组内分摊贡献。
+    Owen Value is a Shapley allocation with a coalition structure. The implementation uses `shap.PartitionExplainer`, which respects the feature grouping first and then distributes contribution within each group.
 
-??? question "什么时候用 Owen Value？"
+??? question "When should I use Owen Value?"
 
-    当变量高度相关，或者业务需要模块级 reason code 时使用。例如逾期、多头、负债能力、设备欺诈等同源变量，单特征 SHAP 容易归因稀释。
+    Use it when variables are highly correlated, or when the business needs module-level reason codes. For example, with variables from the same source such as delinquency, multi-lending, debt capacity, and device fraud, single-feature SHAP easily dilutes the attribution.
 
-??? question "threshold=0.35 是什么意思？"
+??? question "What does threshold=0.35 mean?"
 
-    使用距离 `1 - abs(association)` 聚类。默认 `corr_method="spearman"` 时，`0.35` 约等价于 `|corr| > 0.65` 的特征更容易先聚到同一组。若使用 `corr_method="MIC"`，同一阈值作用于 `1 - MIC`。强相关场景可用 `0.20~0.35`，更宽松可用 `0.50`。
+    Clustering uses the distance `1 - abs(association)`. With the default `corr_method="spearman"`, `0.35` roughly means features with `|corr| > 0.65` are more likely to be grouped together first. With `corr_method="MIC"`, the same threshold applies to `1 - MIC`. Use `0.20~0.35` for strongly correlated scenarios, or `0.50` to be looser.
 
-??? question "什么时候用 corr_method='MIC'？"
+??? question "When should I use corr_method='MIC'?"
 
-    当变量之间存在明显非线性关联、Spearman 难以把它们聚到同一组时。MIC 更慢，且需要单独安装 `pip install 'supermodelingfactory[mic]'`；Python 3.11+ 若 `minepy` 安装失败，请使用 Python 3.10 或继续用 `spearman`。
+    When variables have clear nonlinear association and Spearman has trouble grouping them together. MIC is slower and requires a separate install with `pip install 'supermodelingfactory[mic]'`; on Python 3.11+, if `minepy` fails to install, use Python 3.10 or keep using `spearman`.
 
-??? question "PDP 和 ALE 怎么选？"
+??? question "How do I choose between PDP and ALE?"
 
-    如果特征之间相关性不强，PDP 直观易懂；如果特征相关性明显，ALE 通常更稳健，因为它只在局部区间内扰动特征。
+    If correlation between features is weak, PDP is intuitive and easy to understand; if correlation is significant, ALE is usually more robust because it perturbs the feature only within local intervals.
 
-??? question "LIME 是全局解释吗？"
+??? question "Is LIME a global explanation?"
 
-    LIME 本质是局部解释。`lime_global_importance()` 是对多个局部解释的聚合，只能作为近似全局重要性参考。
+    LIME is inherently a local explanation. `lime_global_importance()` aggregates many local explanations and can serve only as an approximate global importance reference.
 
-??? question "为什么 LIME / SHAP / Owen 报缺依赖？"
+??? question "Why do LIME / SHAP / Owen report missing dependencies?"
 
-    需要安装 explain extra：
+    You need to install the explain extra:
 
     ```bash
     pip install 'supermodelingfactory[explain]'
     ```
 
-??? question "XGBoost + SHAP 报 `could not convert string to float: '[5E-1]'` 怎么办？"
+??? question "XGBoost + SHAP raises `could not convert string to float: '[5E-1]'` — what should I do?"
 
-    这是 XGBoost 3.1+ 与旧版 SHAP 的已知兼容问题。XGBoost 会把单目标模型的 `base_score` 序列化为单元素数组字符串，例如 `"[5E-1]"`，而 SHAP 0.49 及更早版本仍按标量解析。
+    This is a known compatibility problem between XGBoost 3.1+ and older SHAP versions. XGBoost serializes the `base_score` of a single-target model as a single-element array string such as `"[5E-1]"`, while SHAP 0.49 and earlier still parse it as a scalar.
 
-    SuperModelingFactory 会在 `ModelExplainer` 构建 XGBoost `TreeExplainer` 时自动启用兼容层：
+    SuperModelingFactory enables a compatibility layer automatically when `ModelExplainer` builds the XGBoost `TreeExplainer`:
 
-    - 在 SHAP 的 UBJSON 解码阶段把单元素 `base_score` 归一为标量。
-    - 为 `XGBTreeModelLoader` 增加 XGBoost 专属 fallback，并在失败时重试一次。
-    - 仅作用于 `model_type in {"xgb", "xgboost"}` 的 TreeSHAP 路径，不影响 LightGBM、LR、Owen、PDP/ICE/ALE/LIME。
+    - During SHAP's UBJSON decoding stage, a single-element `base_score` is normalized to a scalar.
+    - An XGBoost-specific fallback is added to `XGBTreeModelLoader`, with one retry on failure.
+    - It applies only to the TreeSHAP path with `model_type in {"xgb", "xgboost"}`, and does not affect LightGBM, LR, Owen, or PDP/ICE/ALE/LIME.
 
-    推荐顺序：
+    Recommended order:
 
-    1. 安装最新 SuperModelingFactory 主分支或最新 release。
-    2. Python 3.11+ 环境可升级到 `shap>=0.50.0` 获得上游原生支持。
-    3. 仅当多分类/多目标模型仍失败时，再考虑临时固定 `xgboost<3.1` 作为最后兜底。
+    1. Install the latest SuperModelingFactory main branch or the latest release.
+    2. On Python 3.11+, you can upgrade to `shap>=0.50.0` to get native upstream support.
+    3. Only if multi-class/multi-target models still fail, consider temporarily pinning `xgboost<3.1` as a last resort.
 
-    注意：SMF 不会把多元素 `base_score` 向量静默压成第一个元素，避免多目标 attribution 被错误解释。
+    Note: SMF does not silently collapse a multi-element `base_score` vector to its first element, to avoid misinterpreting multi-target attribution.

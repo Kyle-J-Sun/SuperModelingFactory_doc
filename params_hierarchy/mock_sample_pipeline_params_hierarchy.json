@@ -5,54 +5,54 @@
     "required": [],
     "optional": [
       {
-        "level1": "样本规模与输出范围",
+        "level1": "Sample Size and Output Scope",
         "level2": [
           {
-            "name": "样本数量",
+            "name": "Sample Count",
             "params": {
-              "n_samples": "初始全量申请样本量，默认 80000",
-              "applied_sample": "1 输出全量申请；0 只输出通过样本",
-              "approve_rate": "审批通过率，默认 0.25"
+              "n_samples": "Initial number of full application samples, default 80000",
+              "applied_sample": "1 outputs all applications; 0 outputs only approved samples",
+              "approve_rate": "Approval rate, default 0.25"
             },
             "rules": [
-              "applied_sample=0 时最终输出约 n_samples * approve_rate 行",
-              "applied_sample=0 时输出数据 is_approved 全为 1"
+              "When applied_sample=0, the final output is about n_samples * approve_rate rows",
+              "When applied_sample=0, is_approved is all 1 in the output data"
             ]
           },
           {
-            "name": "时间窗口",
+            "name": "Time Window",
             "params": {
-              "observation_timestamp": "观察日；为空时使用今天 00:00",
-              "application_months": "申请时间向前回溯月份数，默认 18"
+              "observation_timestamp": "Observation date; when empty, today 00:00 is used",
+              "application_months": "Number of months the application time looks back, default 18"
             }
           }
         ]
       },
       {
-        "level1": "模拟字段生成",
+        "level1": "Simulated Field Generation",
         "level2": [
           {
-            "name": "线上模型分",
+            "name": "Online Model Scores",
             "params": {
-              "num_online_scores": "生成 online_model_pb_1 ... online_model_pb_n 的数量，默认 5"
+              "num_online_scores": "Number of online_model_pb_1 ... online_model_pb_n to generate, default 5"
             }
           },
           {
-            "name": "表现标签",
+            "name": "Performance Labels",
             "params": {
-              "y_flag_candidates": "生成 y_flag_dpd7_in_{days}d 的 days 列表，默认 [15,30,45]"
+              "y_flag_candidates": "List of days for generating y_flag_dpd7_in_{days}d, default [15,30,45]"
             },
             "rules": [
-              "只给通过样本生成表现标签，未通过样本为空",
-              "apply_timestamp + days <= observation_timestamp 的样本才成熟",
-              "强制校验短期标签成熟人数大于长期标签成熟人数"
+              "Performance labels are generated only for approved samples; unapproved samples are empty",
+              "Only samples with apply_timestamp + days <= observation_timestamp are mature",
+              "Force a check that the mature count of short-term labels is greater than that of long-term labels"
             ]
           },
           {
-            "name": "随机特征",
+            "name": "Random Features",
             "params": {
-              "num_features": "随机生成特征数量，默认 20",
-              "min_num_feature_business_type": "特征至少覆盖的业务类型数量，默认 5"
+              "num_features": "Number of randomly generated features, default 20",
+              "min_num_feature_business_type": "Minimum number of business types the features must cover, default 5"
             },
             "children": {
               "business_types": [
@@ -69,34 +69,34 @@
               ]
             },
             "rules": [
-              "num_features=0 时 min_num_feature_business_type 必须为 0",
-              "num_features>0 时 min_num_feature_business_type 必须在 1 到 min(num_features,10) 之间",
-              "feature_metadata 记录字段名、业务类型和分布"
+              "When num_features=0, min_num_feature_business_type must be 0",
+              "When num_features>0, min_num_feature_business_type must be between 1 and min(num_features,10)",
+              "feature_metadata records the field names, business types, and distributions"
             ]
           }
         ]
       },
       {
-        "level1": "随机性与落盘",
+        "level1": "Randomness and Disk Output",
         "level2": [
           {
-            "name": "随机控制",
+            "name": "Random Control",
             "params": {
-              "random_state": "随机种子，默认 42"
+              "random_state": "Random seed, default 42"
             }
           },
           {
-            "name": "CSV 输出",
+            "name": "CSV Output",
             "params": {
-              "write_csv": "是否输出 CSV",
-              "output_path": "CSV 输出路径，默认 output/mock_sample/mock_sample.csv"
+              "write_csv": "Whether to output a CSV",
+              "output_path": "CSV output path, default output/mock_sample/mock_sample.csv"
             }
           }
         ]
       }
     ]
   },
-  "requirement_note": "MockSamplePipeline 所有配置均有默认值，因此无必填配置；仍建议按业务需要确认样本规模和输出范围。",
+  "requirement_note": "All MockSamplePipeline configuration has defaults, so there is no required configuration; it is still advisable to confirm the sample size and output scope as the business needs.",
   "underlying_method_params": {
     "generation_functions": {
       "pipeline_internal": true,
@@ -106,28 +106,28 @@
             "approve_rate",
             "random_state"
           ],
-          "meaning": "按 latent risk 低风险排序取通过样本"
+          "meaning": "Approved samples are taken in ascending order of latent risk (low risk first)"
         },
         "online_scores": {
           "controlled_by": [
             "num_online_scores",
             "random_state"
           ],
-          "meaning": "生成 online_model_pb_i 概率值"
+          "meaning": "Generates online_model_pb_i probability values"
         },
         "y_flags": {
           "controlled_by": [
             "y_flag_candidates",
             "observation_timestamp"
           ],
-          "meaning": "仅通过且已成熟样本有 0/1 标签"
+          "meaning": "Only approved and mature samples get a 0/1 label"
         },
         "features": {
           "controlled_by": [
             "num_features",
             "min_num_feature_business_type"
           ],
-          "meaning": "按业务类型生成随机特征并输出 feature_metadata"
+          "meaning": "Generates random features by business type and outputs feature_metadata"
         }
       }
     }

@@ -1,86 +1,86 @@
-# 用户指南
+# User Guides
 
-按建模场景分册的实战指南，每一篇都包含 **背景 → 关键 API → 完整代码 → 常见问题**。
+Hands-on guides organized by modeling scenario. Each one covers **background → key APIs → complete code → FAQ**.
 
-## 分册列表
+## Guide List
 
 <div class="grid cards" markdown>
 
-- :material-call-split: **[样本管理](sample.md)**
+- :material-call-split: **[Sample Management](sample.md)**
 
     `SampleSplitter` / `StratifiedSampler` / `SampleBalancer` / `select_sample_seed`
 
-- :material-database: **[ODPS 数据抽取](odps.md)**
+- :material-database: **[ODPS Data Extraction](odps.md)**
 
     `ODPSRunner` / `parse_sql_file` / `pull_attributes_in_batch`
 
-- :material-table-search: **[数据一致性对比](proc_compare.md)**
+- :material-table-search: **[Data Consistency Comparison](proc_compare.md)**
 
-    `ProcCompareEngine` / `proc_compare` / DataFrame 与 CSV 大表一致性校验
+    `ProcCompareEngine` / `proc_compare` / consistency checks for DataFrames and large CSV tables
 
 - :material-application-brackets: **[Pipeline GUI Schema](pipeline_gui_schema.md)**
 
-    `extract_pipeline_schema` / `config_to_yaml` / `validate_pipeline_config` / GUI 表单元数据
+    `extract_pipeline_schema` / `config_to_yaml` / `validate_pipeline_config` / GUI form metadata
 
-- :material-chart-bell-curve: **[WOE 编码](woe.md)**
+- :material-chart-bell-curve: **[WOE Encoding](woe.md)**
 
     `WOE_Master` / `MonotoneWOEBinner` / `is_monotonic`
 
-- :material-vector-link: **[WOE 分箱引擎](woe_binning_engine.md)**
+- :material-vector-link: **[WOE Binning Engine](woe_binning_engine.md)**
 
-    `as_woe_engine` / `binning_engine` / `woe_binner` / Master-Monotone 统一协议
+    `as_woe_engine` / `binning_engine` / `woe_binner` / unified Master-Monotone protocol
 
-- :material-filter-variant: **[特征筛选](feature.md)**
+- :material-filter-variant: **[Feature Screening](feature.md)**
 
     `PSICalculator` / `VarExtractionInsights` / `CorrelationFilter`
 
-- :material-brain: **[模型训练](model.md)**
+- :material-brain: **[Model Training](model.md)**
 
-    `LRMaster` / `GradientBoostingModel` / `BackwardVariableEliminator`（含 `weight_col`）
+    `LRMaster` / `GradientBoostingModel` / `BackwardVariableEliminator`(with `weight_col`)
 
-- :material-tune: **[GBM 超参搜索](gbm_param_search.md)**
+- :material-tune: **[GBM Hyperparameter Search](gbm_param_search.md)**
 
-    `GradientBoostingModel.param_search` / grid search / Optuna / INS-OOS-OOT holdout（含加权 AUC）
+    `GradientBoostingModel.param_search` / grid search / Optuna / INS-OOS-OOT holdout(with weighted AUC)
 
-- :material-archive-cog: **[模型注册与版本管理](model_registry.md)**
+- :material-archive-cog: **[Model Registry and Versioning](model_registry.md)**
 
-    `save_model` / `load_model` / `load_model_metadata` / 模型 metadata artifact
+    `save_model` / `load_model` / `load_model_metadata` / model metadata artifact
 
-- :material-chart-line: **[模型评估](eval.md)**
+- :material-chart-line: **[Model Evaluation](eval.md)**
 
-    `PerformanceEvaluator` / `GainsTableCalculator` / `EvaluationPipeline`（含加权 Gains / KS / AUC）
+    `PerformanceEvaluator` / `GainsTableCalculator` / `EvaluationPipeline`(with weighted Gains / KS / AUC)
 
-- :material-lightbulb-on: **[模型解释](explainability.md)**
+- :material-lightbulb-on: **[Model Explainability](explainability.md)**
 
-    `ModelExplainer`（SHAP / Owen Value / PDP / ICE / ALE / LIME）
+    `ModelExplainer` (SHAP / Owen Value / PDP / ICE / ALE / LIME)
 
-- :material-account-cancel: **[拒绝推断与分布适配](reject_inference.md)**
+- :material-account-cancel: **[Reject Inference and Distribution Adaptation](reject_inference.md)**
 
     `RejectInferenceFactory` / `DistributionAdaptation`
 
-- :material-shield-check: **[线上线下一致性校验](uat.md)**
+- :material-shield-check: **[Online/Offline Consistency Check](uat.md)**
 
     `UATConsistencyChecker` / `UATConfig`
 
-- :material-file-excel: **[Excel 报告生成](excel_report.md)**
+- :material-file-excel: **[Excel Report Generation](excel_report.md)**
 
     `ExcelMaster` / `Template` / `Report`
 
 </div>
 
-!!! tip "版本变更笔记"
+!!! tip "Version change notes"
 
-    历史版本的迭代内容已集中到顶级导航的 [ChangeLog](../changelog/index.md) tab 下。
+    Release-by-release changes are collected under the [ChangeLog](../changelog/index.md) tab in the top-level navigation.
 
-## 阅读顺序建议
+## Suggested Reading Order
 
-!!! tip "新手路径"
+!!! tip "Path for newcomers"
 
-    1. 先读 [快速上手](../quickstart.md) 跑通一遍
-    2. 再读 [端到端流水线](../pipeline.md) 理解整体流程
-    3. 如果使用单调分箱，优先读 [WOE 分箱引擎](woe_binning_engine.md)
-    4. 然后按需查阅各分册
+    1. Start with the [Quickstart](../quickstart.md) and run it end to end
+    2. Then read [End-to-End Pipelines](../pipeline.md) to understand the overall flow
+    3. If you use monotone binning, read the [WOE Binning Engine](woe_binning_engine.md) guide first
+    4. Then consult the other guides as needed
 
-!!! info "API 速查"
+!!! info "API lookup"
 
-    任何时刻想查具体函数签名，跳转到 [API 参考](../api/index.md) — 由源码 docstring 自动生成。
+    To look up a specific function signature at any time, go to the [API Reference](../api/index.md), which is generated automatically from source docstrings.

@@ -1,7 +1,7 @@
-# MkDocs 文档站点依赖
-# 安装：pip install -r requirements-docs.txt
-# 预览：mkdocs serve   （默认 http://127.0.0.1:8000）
-# 构建：mkdocs build   （产出 site/ 静态站点）
+# MkDocs documentation site dependencies
+# Install: pip install -r requirements-docs.txt
+# Preview: mkdocs serve   (default: http://127.0.0.1:8000)
+# Build:   mkdocs build   (produces the static site in site/)
 
 mkdocs>=1.6.0
 mkdocs-material>=9.5.0

@@ -1,25 +1,25 @@
-# API 参考
+# API Reference
 
-完整公开 API 的签名、参数、返回值说明，由源码 docstring 通过 [mkdocstrings-python](https://mkdocstrings.github.io/) 自动生成。
+Signatures, parameters, and return values for the full public API, generated automatically from source docstrings through [mkdocstrings-python](https://mkdocstrings.github.io/) .
 
-## 子包索引
+## Subpackage Index
 
-| 子包 | 路径 | 主要内容 |
+| Subpackage | Path | Main contents |
 |------|------|---------|
-| **Modeling_Tool.Core** | [`api/core.md`](core.md) | 分箱、ODPS、工具、加密、JSON、斜率 |
-| **Modeling_Tool.WOE** | [`api/woe.md`](woe.md) | WOE 主控、转换器、绘图器、单调分箱器 |
-| **Modeling_Tool.Feature** | [`api/feature.md`](feature.md) | PSI、IV、相关性、分布 |
-| **Modeling_Tool.Model** | [`api/model.md`](model.md) | LR、LightGBM、XGBoost、CatBoost、后向消元（含样本权重） |
-| **Modeling_Tool.Eval** | [`api/eval.md`](eval.md) | Gains 表、ROC/KS、链式评估（含 `weight_col` 加权指标） |
-| **Modeling_Tool.Sample** | [`api/sample.md`](sample.md) | 切分、分层、均衡、拒绝推断 |
-| **Modeling_Tool.Explainability** | [`api/explainability.md`](explainability.md) | SHAP 模型解释（`ModelExplainer`） |
-| **Modeling_Tool.UAT** | [`api/uat.md`](uat.md) | 线上线下一致性校验 |
-| **ExcelMaster** | [`api/excelmaster.md`](excelmaster.md) | 通用 Excel 报告引擎 |
-| **Report** | [`api/report.md`](report.md) | 风控报告模板函数 |
+| **Modeling_Tool.Core** | [`api/core.md`](core.md) | Binning, ODPS, utilities, encryption, JSON, slope |
+| **Modeling_Tool.WOE** | [`api/woe.md`](woe.md) | WOE master, transformers, plotters, monotone binner |
+| **Modeling_Tool.Feature** | [`api/feature.md`](feature.md) | PSI, IV, correlation, distribution |
+| **Modeling_Tool.Model** | [`api/model.md`](model.md) | LR, LightGBM, XGBoost, CatBoost, backward elimination (with sample weights) |
+| **Modeling_Tool.Eval** | [`api/eval.md`](eval.md) | Gains table, ROC/KS, chained evaluation (with `weight_col` weighted metrics) |
+| **Modeling_Tool.Sample** | [`api/sample.md`](sample.md) | Splitting, stratification, balancing, reject inference |
+| **Modeling_Tool.Explainability** | [`api/explainability.md`](explainability.md) | SHAP model explanation (`ModelExplainer`) |
+| **Modeling_Tool.UAT** | [`api/uat.md`](uat.md) | Online/offline consistency checks |
+| **ExcelMaster** | [`api/excelmaster.md`](excelmaster.md) | General-purpose Excel reporting engine |
+| **Report** | [`api/report.md`](report.md) | Risk-control report template functions |
 
-## 顶层统一 API
+## Top-Level Unified API
 
-`Modeling_Tool/__init__.py` 精选导出的常用 API（建议优先使用）：
+Commonly used APIs curated and exported by `Modeling_Tool/__init__.py` (prefer these):
 
 ```python
 from Modeling_Tool import (
@@ -30,12 +30,12 @@ from Modeling_Tool import (
     get_feature_names, pull_attributes_in_batch,
     save_model, load_model, scoring,
 
-    # Model（懒加载，首次访问时才导入 lightgbm/xgboost）
+    # Model (lazy-loaded; lightgbm/xgboost are imported only on first access)
     GradientBoostingModel, LightGBMModel, XGBoostModel,
     lgbm_quick_train, xgbm_quick_train,
     LRMaster, FeatureSelectionAnalyzer, BackwardVariableEliminator,
 
-    # Explainability（懒加载，需 pip install supermodelingfactory[explain]）
+    # Explainability (lazy-loaded; requires pip install supermodelingfactory[explain])
     ModelExplainer,
 
     # Eval
@@ -64,38 +64,38 @@ from Modeling_Tool import (
 )
 ```
 
-## 阅读建议
+## Reading Tips
 
-!!! tip "API 文档的章节结构"
+!!! tip "How the API pages are structured"
 
-    每个 API 页面按 **类 → 方法 → 函数** 层级组织：
+    Each API page is organized by **class → method → function**:
 
-    - 类标题列出继承层次、构造函数签名
-    - 方法标题给出签名 + 参数表 + 返回值
-    - 私有成员（以 `_` 开头）默认隐藏
+    - Class headings list the inheritance hierarchy and constructor signature
+    - Method headings give the signature, a parameter table, and the return value
+    - Private members (starting with `_`) are hidden by default
 
-## 关于 docstring 风格
+## About the Docstring Style
 
-本项目使用 **NumPy 风格 docstring**（`Parameters / Returns / Examples`），mkdocstrings 会渲染为表格形式：
+This project uses **NumPy-style docstrings** (`Parameters / Returns / Examples`), which mkdocstrings renders as tables:
 
 ```python
 def calc_woe(data, bad_pct, good_pct):
     """
-    计算 WOE 值。
+    Compute WOE values.
 
     Parameters
     ----------
     data : pandas.DataFrame
-        含坏样本率与好样本率的表。
+        Table containing the bad rate and good rate.
     bad_pct : str
-        坏样本占比列名。
+        Column name of the bad-sample share.
     good_pct : str
-        好样本占比列名。
+        Column name of the good-sample share.
 
     Returns
     -------
     pandas.Series
-        WOE 值。
+        WOE values.
 
     Examples
     --------
@@ -103,8 +103,8 @@ def calc_woe(data, bad_pct, good_pct):
     """
 ```
 
-如需给函数补充 docstring，请遵循同一风格保持一致。
+When adding a docstring to a function, follow the same style for consistency.
 
-## 样本权重 API
+## Sample Weight API
 
-训练与评估的加权参数已作为**原生公开 API** 合入主仓（`LRMaster.fit(weight_col=...)`、`GradientBoostingModel.fit(sample_weight=...)`、`PerformanceEvaluator(weight_col=...)` 等）。实战用法与指标语义见 [模型训练 — 样本权重](../guides/model.md#样本权重) 与 [模型评估 — 样本权重评估](../guides/eval.md#样本权重评估)。
+The weighting parameters for training and evaluation have been merged into the main repository as **native public APIs** (`LRMaster.fit(weight_col=...)`, `GradientBoostingModel.fit(sample_weight=...)`, `PerformanceEvaluator(weight_col=...)`, and so on). For practical usage and metric semantics, see [Model Training — Sample Weights](../guides/model.md#sample-weights) and [Model Evaluation — Sample-Weighted Evaluation](../guides/eval.md#sample-weighted-evaluation).
