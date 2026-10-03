@@ -1,566 +1,684 @@
 # Model Training
 
-SuperModelingFactory wraps four families of models in the [`Model`](../api/model.md) subpackage — **logistic regression (the scorecard first choice), LightGBM, XGBoost, and CatBoost** — and provides a **backward variable elimination** helper.
+The [`Model`](../api/model.md) subpackage trains the models used in scorecard work and adds a variable-elimination helper.
 
-!!! tip "Sample weights"
+| Class or function | Use it for | Sample weights |
+|---|---|---|
+| `LRMaster` | Logistic regression on WOE features: statistical summary, stepwise selection, calibration, holdout grid search | `weight_col` |
+| `GradientBoostingModel` | One interface over LightGBM (`"lgb"`), XGBoost (`"xgb"`), and CatBoost (`"cat"`): warm start, calibration, parameter search | `sample_weight`, `eval_sample_weight` |
+| `LightGBMModel`, `XGBoostModel`, `CatBoostModel` | The single-backend classes behind `GradientBoostingModel` | see [Sample weights](#sample-weights) |
+| `lgbm_quick_train`, `xgbm_quick_train`, `catboost_quick_train` | One-call training from DataFrames; they return the bare fitted estimator | `wgt_col`, `val_wgt_col` |
+| `BackwardVariableEliminator` | Dropping weak features round after round by cumulative importance | `weight_col`, `validation_weight_col` |
+| `save_model`, `load_model`, `scoring` | Persisting a model and scoring a DataFrame with it | |
 
-    Both training and evaluation support optional sample weights (`weight_col` / `sample_weight`).
-    Without weights, behavior is exactly the same as in previous versions (backward compatible). A native API since the main repository's [PR #25](https://github.com/Kyle-J-Sun/SuperModelingFactory/pull/25).
-    For the evaluation-side semantics, see [Model Evaluation — Sample Weights](eval.md#sample-weighted-evaluation).
+`catboost_quick_train` is imported from `Modeling_Tool.Model`; everything else on this page is importable from `Modeling_Tool`.
 
-## 1. Logistic Regression — `LRMaster`
+## Example data
+
+Every snippet on this page runs top to bottom in one Python session. The setup creates a synthetic portfolio, a time-based
+train / validation / out-of-time split, and WOE-encoded copies of the frames for logistic regression.
+
+```python
+import os
+
+import numpy as np
+import pandas as pd
+
+from Modeling_Tool import WOE_Master
+
+rng = np.random.default_rng(42)
+n = 8000
+months = [f"2025-{m:02d}" for m in range(1, 10)]
+
+df = pd.DataFrame({
+    "apply_month": rng.choice(months, n),
+    "city_grade":  rng.choice(["A", "B", "C", "D"], n),
+    "age":         rng.normal(35, 8, n).clip(18, 70),
+    "income":      rng.lognormal(10, 0.4, n),
+    "score_b":     rng.normal(600, 60, n),
+    "utilization": rng.uniform(0, 1, n),
+    "n_overdue":   rng.poisson(0.3, n),
+    "sample_wgt":  rng.uniform(0.5, 2.0, n),
+})
+logit = -2.2 - 0.02 * (df["score_b"] - 600) + 0.5 * df["n_overdue"] - 0.8 * df["utilization"]
+df["bad_flag"] = rng.binomial(1, 1 / (1 + np.exp(-logit)))
+
+features = ["age", "income", "score_b", "utilization", "n_overdue"]
+train = df[df["apply_month"] <= "2025-06"].copy()
+valid = df[df["apply_month"] == "2025-07"].copy()
+oot = df[df["apply_month"] >= "2025-08"].copy()
+
+# WOE encoding (numeric features) for logistic regression
+woe = WOE_Master(train_data=train, varlist=features, dep="bad_flag")
+woe.fit(nbins=10, equal_freq=True)
+train_woe, valid_woe, oot_woe = (woe.transform(frame) for frame in (train, valid, oot))
+woe_features = [f"{f}_woe" for f in features]
+
+os.makedirs("models", exist_ok=True)
+```
+
+## Sample weights
+
+Training and evaluation take optional sample weights. **Without weights, behavior is the historical, unweighted one.**
+Weights must be non-negative and finite. Use the same weights when you evaluate: see
+[Model Evaluation](eval.md#sample-weighted-evaluation).
+
+| API | How to pass weights |
+|---|---|
+| `LRMaster.fit`, `stepwise_selection`, `get_aic`, `get_bic`, `calibrate_model` | `weight_col="<column of the frame>"` (`calibrate_model` also takes `sample_weight=<array>`) |
+| `LRMaster.grid_search_params` | `weight_col` for training, `eval_weight_col` for the AUC on each evaluation set |
+| `GradientBoostingModel.fit` | `sample_weight=` (training rows) and `eval_sample_weight=` (validation rows). For XGBoost, `sample_weight_eval_set=[...]` is also accepted |
+| `LightGBMModel.fit` | `sample_weight=` (alias `wgt=`) and `eval_sample_weight=` |
+| `XGBoostModel.fit` | `sample_weight=` and `sample_weight_eval_set=[<validation weights>]` |
+| `CatBoostModel.fit` | `sample_weight=` for training only |
+| `lgbm_quick_train`, `xgbm_quick_train`, `catboost_quick_train` | `wgt_col="<column>"` for training and `val_wgt_col="<column>"` for validation |
+| `BackwardVariableEliminator` | `weight_col`, `validation_weight_col` (defaults to `weight_col`) |
+
+Validation weights change the metric used for early stopping in LightGBM and XGBoost. **CatBoost ignores validation weights**:
+`GradientBoostingModel("cat", ...).fit(..., eval_sample_weight=...)` accepts the argument and does nothing with it.
+
+## 1. Logistic regression: `LRMaster`
 
 ```python
 from Modeling_Tool import LRMaster
 
 lr = LRMaster(params={"C": 1.0, "max_iter": 1000, "solver": "lbfgs"})
-# fit takes (data, varlist, tgt_name), not (X, y)
-lr.fit(train_woe, woe_features, "bad_flag")
+lr.fit(train_woe, woe_features, "bad_flag")           # fit(data, varlist, tgt_name); returns the LRMaster
 
-# Statistical summary: coefficients, standard errors, z, p-value, confidence intervals
-summary = lr.get_statsmodel_summary()
-print(summary)
+valid_score = lr.predict_proba(valid_woe)[:, 1]       # probability of the bad class
+
+print(lr.get_statsmodel_summary())    # index: Intercept + features; columns: coef, std_err, z, p_value, ci_lower, ci_upper
+print(lr.get_variable_importance())   # columns: varlist, coef, importance (= abs(coef)), sorted by importance
+print(lr.get_aic(), lr.get_bic())
 ```
 
-### Sample Weights
+`params` is passed to scikit-learn's `LogisticRegression(**params)`, so any of its arguments works (`C`, `penalty`, `solver`,
+`max_iter`, `class_weight`, ...) and omitted ones keep the defaults of your installed scikit-learn. Training uses the data in
+`fit`; the validation arguments (`val_data`, `val_varlist`, `val_tgt_name`) are accepted for reference only.
 
-`fit` supports passing weights as a DataFrame column name or an explicit array (**pick one**; the `wgt` / `wgt_col` aliases are also accepted):
+!!! warning "`predict` returns class labels"
+
+    `predict_proba(data)` returns an `(n, 2)` array whose column 1 is the bad-class probability, exactly as in scikit-learn.
+    `predict(data)` returns hard 0/1 labels, not scores. Use `predict_proba(data)[:, 1]` whenever you need a score.
+
+`LRMaster(params=None, model=None, varlist=None, tgt_name=None, standardize=False, scaler=None)` can also wrap an existing
+fitted `LogisticRegression` through `model=` (give `varlist` if the model has no `feature_names_in_`).
+
+| Method | Returns |
+|---|---|
+| `fit(data, varlist, tgt_name, val_data=None, val_varlist=None, val_tgt_name=None, weight_col=None)` | The `LRMaster` itself |
+| `predict(data, varlist=None, calibrated_model=False)` | Hard 0/1 labels |
+| `predict_proba(data, varlist=None, calibrated_model=False)` | `(n, 2)` probabilities; `calibrated_model=True` uses the calibrated model |
+| `get_statsmodel_summary(data=None, varlist=None, tgt_name=None)` | DataFrame of coefficients, standard errors, z, p-values, and 95% intervals (computed from the Fisher information) |
+| `get_variable_importance()` | DataFrame `varlist`, `coef`, `importance` |
+| `get_aic(data=None, varlist=None, tgt_name=None, weight_col=None)`, `get_bic(...)` | Float |
+| `stepwise_selection(data, varlist, tgt_name, criterion='aic', direction='both', max_iter=100, verbose=True, weight_col=None)` | List of the selected variables |
+| `calibrate_model(model=None, train_df=None, method='sigmoid', cv=5, weight_col=None, sample_weight=None)` | The `LRMaster` itself |
+| `eval_calibrated_outcome(evalset, plot=False, weight_col=None, sample_weight=None)` | `None`; prints the raw and calibrated Brier scores |
+| `grid_search_params(data, varlist, tgt_name, eval_sets, param_grid, ...)` | DataFrame of results |
+| `clone()` | An unfitted copy with the same configuration |
+| `set_data(data)` | The `LRMaster`; stores the frame later used for calibration |
+
+### Sample weights
 
 ```python
-# Option 1: column name (recommended; same naming as the evaluation-side weight_col)
-lr.fit(train_woe, woe_features, "bad_flag", weight_col="sample_wgt")
-
-# Option 2: explicit array
-lr.fit(train_woe, woe_features, "bad_flag", sample_weight=train_woe["sample_wgt"].values)
+lr_w = LRMaster(params={"C": 1.0, "max_iter": 1000})
+lr_w.fit(train_woe, woe_features, "bad_flag", weight_col="sample_wgt")
 ```
 
-`stepwise_selection`, `calibrate_model`, and `get_aic` / `get_bic` pass the weights through as well.
-Weights must be non-negative finite values.
+`LRMaster.fit` accepts only `weight_col`, a column of the training frame. It has no `sample_weight` array argument.
 
-### Key Parameters (passed through to sklearn)
+### Stepwise variable selection
 
-| Parameter | Default | Description |
-|------|-------|------|
-| `C` | `1.0` | Inverse regularization strength; the smaller, the stronger the regularization |
-| `penalty` | `"l2"` | `l1` / `l2` / `elasticnet` |
-| `solver` | `"lbfgs"` | Optimization algorithm |
-| `max_iter` | `100` | Maximum number of iterations |
-
-### Variable Importance
+`stepwise_selection` adds and removes variables by AIC or BIC (`direction` is `'forward'`, `'backward'`, or `'both'`). It
+returns the selected names and leaves the model fitted on them.
 
 ```python
-# LR coefficients (sorted by absolute value); columns are varlist / coef / importance
-varimp = lr.get_variable_importance()
-print(varimp[["varlist", "coef", "importance"]])
-```
-
-### Stepwise Variable Selection
-
-`stepwise_selection(data, varlist, tgt_name, ...)` does forward / backward / bidirectional selection based on AIC/BIC:
-
-```python
-from Modeling_Tool import LRMaster
-
-lr = LRMaster(params={"C": 1.0})
-selected = lr.stepwise_selection(
+stepper = LRMaster(params={"C": 1.0, "max_iter": 1000})
+selected = stepper.stepwise_selection(
     train_woe, woe_features, "bad_flag",
-    criterion="aic",        # 'aic' or 'bic'
-    direction="both",       # 'forward' / 'backward' / 'both'
-    weight_col="sample_wgt",  # optional: weighted AIC/BIC
+    criterion="aic",            # 'aic' or 'bic'
+    direction="both",           # 'forward', 'backward', or 'both'
+    weight_col="sample_wgt",    # optional: weighted AIC/BIC
+    verbose=False,
 )
 print(f"Stepwise selection kept {len(selected)} variables: {selected}")
 ```
 
-### Standardization (Optional)
+### Standardization (optional)
 
-By default, `LRMaster` **does not** standardize features (consistent with historical behavior). If you want to standardize the features before they enter the model,
-turn on `standardize=True` at construction; `StandardScaler` is used by default:
-
-```python
-from Modeling_Tool import LRMaster
-
-# Turn on standardization (StandardScaler by default)
-lr = LRMaster(params={"C": 1.0, "max_iter": 1000}, standardize=True)
-lr.fit(train_woe, woe_features, "bad_flag")
-
-# At prediction time, the input is automatically transformed with the scaler fitted during fit; no manual standardization needed
-proba = lr.predict_proba(test_woe)
-```
-
-You can also pass a custom scaler (**together with** `standardize=True`), such as `MinMaxScaler`:
+`LRMaster` does not standardize by default. Pass `standardize=True` to fit a `StandardScaler` on the training features; the
+same scaler is applied in every prediction and evaluation call. Pass `scaler=` **together with** `standardize=True` to use
+another scaler (the instance is cloned, never modified).
 
 ```python
 from sklearn.preprocessing import MinMaxScaler
-from Modeling_Tool import LRMaster
 
-lr = LRMaster(
-    params={"C": 1.0},
-    standardize=True,
-    scaler=MinMaxScaler(),   # the instance passed in is cloned; the original object is not modified
-)
-lr.fit(train_woe, woe_features, "bad_flag")
+scaled = LRMaster(params={"C": 1.0, "max_iter": 1000}, standardize=True)
+scaled.fit(train_woe, woe_features, "bad_flag")
+proba = scaled.predict_proba(valid_woe)             # inputs are scaled automatically
+
+custom = LRMaster(params={"C": 1.0}, standardize=True, scaler=MinMaxScaler())
+custom.fit(train_woe, woe_features, "bad_flag")
+print(type(custom.standardizer).__name__)           # MinMaxScaler
 ```
 
-#### Behavior Notes
+| Aspect | Behavior |
+|---|---|
+| Default | `standardize=False`: no scaling |
+| Custom scaler | `scaler=` is ignored unless `standardize=True` |
+| When it is fitted | Once, on the training features, in `fit` / `stepwise_selection`; stored as `lr.standardizer` |
+| Consistency | `predict`, `predict_proba`, `calibrate_model`, `get_statsmodel_summary`, `get_aic`, and `get_bic` transform their input with the same scaler |
+| `stepwise_selection` | Selection runs in the standardized space; the scaler is refitted on the selected variables at the end |
+| `clone()` | Copies the `standardize` switch and the scaler prototype, not the fitted scaler or model |
 
-| Aspect | Description |
-|------|------|
-| Default | `standardize=False`, no standardization at all (backward compatible) |
-| Default scaler | `StandardScaler`; a custom one can be passed through `scaler=` (such as `MinMaxScaler()`) |
-| When it is fitted | The scaler is fitted **only once, on the training features**, during `fit` / `stepwise_selection`, and stored in `lr.standardizer` |
-| Inference consistency | `predict` / `predict_proba` / `calibrate_model` / `get_statsmodel_summary` / `get_aic` / `get_bic` all transform their input with the same scaler, avoiding a training / inference space mismatch |
-| `stepwise_selection` | Selection happens in the standardized space; when it finishes, the scaler is refitted on the **finally selected variables** |
-| `clone()` | Copies only the `standardize` switch and the scaler prototype; it does **not** copy the fitted scaler / model |
+With standardization on, the coefficients from `get_variable_importance()` and `get_statsmodel_summary()` are in the
+**standardized space**: comparable across features, but no longer the log-odds change per original unit.
 
-!!! note "Interpreting coefficients"
-
-    With standardization on, the coefficients returned by `get_variable_importance()` and `get_statsmodel_summary()` are
-    coefficients in the **standardized space** — the benefit is that coefficient sizes of features on different scales can be compared directly; but they no longer equal
-    the log-odds change for "a 1-unit change in the predictor" in the original units.
-
-!!! warning "A custom scaler requires standardization to be turned on explicitly"
-
-    Passing only `scaler=...` without `standardize=True` does not enable standardization; a custom scaler must be used together with
-    `standardize=True`.
-
-### Hyperparameter Grid Search (Holdout)
-
-`grid_search_params(...)` runs a hyperparameter grid search on **INS / OOS / OOT holdouts** (rather than k-fold cross-validation),
-designed for the "in-sample / out-of-sample / out-of-time" scenario common in scorecards: it trains a candidate model for each point in the Cartesian product of `param_grid`,
-computes AUC on every eval set, and then picks the best combination according to `objective`.
+### Calibration
 
 ```python
-import numpy as np
-from Modeling_Tool import LRMaster
-
-tuner = LRMaster(params={"solver": "lbfgs", "max_iter": 1000})
-results = tuner.grid_search_params(
-    data=ins_fit,                  # data used to train candidate models (usually the INS)
-    varlist=woe_features,
-    tgt_name="bad_flag",
-    eval_sets={"ins": ins_woe, "oos": oos_woe, "oot": oot_woe},  # ordered, scored by AUC
-    param_grid={"C": np.logspace(-3, 2, 31)},   # multiple keys are combined as a Cartesian product
-    objective="oot_gap_penalized",  # default: maximize the primary-set AUC while penalizing the overfitting gap
-    primary_set="oot",              # defaults to the last key of eval_sets
-    gap_ref_sets=["ins", "oos"],    # defaults to all sets except primary_set
-    refit=True,                     # after the search, refit self on data with the best parameters
-    weight_col="sample_wgt",        # training-set weight column
-    eval_weight_col="sample_wgt",   # weighted AUC scoring on each eval set
-)
-
-print(tuner.best_params_)     # best-parameter dict
-print(tuner.search_results_)  # full results table (= return value)
+lr.calibrate_model(method="sigmoid", cv=5)                 # 'sigmoid' or 'isotonic'; cv an int or 'prefit'
+calibrated = lr.predict_proba(valid_woe, calibrated_model=True)[:, 1]
+lr.eval_calibrated_outcome(valid_woe)                      # prints raw and calibrated Brier scores
 ```
 
-#### Three Objectives
+Without `train_df`, `calibrate_model` uses the frame from `fit`. Calibrating on the training data is rarely what you want:
+pass a holdout frame as `train_df=...`, or use `cv='prefit'` with a separate calibration set.
 
-| objective | Selection criterion |
+### Hyperparameter grid search on holdouts
+
+`grid_search_params` trains one candidate per point of the Cartesian product of `param_grid`, scores the AUC on every frame in
+`eval_sets`, and picks the best candidate by `objective`. It uses your **in-sample / out-of-sample / out-of-time holdouts**
+rather than k-fold cross-validation.
+
+```python
+tuner = LRMaster(params={"solver": "lbfgs", "max_iter": 1000})
+results = tuner.grid_search_params(
+    data=train_woe,                                          # frame the candidates are trained on
+    varlist=woe_features,
+    tgt_name="bad_flag",
+    eval_sets={"ins": train_woe, "oos": valid_woe, "oot": oot_woe},   # ordered; scored by AUC
+    param_grid={"C": np.logspace(-3, 2, 6)},                 # several keys form a Cartesian product
+    objective="oot_gap_penalized",                           # default
+    primary_set="oot",                                       # default: the last key of eval_sets
+    gap_ref_sets=["ins", "oos"],                             # default: every set except primary_set
+    refit=True,                                              # refit the LRMaster on `data` with the best parameters
+    weight_col="sample_wgt",                                 # training weights
+    eval_weight_col="sample_wgt",                            # weighted AUC on each evaluation set
+    verbose=False,
+)
+print(results.head())              # parameter columns, AUC_<set> per eval set, gap, score
+print(tuner.best_params_)          # {'C': ...}
+print(tuner.search_results_)       # the same table as the return value
+```
+
+| `objective` | Selection criterion |
 |---|---|
-| `'oot_gap_penalized'` (default) | `AUC[primary] - |mean(AUC[gap_refs]) - AUC[primary]|`, i.e. raise the primary-set AUC while penalizing the AUC gap between training and holdout (overfitting) |
-| `'max_primary'` | Directly maximize `AUC[primary]` |
-| callable | Custom `f(auc_dict) -> float`, where `auc_dict` is `{set_name: AUC}` |
+| `'oot_gap_penalized'` (default) | `AUC[primary] - abs(mean(AUC[gap_refs]) - AUC[primary])`: a high primary-set AUC with little gap to the other sets |
+| `'max_primary'` | `AUC[primary]` |
+| a callable | `f(auc_dict) -> float`, where `auc_dict` maps each eval-set name to its AUC |
 
-#### Return Value and Side Effects
+The returned table is sorted by `score`, best first. The search also writes `best_params_` and `search_results_`, merges the
+best parameters into `lr.params`, and, with `refit=True`, refits the model on `data`. Only `metric='auc'` is supported. If the
+`LRMaster` was built with `standardize=True`, every candidate uses the same scaling configuration.
 
-- **Returns**: a results table sorted by `score` in descending order, with columns: the parameter columns + `AUC_<name>` for each eval set + `gap` (under the gap objective) + `score`.
-- **Side effects**: writes `self.best_params_` and `self.search_results_`, merges the best combination into `self.params`; with `refit=True`, it also refits `self.model` on `data` with the best parameters.
+## 2. Gradient boosting: `GradientBoostingModel`
 
-!!! note "Holdout, not CV; only AUC is supported for now"
-
-    This is a holdout search based on the `eval_sets` you provide explicitly (not k-fold cross-validation), which fits the risk-control
-    INS/OOS/OOT practice better. `metric` currently supports only `'auc'`.
-
-!!! tip "Standardization config is inherited automatically"
-
-    If this `LRMaster` has `standardize=True`, every candidate inherits the same configuration (each fits its scaler on `data`),
-    ensuring the search and the final model live in the same feature space.
-
-## 2. Gradient Boosting Models — `GradientBoostingModel`
-
-A unified interface to LightGBM / XGBoost / CatBoost.
+`GradientBoostingModel(model_type, params)` takes `model_type` `'lgb'`, `'xgb'`, or `'cat'` (`'catboost'` is an alias). The
+`params` dictionary is forwarded to the backend's scikit-learn estimator (`LGBMClassifier`, `XGBClassifier`,
+`CatBoostClassifier`), so the backend's own defaults apply to everything you leave out. The validation set passed to `fit` is
+used for early stopping.
 
 ```python
 from Modeling_Tool import GradientBoostingModel
 
 gbm = GradientBoostingModel(
-    model_type="lgb",       # 'lgb' / 'xgb' / 'cat'
+    "lgb",
     params={
-        "n_estimators": 500,
+        "n_estimators": 300,
         "learning_rate": 0.05,
         "max_depth": 4,
         "num_leaves": 15,
         "min_child_samples": 100,
         "subsample": 0.8,
         "colsample_bytree": 0.8,
-        "early_stopping_rounds": 30,
+        "early_stopping_rounds": 30,     # required for LightGBM
         "eval_metric": "auc",
+        "verbose": -1,
     },
 )
-gbm.fit(
-    train_X, train_y,
-    val_X,   val_y,
-)
+gbm.fit(train[features], train["bad_flag"], valid[features], valid["bad_flag"])    # returns the model
 
-# Variable importance
-varimp = gbm.get_feature_importance()
-print(varimp.head(15))
-
-# Predict (returns the positive-class probability, 1-D)
-proba = gbm.predict(test_X)
-
-# Calibration (optional)
-gbm.calibrate(val_X, val_y, method="isotonic")
+proba = gbm.predict(oot[features])                  # 1-D probability of the bad class
+print(gbm.get_feature_importance().head())          # columns: feature, importance
+print(gbm.roc_auc(oot[features], oot["bad_flag"]), gbm.brier_score(oot[features], oot["bad_flag"]))
 ```
 
-### Sample Weights
+Unknown attributes are passed through to the fitted estimator, so `gbm.predict_proba(X)` (an `(n, 2)` array),
+`gbm.feature_names_in_`, and `gbm.get_params()` work, and a `GradientBoostingModel` can be handed directly to
+`PerformanceEvaluator`, `ModelExplainer`, `scoring`, and `save_model`. The fitted estimator itself is `gbm._model.model`.
 
-`GradientBoostingModel.fit` and the underlying `LightGBMModel` / `XGBoostModel` / `CatBoostModel`
-support training-set `sample_weight` (alias `wgt`) and validation-set `eval_sample_weight`:
+### Parameters that need care
+
+| Parameter | LightGBM | XGBoost | CatBoost |
+|---|---|---|---|
+| `early_stopping_rounds` | **Required**; a missing key raises `KeyError` | Optional | Optional |
+| `eval_metric` | Used (`'auc'`; default `'auc'`) | **Ignored**: early stopping uses XGBoost's own binary default, `logloss` | Used (`'AUC'`) |
+| `n_estimators`, `max_depth` | Native names | Native names | Mapped to CatBoost's `iterations` and `depth`; the native names also work. Do not pass both |
+| `cat_features` | n/a (CatBoost-only key) | n/a (CatBoost-only key) | List of raw categorical column names |
+| `init_score` in `fit` (warm start) | Supported | Supported (as `base_margin`) | `NotImplementedError` |
+
+The validation set carries no weights unless you pass `eval_sample_weight`; see [Sample weights](#sample-weights).
+
+!!! note "`get_feature_importance` ignores `importance_type`"
+
+    The method accepts `importance_type` for API symmetry, but each backend returns one fixed kind in 0.8.2: **LightGBM**
+    total gain, **XGBoost** split counts, **CatBoost** its default `PredictionValuesChange` (which sums to 100). The values are
+    not normalized. For another kind use the estimator directly, for example `gbm.booster_.feature_importance(importance_type="split")`
+    for LightGBM or `gbm.get_booster().get_score(importance_type="gain")` for XGBoost.
+
+### Sample weights
 
 ```python
-gbm.fit(
-    train_woe[woe_features], train_woe["bad_flag"],
-    test_woe[woe_features],  test_woe["bad_flag"],
-    sample_weight=train_woe["sample_wgt"],
-    eval_sample_weight=test_woe["sample_wgt"],
-)
-```
-
-CatBoost injects the weights through `Pool(weight=...)`. `calibrate` and the internal `roc_auc` / `brier_score`
-evaluation accept `sample_weight` as well.
-
-`lgbm_quick_train` / `xgbm_quick_train` can specify the validation-set weight column with `val_wgt_col`:
-
-```python
-from Modeling_Tool import lgbm_quick_train
-
-model = lgbm_quick_train(
-    train_X, train_y, val_X, val_y,
-    params={"n_estimators": 200},
-    val_wgt_col="sample_wgt",
+weighted_gbm = GradientBoostingModel("lgb", {"n_estimators": 100, "early_stopping_rounds": 20, "verbose": -1})
+weighted_gbm.fit(
+    train[features], train["bad_flag"],
+    valid[features], valid["bad_flag"],
+    sample_weight=train["sample_wgt"],
+    eval_sample_weight=valid["sample_wgt"],
 )
 ```
 
-#### CatBoost Example (`model_type="cat"`)
+### XGBoost and CatBoost
 
-CatBoost uses the same interface; just change `model_type` to `"cat"`. The unified parameter names (`n_estimators` /
-`max_depth`) are mapped automatically to CatBoost's native parameters (`iterations` / `depth`), with no change to the rest of the calling code;
-if the data has raw categorical columns, you can hand them to CatBoost's native handling through `cat_features` (no need for WOE / one-hot first).
+The interface is identical; only `model_type` and the parameter names that differ per backend change.
 
 ```python
-from Modeling_Tool import GradientBoostingModel
+xgb = GradientBoostingModel("xgb", {"n_estimators": 200, "max_depth": 4, "learning_rate": 0.05, "early_stopping_rounds": 20})
+xgb.fit(train[features], train["bad_flag"], valid[features], valid["bad_flag"])
 
 cat = GradientBoostingModel(
-    model_type="cat",       # CatBoost
-    params={
-        "n_estimators": 500,        # equivalent to CatBoost's iterations
-        "learning_rate": 0.05,
-        "max_depth": 6,             # equivalent to CatBoost's depth
-        "l2_leaf_reg": 3.0,
-        "subsample": 0.8,
-        "early_stopping_rounds": 30,
-        "eval_metric": "AUC",
-        "cat_features": ["city_grade"],   # optional: pass raw categorical columns directly
-    },
+    "cat",
+    {"n_estimators": 200, "max_depth": 4, "learning_rate": 0.05, "early_stopping_rounds": 20,
+     "eval_metric": "AUC", "verbose": False},
 )
-cat.fit(train_X, train_y, val_X, val_y)
-
-# Downstream usage identical to lgb / xgb
-varimp = cat.get_feature_importance()
-proba = cat.predict(test_X)
+cat.fit(train[features], train["bad_flag"], valid[features], valid["bad_flag"])
+print(cat.get_feature_importance().head())
 ```
 
-### Key Parameters
+### CatBoost with raw categorical columns
 
-| Parameter | Default | Description |
-|------|-------|------|
-| `model_type` | `"lgb"` | `"lgb"` / `"xgb"` / `"cat"` |
-| `n_estimators` | `100` | Number of trees |
-| `learning_rate` | `0.1` | Learning rate |
-| `max_depth` | `-1` | Maximum depth (-1 = unlimited) |
-| `early_stopping_rounds` | `None` | Early-stopping rounds |
-| `eval_metric` | `"auc"` | Evaluation metric |
-
-### Using LightGBMModel / XGBoostModel / CatBoostModel Directly
+CatBoost can encode string columns itself, so you can skip WOE for them: list the columns in `cat_features`, keep them in the
+feature frame, and use the same frame layout for training, validation, and scoring.
 
 ```python
-from Modeling_Tool import LightGBMModel, XGBoostModel, CatBoostModel
-
-lgb = LightGBMModel(params={"n_estimators": 200, "learning_rate": 0.05})
-lgb.fit(train_X, train_y, val_X, val_y)
-
-xgb = XGBoostModel(params={"n_estimators": 200, "max_depth": 6})
-xgb.fit(train_X, train_y, val_X, val_y)
-
-cat = CatBoostModel(params={"n_estimators": 200, "max_depth": 6})
-cat.fit(train_X, train_y, val_X, val_y)
-```
-
-### Standard CatBoost Modeling — `CatBoostModel`
-
-`CatBoostModel` can be used on its own, or called through the unified interface via `GradientBoostingModel("cat", ...)`.
-Its biggest feature is **native handling of categorical features**: specify raw categorical columns (column names or indices) through `cat_features`,
-and CatBoost encodes them internally with ordered target statistics, with no need for WOE / one-hot beforehand.
-
-```python
-from Modeling_Tool import CatBoostModel
-
-cat = CatBoostModel(
-    params={
-        "n_estimators": 500,        # -> iterations
-        "learning_rate": 0.05,
-        "max_depth": 6,             # -> depth
-        "l2_leaf_reg": 3.0,
-        "early_stopping_rounds": 30,
-        "eval_metric": "AUC",
-        "cat_features": ["city_grade"],   # raw categorical columns, no encoding needed
-    },
+cat_columns = features + ["city_grade"]
+cat_native = GradientBoostingModel(
+    "cat",
+    {"iterations": 200, "depth": 4, "learning_rate": 0.05, "early_stopping_rounds": 20,
+     "eval_metric": "AUC", "cat_features": ["city_grade"], "verbose": False},
 )
-cat.fit(train_X, train_y, val_X, val_y)
-
-varimp = cat.get_feature_importance()
-proba = cat.predict(test_X)
+cat_native.fit(train[cat_columns], train["bad_flag"], valid[cat_columns], valid["bad_flag"])
+print(cat_native.predict(oot[cat_columns])[:3])
 ```
 
-!!! note "The WOE pipeline usually doesn't need `cat_features`"
+!!! tip "Strings in LightGBM and XGBoost"
 
-    The standard scorecard flow first WOE-encodes all features into numeric columns, so the model features no longer contain raw categorical columns,
-    and `cat_features` can be omitted. You need it only when you feed raw categorical columns directly to CatBoost.
+    LightGBM raises `ValueError: pandas dtypes must be int, float or bool` for `object` columns, and listing the column in
+    `params["categorical_feature"]` does not change that. Convert it first: `df[col] = df[col].astype("category")`, with the
+    same categories in every frame. After WOE encoding, all features are numeric and none of this applies.
 
-### Quick Training Functions
+### Warm start (incremental learning)
+
+Continue learning on new data from an existing model: the old model's log-odds become the starting point (`init_score`) for
+the new model, and scoring fuses both: `sigmoid(old_margin + new_raw_score)`. It works for `lgb` and `xgb`; CatBoost raises
+`NotImplementedError`.
 
 ```python
-from Modeling_Tool import lgbm_quick_train, xgbm_quick_train
+base_model = GradientBoostingModel("lgb", {"n_estimators": 100, "early_stopping_rounds": 20, "verbose": -1})
+base_model.fit(train[features], train["bad_flag"], valid[features], valid["bad_flag"])
 
-model = lgbm_quick_train(train_X, train_y, val_X, val_y,
-                         params={"n_estimators": 200})
+# 1) Log-odds of the old model, on the rows used for incremental training
+base_margin_train = base_model.get_base_margin(train[features])
+
+# 2) Train the new model on top of it (the same call for "xgb")
+increment = GradientBoostingModel("lgb", {"n_estimators": 50, "early_stopping_rounds": 10, "verbose": -1})
+increment.fit(train[features], train["bad_flag"], valid[features], valid["bad_flag"], init_score=base_margin_train)
+
+# 3) Fused prediction: sigmoid(old margin + new raw score)
+base_margin_oot = base_model.get_base_margin(oot[features])
+fused = increment.predict_with_base_margin(oot[features], base_margin_oot, return_prob=True)    # False returns log-odds
 ```
-
-### Incremental Learning (Warm-start)
-
-Continue training on new data from an existing model, instead of starting from scratch. `GradientBoostingModel`
-provides an interface that is **compatible with both lgb and xgb**: the old model's log-odds output is used as `init_score`
-to continue learning on the new data, and at scoring time "old model margin + new model contribution" is fused into the final probability.
-
-#### Differences between lgb / xgb
 
 | Step | XGBoost | LightGBM |
-|------|---------|----------|
-| Get the raw margin (log-odds) | `predict(X, output_margin=True)` | `predict(X, raw_score=True)` |
-| Pass an offset at training time | `fit(X, y, base_margin=...)` | `fit(X, y, init_score=...)` |
-| Add the offset directly at prediction time | Natively supported | **Not supported** |
+|---|---|---|
+| Raw margin | `predict(X, output_margin=True)` | `predict(X, raw_score=True)` |
+| Training offset | `fit(..., base_margin=...)` | `fit(..., init_score=...)` |
+| Offset at prediction time | Native | **Not supported** |
 
-`GradientBoostingModel` hides these differences internally: externally it uses `init_score` uniformly, and the prediction fusion uniformly goes through
-`sigmoid(base_margin + new-model raw score)` — the only approach that behaves the same for both frameworks (LightGBM
-does not support injecting init_score at prediction time).
+`GradientBoostingModel` hides these differences: you always pass `init_score`, and fused prediction always goes through
+`predict_with_base_margin`, the one approach that behaves identically on both backends. The offset is applied to the training set
+only; the validation set gets none, so early stopping measures the metric without the offset.
 
-#### Three-Step Usage
+A model that was pickled as a bare `LGBMClassifier` or `XGBClassifier` can be adapted without retraining:
+`GradientBoostingModel.from_fitted(estimator)`; the backend is detected from the estimator, or pass `model_type=`.
+
+### Calibration
 
 ```python
-from Modeling_Tool import GradientBoostingModel
-
-# 1) Get the base margin (log-odds) from the old model, as the starting point for incremental training
-base_margin_train = init_model.get_base_margin(train_X)
-
-# 2) Incremental training: pass the base margin as init_score (lgb / xgb both use init_score)
-new_model = GradientBoostingModel("xgb", params)   # same for "lgb"
-new_model.fit(train_X, train_y, val_X, val_y, init_score=base_margin_train)
-
-# 3) Fused prediction: sigmoid(base_margin + new-model raw score)
-base_margin_score = init_model.get_base_margin(score_X)
-proba = new_model.predict_with_base_margin(score_X, base_margin_score, return_prob=True)
-# return_prob=False returns the fused raw log-odds
+calibrated = GradientBoostingModel("xgb", {"n_estimators": 100, "early_stopping_rounds": 10})
+calibrated.fit(train[features], train["bad_flag"], valid[features], valid["bad_flag"])
+calibrated.calibrate(valid[features], valid["bad_flag"], method="isotonic")      # 'sigmoid' (default) or 'isotonic'
+proba = calibrated.predict(oot[features])
 ```
 
-!!! note "The offset applies only to the training set"
+`calibrate` wraps the fitted model with `CalibratedClassifierCV` and fits the calibrator on the data you pass; use a
+holdout, not the training data. Keep the default `cv='prefit'`: an integer `cv` refits clones without a validation set and
+fails whenever `early_stopping_rounds` is set. After calibrating, importance and other tree-specific attributes are no longer
+available on that object.
 
-    Consistent with common production implementations, the `init_score` offset is injected only into the training set; the validation set gets no offset, so the early-stopping
-    eval metric is evaluated in the "no-offset" space. If you need strict consistency, you can later pass through lgb's
-    `eval_init_score` / xgb's `base_margin_eval_set`.
+### Save and load
 
-!!! tip "init_model should be a GradientBoostingModel"
+```python
+gbm.save("models/gbm_estimator.pkl")                                     # the fitted estimator only
+restored = GradientBoostingModel("lgb", gbm.params).load("models/gbm_estimator.pkl")    # load returns the model
+print(np.allclose(restored.predict(oot[features]), gbm.predict(oot[features])))
+```
 
-    `get_base_margin` / `predict_with_base_margin` are instance
-    methods of `GradientBoostingModel`, so the base model `init_model` should also be a `GradientBoostingModel` (not a bare
-    `LGBMClassifier` / `XGBClassifier`).
+`save_model` / `load_model` store a model together with metadata; see [Persistence and scoring](#4-persistence-and-scoring) and
+[Model Registry and Versioning](model_registry.md).
 
-## 3. Backward Variable Elimination — `BackwardVariableEliminator`
+### Parameter search
 
-Removes variables step by step based on a **cumulative importance threshold**, commonly used for **lightweight variable screening**.
+`GradientBoostingModel.param_search(...)` runs a holdout grid or Optuna search; see
+[GBM Hyperparameter Search](gbm_param_search.md).
+
+### The single-backend classes and the quick-train functions
+
+`LightGBMModel(params, model=None)`, `XGBoostModel(params, model=None)`, and `CatBoostModel(params, model=None)` expose the same
+methods as `GradientBoostingModel` (`fit`, `predict`, `get_feature_importance`, `calibrate`, `roc_auc`, `brier_score`, `save`,
+`load`) plus `calibration_curve(x, y, n_bins=10)`. Their `fit` signatures differ slightly, as listed in
+[Sample weights](#sample-weights). The quick-train functions take DataFrames plus the feature and target names and return
+the **bare estimator**, not a `GradientBoostingModel`:
+
+```python
+from Modeling_Tool import LightGBMModel, lgbm_quick_train, xgbm_quick_train
+from Modeling_Tool.Model import catboost_quick_train
+
+lgb_params = {"n_estimators": 100, "learning_rate": 0.1, "early_stopping_rounds": 10, "verbose": -1}
+
+lgb_single = LightGBMModel(dict(lgb_params))
+lgb_single.fit(train[features], train["bad_flag"], valid[features], valid["bad_flag"])
+curve = lgb_single.calibration_curve(valid[features], valid["bad_flag"], n_bins=10)   # (fraction_of_positives, mean_predicted_value)
+
+lgb_estimator = lgbm_quick_train(
+    train, valid, features, "bad_flag", dict(lgb_params), wgt_col="sample_wgt", val_wgt_col="sample_wgt",
+)     # LGBMClassifier
+xgb_estimator = xgbm_quick_train(
+    train, valid, features, "bad_flag", params={"n_estimators": 100, "early_stopping_rounds": 10},
+    wgt_col="sample_wgt", val_wgt_col="sample_wgt",
+)     # XGBClassifier
+cat_estimator = catboost_quick_train(
+    train, valid, features, "bad_flag", {"n_estimators": 100, "early_stopping_rounds": 10, "verbose": False},
+)     # CatBoostClassifier
+```
+
+| Function | Signature | Returns |
+|---|---|---|
+| `lgbm_quick_train` | `(train_data, validation_data, x, y, params, wgt_col=None, val_wgt_col=None, cat_x_train=None)` | `LGBMClassifier` |
+| `xgbm_quick_train` | `(train_data, validation_data, x, y, wgt_col=None, params=None, sample_weight_eval_set=None, val_wgt_col=None)` | `XGBClassifier` |
+| `catboost_quick_train` | `(train_data, validation_data, x, y, params, wgt_col=None, val_wgt_col=None, cat_features=None)` | `CatBoostClassifier` |
+
+`x` is the list of feature columns and `y` the target column name.
+
+## 3. Backward variable elimination: `BackwardVariableEliminator`
+
+The eliminator trains a boosted model on the current variables, ranks them by importance, **keeps the top variables whose
+cumulative importance reaches `cum_importance_threshold`** (and at least `min_vars` of them), and repeats on the survivors for
+`n_rounds` rounds or until `min_vars` is reached. It is a lightweight screening step for long candidate lists.
 
 ```python
 from Modeling_Tool import BackwardVariableEliminator
 
+# 5 informative features plus 15 noise features
+noise_rng = np.random.default_rng(7)
+noise_cols = [f"noise_{i}" for i in range(15)]
+for frame in (train, valid, oot):
+    for col in noise_cols:
+        frame[col] = noise_rng.normal(size=len(frame))
+candidates = features + noise_cols
+
 eliminator = BackwardVariableEliminator(
-    model_type="lgb",
-    train_data=train_woe,
-    validation_data=test_woe,
-    oot_data=oot_woe,
-    params={"n_estimators": 100, "learning_rate": 0.1},
-    y="bad_flag",
-    weight_col="sample_wgt",              # training-set weight column
-    validation_weight_col="sample_wgt",   # validation-set weight column
-    results_output_dir="./output/",   # constructor parameter, not a fit parameter
-    modelsave_dir="./models/",
+    train_data=train,
+    varlist=candidates,
+    dep="bad_flag",
+    model_type="lgbm",                          # 'lgbm' or 'xgbm'
+    validation_data=valid,                      # used for early stopping and the performance summary
+    test_data_dict={"oot": oot},                # more frames to summarize, by name
+    weight_col="sample_wgt",
+    validation_weight_col="sample_wgt",
+)
+rounds = eliminator.run(
+    n_rounds=3,
+    varreduct_params={"num_leaves": 7, "learning_rate": 0.1},     # LightGBM parameters
+    num_boost_round=100,
+    early_stopping_rounds=10,
+    cum_importance_threshold=0.99,
+    min_vars=5,
 )
 
-eliminator.fit(x=woe_features)
-result = eliminator.analyze()
-print(result)   # number of variables and performance at each backward-elimination round
+print(eliminator.get_summary())         # round, n_vars_in, n_vars_out, vars_removed
+print(eliminator.get_final_vars())      # variables kept after the last round
 ```
 
-The underlying `backward_lgbm` / `backward_xgbm` also accept `weight_col` and `validation_weight_col`,
-and both training and the performance summary (`get_perf_summary`) are computed by weight.
+`BackwardVariableEliminator(train_data, varlist, dep, model_type='lgbm', validation_data=None, test_data_dict=None, weight_col=None, validation_weight_col=None, wgt_col=None)`
+is configured at construction; `run(n_rounds=5, varreduct_params=None, stopping_metric='auc', seed=42, num_boost_round=200, early_stopping_rounds=20, importance_type='gain', cum_importance_threshold=0.99, min_vars=10, ret_perf=True, nbins=10, **kwargs)`
+does the work and returns one dictionary per round:
 
-### How It Works
+| Key | Content |
+|---|---|
+| `round`, `n_vars_in`, `n_vars_out` | Round number, and the variable counts before and after |
+| `selected_vars` | The variables kept |
+| `model` | The fitted booster (`lightgbm.Booster`, or the XGBoost booster) |
+| `perf` | `{split name: get_perf_summary frame}` with the keys `'mdl'` (training), `'hd'` (validation), and your `test_data_dict` names; empty when `ret_perf=False` |
 
-1. Train one round of LGB with all features, and record each feature's gain importance
-2. Remove variables whose **cumulative importance < threshold** (such as `< 0.001`)
-3. Repeat 1–2 until the number of remaining variables reaches the lower limit or AUC stops improving
+!!! warning "`model_type` values"
 
-## 4. Model Persistence
+    Use exactly `'lgbm'` or `'xgbm'` (the default is `'lgbm'`). Any other string, including `'lgb'` and `'xgb'`, silently
+    runs XGBoost.
+
+`varreduct_params` holds the booster's parameters. For LightGBM, SMF fills in `metric` (= `stopping_metric`), `seed`,
+`objective='binary'`, `boosting_type='gbdt'`, and `num_threads=8` for the keys you do not set. Without `validation_data`,
+early stopping watches the training set. The functions `backward_lgbm(...)` and `backward_xgbm(...)` in
+`Modeling_Tool.Model` run a single round and return `(selected_vars, model, perf)`.
+
+`BackwardEliminationAnalyzer(results)` (in `Modeling_Tool.Model`) analyzes the list that `run` returns:
 
 ```python
-from Modeling_Tool import save_model, load_model
+from Modeling_Tool.Model import BackwardEliminationAnalyzer
 
-save_model(gbm._model.model, "./models/gbm_v1.pkl")
-
-# Load
-loaded = load_model("./models/gbm_v1.pkl")
+analyzer = BackwardEliminationAnalyzer(rounds)
+print(analyzer.get_stable_vars(top_n=5))                     # variables kept in every round
+print(analyzer.get_perf_trend(dataset="hd", metric="AUC"))   # metric per round on one split
 ```
 
-## 5. Scoring Function
+`plot_var_reduction(figsize=(8, 4), save_path=None)` plots the number of variables per round; its axis labels are in Chinese.
+
+## 4. Persistence and scoring
+
+`save_model(model, filename, metadata=None, feature_cols=None, woe_mapping_path=None, train_window=None, metrics=None, model_name=None, model_version=None, include_metadata=True)`
+pickles any model object (a `GradientBoostingModel`, an `LRMaster`, or a bare estimator) and returns `0`. With
+`include_metadata=True` it also records the SMF and Python versions, the creation time, the model class, and what you pass in
+`feature_cols`, `metrics`, `model_name`, `model_version`, plus any custom keys in `metadata`. `load_model(model_path,
+return_metadata=False)` returns the model, or `(model, metadata)`; `load_model_metadata(model_path)` returns only the metadata.
 
 ```python
-from Modeling_Tool import scoring
+from Modeling_Tool import load_model, load_model_metadata, save_model, scoring
 
-scores = scoring(
-    data=new_df,
-    model=gbm._model.model,
-    varlist=woe_features,
-    scr_name="prob",
+save_model(
+    gbm, "models/gbm_v1.pkl",
+    feature_cols=features, metrics={"oot_auc": 0.77}, model_name="demo_gbm", model_version="1.0",
+    metadata={"owner": "risk-modeling"},
 )
+loaded, metadata = load_model("models/gbm_v1.pkl", return_metadata=True)
+print(metadata["smf_version"], metadata["feature_cols"], metadata["owner"])
+print(load_model_metadata("models/gbm_v1.pkl")["model_name"])        # metadata only
+
+scored = scoring(data=oot, model=loaded, varlist=features, scr_name="prob")
+print(scored[["prob"]].describe())
 ```
 
-## Model Comparison in Practice
+`scoring(data, model, varlist, scr_name, keeplist=None, all_missing_spec_value=None)` adds the model's bad-class probability
+as `scr_name` to a copy of `data` (any model with `predict_proba`, including `LRMaster`). With `keeplist`, only those columns and
+the score are returned. Rows whose features are **all** missing get `all_missing_spec_value` instead of the model's score; any
+falsy value (`None`, `0`) leaves the override off.
+
+## Model comparison in practice
+
+Fit each model on the same split, score the holdouts, and compare them with one evaluator.
 
 ```python
-from Modeling_Tool import (
-    LRMaster, GradientBoostingModel, PerformanceEvaluator,
-)
+from Modeling_Tool import PerformanceEvaluator
 
+boosting_params = {"n_estimators": 150, "learning_rate": 0.05, "max_depth": 3, "early_stopping_rounds": 20}
 models = {
-    "LR":   LRMaster({"C": 1.0}),
-    "LGB":  GradientBoostingModel("lgb", {"n_estimators": 200}),
-    "XGB":  GradientBoostingModel("xgb", {"n_estimators": 200}),
-    "CAT":  GradientBoostingModel("cat", {"n_estimators": 200}),
+    "lr": LRMaster({"C": 1.0, "max_iter": 1000}),
+    "lgb": GradientBoostingModel("lgb", {**boosting_params, "verbose": -1}),
+    "xgb": GradientBoostingModel("xgb", dict(boosting_params)),
+    "cat": GradientBoostingModel("cat", {**boosting_params, "verbose": False}),
 }
 
-results = {}
 for name, model in models.items():
-    if name == "LR":
+    if name == "lr":
         model.fit(train_woe, woe_features, "bad_flag", weight_col="sample_wgt")
+        for frame in (train_woe, valid_woe, oot_woe):
+            frame["score_lr"] = model.predict_proba(frame)[:, 1]
     else:
-        model.fit(train_woe[woe_features], train_woe["bad_flag"],
-                  test_woe[woe_features],  test_woe["bad_flag"],
-                  sample_weight=train_woe["sample_wgt"],
-                  eval_sample_weight=test_woe["sample_wgt"])
+        model.fit(
+            train_woe[woe_features], train_woe["bad_flag"], valid_woe[woe_features], valid_woe["bad_flag"],
+            sample_weight=train_woe["sample_wgt"],
+            eval_sample_weight=valid_woe["sample_wgt"],
+        )
+        for frame in (train_woe, valid_woe, oot_woe):
+            frame[f"score_{name}"] = model.predict(frame[woe_features])
 
-    raw_model = model._model.model if name != "LR" else model.model
-    evaluator = PerformanceEvaluator(
-        tgt_name="bad_flag",
-        model=raw_model,
-        feature_cols=woe_features,
-        weight_col="sample_wgt",
+for name in models:
+    perf = (
+        PerformanceEvaluator(tgt_name="bad_flag", scr_name=f"score_{name}", weight_col="sample_wgt")
+        .add_dataset("train", train_woe)
+        .add_dataset("valid", valid_woe)
+        .add_dataset("oot", oot_woe)
+        .evaluate(display=False)
     )
-    perf = evaluator.add_dataset("train", train_woe) \
-                    .add_dataset("test",  test_woe).evaluate()
-    results[name] = perf
-
-# Compare KS / AUC
-for name, perf in results.items():
-    print(f"{name}: AUC={perf['AUC'].mean():.4f}  KS={perf['KS'].mean():.4f}")
+    print(name, perf.set_index("index")[["AUC", "KS"]].round(4).to_dict("index"))
 ```
 
 ## FAQ
 
-??? question "LightGBM training raises a `categorical_feature` error"
+??? question "LightGBM raises `ValueError: pandas dtypes must be int, float or bool`"
 
-    Make sure the categorical column has the `category` dtype in the DataFrame, or set it in params:
+    A feature column has the `object` dtype. Convert string columns before training: `df[col] = df[col].astype("category")`,
+    using the same categories in every frame (training, validation, scoring). Listing the column in `params["categorical_feature"]`
+    does not help. Alternatively WOE-encode the feature, or use CatBoost with `cat_features`.
 
-    ```python
-    params["categorical_feature"] = ["city_grade"]
-    ```
+??? question "LightGBM raises `KeyError: 'early_stopping_rounds'`"
 
-??? question "CatBoost parameter aliases: `n_estimators` / `max_depth`, or `iterations` / `depth`?"
+    LightGBM training in SMF reads `params["early_stopping_rounds"]` and needs a validation set: pass both. XGBoost and
+    CatBoost do not require it.
 
-    `GradientBoostingModel("cat", ...)` and `CatBoostModel` accept **unified parameter names**, so the three GBMs
-    can share one configuration: `n_estimators` maps to CatBoost's native `iterations`, and `max_depth` maps to
-    `depth`. You can also write CatBoost's native names directly (`iterations` / `depth`); either one works.
-    Avoid passing an alias and its native name **together**, to prevent ambiguity; other parameters (`learning_rate`, `l2_leaf_reg`,
-    `early_stopping_rounds`, `eval_metric`, etc.) are passed through under CatBoost's native names.
+??? question "CatBoost: `n_estimators` / `max_depth`, or `iterations` / `depth`?"
+
+    `GradientBoostingModel("cat", ...)` and `CatBoostModel` accept both, so one configuration can serve all three backends:
+    `n_estimators` maps to `iterations`, and `max_depth` maps to `depth`. Do not pass an alias and its native name together.
+    Other parameters (`learning_rate`, `l2_leaf_reg`, `early_stopping_rounds`, `eval_metric`, ...) use CatBoost's native names.
 
 ??? question "How does CatBoost handle categorical features?"
 
-    CatBoost supports categorical features natively: specify raw categorical columns (column names or indices) with `cat_features` in params,
-    and CatBoost encodes them internally with ordered target statistics, with **no** WOE / one-hot preprocessing needed:
+    List raw categorical columns in `params["cat_features"]` (names or indices); CatBoost encodes them with ordered target
+    statistics, so no WOE or one-hot step is needed. The training, validation, and scoring frames must have the same columns.
+    After WOE encoding every feature is numeric and `cat_features` is unnecessary.
+
+??? question "Feature importances do not sum to 1"
+
+    They are not normalized. LightGBM returns total gain, XGBoost returns split counts, CatBoost returns
+    `PredictionValuesChange` (summing to 100), and `importance_type` does not change that. Divide by the sum if you need
+    shares. For `ModelExplainer.feature_importance(normalize=True)` see [Model Explainability](explainability.md).
+
+??? question "`calibrate` fails with an early-stopping error"
+
+    You passed an integer `cv`, which refits clones of the estimator without a validation set. Keep the default `cv='prefit'`
+    and pass a separate calibration frame.
+
+??? question "After turning on standardization the coefficients look very different"
+
+    That is expected: with `standardize=True` the model lives in the standardized space, and `get_variable_importance()` and
+    `get_statsmodel_summary()` report standardized coefficients. Use `standardize=False` (the default) for coefficients in the
+    original units.
+
+??? question "How do I run k-fold cross-validation or a hyperparameter search?"
+
+    `LRMaster.grid_search_params` searches on holdouts (see above) and `GradientBoostingModel.param_search` searches GBM
+    parameters (see [GBM Hyperparameter Search](gbm_param_search.md)). For k-fold cross-validation, build a fresh estimator
+    **without** `early_stopping_rounds` and `eval_metric`, because scikit-learn refits without a validation set:
 
     ```python
-    cat = GradientBoostingModel("cat", {
-        "n_estimators": 300,
-        "cat_features": ["city_grade", "channel"],   # raw categorical columns
-    })
-    cat.fit(train_X, train_y, val_X, val_y)
-    ```
-
-    Note: the training set and the validation / scoring data must contain the same columns; if you are already on the WOE pipeline (all features numeric),
-    `cat_features` is usually not needed.
-
-??? question "Variable importance doesn't sum to 1"
-
-    `get_feature_importance(importance_type='gain')` returns normalized relative values,
-    and the `sum` should be 1.0; if it returns `split`, the values are weighted by split count.
-
-??? question "After turning on standardization, the coefficients changed a lot / are interpreted differently"
-
-    This is expected. With `standardize=True` the model is trained in the standardized space, and `get_variable_importance()`
-    and `get_statsmodel_summary()` give standardized coefficients; if you need coefficients in the original units, turn standardization off
-    (`standardize=False`, the default) and retrain.
-
-??? question "How do I do hyperparameter search / cross-validation?"
-
-    `LRMaster` has a built-in holdout-based grid search, `grid_search_params(...)` (see "Hyperparameter Grid Search" above).
-    If you want k-fold cross-validation, or hyperparameter search for `GradientBoostingModel`, you can wrap it yourself with sklearn's
-    `cross_val_score` (note that for GBM you get the underlying estimator with `model._model.model`, and for LR with `model.model`):
-
-    ```python
+    from lightgbm import LGBMClassifier
     from sklearn.model_selection import cross_val_score
-    scores = cross_val_score(model._model.model, X, y, cv=5, scoring="roc_auc")
+
+    cv_params = {"n_estimators": 100, "learning_rate": 0.05, "max_depth": 3, "verbose": -1}
+    scores = cross_val_score(LGBMClassifier(**cv_params), train[features], train["bad_flag"], cv=5, scoring="roc_auc")
     ```
 
-    For GBM hyperparameter search, see [GBM Hyperparameter Search](gbm_param_search.md).
+??? question "When should I use sample weights, and what is the difference between `weight_col` and `sample_weight`?"
 
-??? question "When should I use sample weights? What is the difference between `weight_col` and `sample_weight`?"
+    Typical uses are correcting sampling bias (for example weighting after oversampling), weighting by balance or amount, and
+    time-decay weighting. `weight_col` names a column of the DataFrame you pass (`LRMaster`, the evaluators, the Pipelines);
+    `sample_weight` is an array aligned with the rows (`GradientBoostingModel` and the single-backend classes). See
+    [Sample weights](#sample-weights) for the argument each API takes.
 
-    Typical scenarios: correcting sampling bias (such as giving original samples higher weight after oversampling), weighting by amount/balance,
-    time-decay weighting, and so on. `weight_col` is resolved from a DataFrame column (recommended, consistent with the evaluation side);
-    `sample_weight` takes a numpy array directly. The two cannot be passed together.
-    The evaluation side uniformly uses `weight_col`; low-level plotting functions use the `sample_weight` key (see [Model Evaluation](eval.md)).
+## LR p-value backward elimination in the Pipeline
 
-## LR p-value Backward Elimination (0.6.7+, G07)
+`CreditModelPipeline` can drop logistic-regression variables whose coefficient p-values are too high. After the first fit it
+repeatedly removes the variable with the largest p-value and refits, until every p-value is at most the threshold or a limit
+is hit. The p-values come from the same Fisher-information computation as `LRMaster.get_statsmodel_summary()`.
 
 ```python
-CreditModelPipelineConfig(
+from Modeling_Tool import CreditModelPipeline, CreditModelPipelineConfig
+
+# the five real features plus six noise columns that elimination should remove
+pipeline_df = df.assign(badflag=df["bad_flag"], oot_flag=(df["apply_month"] >= "2025-08").astype(int))
+pipe_rng = np.random.default_rng(3)
+pipe_noise = [f"noise_{i}" for i in range(6)]
+for col in pipe_noise:
+    pipeline_df[col] = pipe_rng.normal(size=len(pipeline_df))
+
+config = CreditModelPipelineConfig(
+    output_dir="output/lr_elimination",
+    target_col="badflag",
+    feature_cols=features + pipe_noise,
+    oot_col="oot_flag",
     train_models=["lr"],
-    lr_elimination_mode="pvalue",     # None (default) disables it
-    lr_elimination_params={
-        "pvalue_threshold": 0.05, "min_features": 1,
-        "max_iterations": 20, "tie_breaker": "pvalue",
-    },
+    lr_elimination_mode="pvalue",              # None (default) disables it
+    lr_elimination_params={"pvalue_threshold": 0.05, "min_features": 1, "max_iterations": 20},
+    backward_enabled=False, optuna_models=[], explain_models=[], owen_enabled=False,
+    write_excel=False, plot_outputs=False,
 )
+result = CreditModelPipeline(config).run(pipeline_df)
+
+print(result.feature_selection_summary["lr_elimination"])    # iteration, dropped_feature, p_value, n_remaining
+lr_master, lr_estimator, lr_features = result.models["lr"]   # (LRMaster, LogisticRegression, final feature list)
+print(lr_features)
 ```
 
-After the initial fit, it loops: take the largest coefficient p-value (scipy Fisher information, on exactly the same basis as the final sklearn LR),
-and if it exceeds the threshold, drop that feature and refit, until all pass or `min_features`/`max_iterations` is reached.
-The trajectory goes into `result.feature_selection_summary["lr_elimination"]` and is written to `lr_pvalue_elimination.csv`;
-the feature list of `models["lr"]` is the reduced final one, and evaluation/explanation follow it automatically.
+| `lr_elimination_params` key | Default | Meaning |
+|---|---|---|
+| `pvalue_threshold` | `0.05` | Stop when the largest coefficient p-value is at most this |
+| `min_features` | `1` | Never go below this many variables |
+| `max_iterations` | `20` | Maximum number of drops |
+| `tie_breaker` | | Accepted but has no effect: equal p-values are resolved by column order |
+
+The trajectory (`iteration`, `dropped_feature`, `p_value`, `n_remaining`) is also written to `lr_pvalue_elimination.csv` in
+`output_dir` when outputs are written, and evaluation and explanation use the reduced list. The reduced list is
+`result.models["lr"][2]`; `result.selected_features` and `result.model_feature_sets` still show the features that entered the
+first fit. Any other key in `lr_elimination_params` raises `ValueError`.

@@ -20,20 +20,28 @@ brew install libomp
 | Linux | x86_64 (manylinux_2_28) | 3.10 / 3.11 / 3.12 / 3.13 |
 | Windows | x86_64 | 3.10 / 3.11 / 3.12 / 3.13 |
 
-!!! warning "Intel Mac users"
-    PyPI currently provides prebuilt wheels only for Apple Silicon (arm64). On an Intel Mac, installation falls back to the sdist and requires a local Cython build environment:
-    ```bash
-    pip install cython
-    pip install supermodelingfactory
-    ```
+!!! note "Other platforms"
+    SMF ships plain Python source, so no compiler is needed. On platforms without a prebuilt wheel (for example an Intel Mac),
+    `pip` installs from the source distribution.
 
 ## Optional Dependencies
 
-Alibaba Cloud MaxCompute / ODPS integration requires an extra install:
+Features that need extra packages are kept behind extras:
 
-```bash
-pip install 'supermodelingfactory[odps]'
-```
+| Extra | Install | Enables |
+|---|---|---|
+| `odps` | `pip install 'supermodelingfactory[odps]'` | Alibaba Cloud MaxCompute: `ODPSRunner`, `proc_means_odps`, `ParallelODPSManager` |
+| `explain` | `pip install 'supermodelingfactory[explain]'` | `ModelExplainer`: SHAP, Owen value, LIME |
+| `stats` | `pip install 'supermodelingfactory[stats]'` | `statsmodels`-based VIF gates and LR diagnostics |
+| `imblearn` | `pip install 'supermodelingfactory[imblearn]'` | SMOTE and imbalanced-learn samplers |
+| `optuna` | `pip install 'supermodelingfactory[optuna]'` | Optuna search in `GradientBoostingModel.param_search` and the pipelines |
+| `mic` | `pip install 'supermodelingfactory[mic]'` | MIC correlation in `build_coalition_structure` (Python < 3.11 only) |
+
+Combine extras with commas: `pip install 'supermodelingfactory[explain,stats,optuna]'`.
+
+!!! note "Notebook display"
+    `PerformanceEvaluator.evaluate()` prints its table with `IPython.display` by default. In a plain script pass
+    `display=False`, or `pip install ipython`.
 
 ## Developer / Test Environment Dependencies
 
@@ -45,7 +53,7 @@ cd SuperModelingFactory_pytest
 pip install -r requirements-dev.txt
 ```
 
-That file declares three **packages that are not runtime dependencies of the main package but are required by the test suite** (`pyodps`, `shap`, `lime`). Without them, about 74 tests are silently skipped, which masks real regressions. Target baseline: **0 skipped / 0 failed**.
+That file declares **packages that are not runtime dependencies of the main package but are required by the test suite** (`pyodps`, `shap`, `lime`, `statsmodels`, `PyYAML`). Without them, dozens of tests are silently skipped, which masks real regressions. Target baseline: **0 skipped / 0 failed**.
 
 ## Upgrade
 
@@ -99,9 +107,9 @@ mkdocs serve    # open http://127.0.0.1:8000 in your browser
     pip install 'supermodelingfactory[odps]'
     ```
 
-??? question "`ImportError` from a closed-source module"
+??? question "`ImportError` on an unsupported Python version or platform"
 
-    The current Python version or operating system is not in the supported list. Confirm your environment and reinstall:
+    Check your environment against the supported list above and reinstall:
 
     ```bash
     pip debug --verbose

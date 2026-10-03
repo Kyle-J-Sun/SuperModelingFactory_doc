@@ -33,16 +33,16 @@ SuperModelingFactory brings together three capabilities needed across the full c
     ```python
     from Modeling_Tool import SampleSplitter
     splitter = SampleSplitter(test_size=0.3, random_state=42, stratify=True)
-    train_df, test_df = splitter.split_df(data, target='bad_flag')
+    train_df, test_df = splitter.split_df(data, target="bad_flag")
     ```
 
 === "WOE encoding"
 
     ```python
     from Modeling_Tool import WOE_Master
-    woe = WOE_Master(train_data=train_df, varlist=features, dep='bad_flag')
+    woe = WOE_Master(train_data=train_df, varlist=features, dep="bad_flag")  # numeric features
     woe.fit(nbins=10, equal_freq=True)
-    train_woe = woe.transform(train_df)
+    train_woe = woe.transform(train_df)   # adds `<feature>_woe` columns
     test_woe  = woe.transform(test_df)
     ```
 
@@ -50,19 +50,23 @@ SuperModelingFactory brings together three capabilities needed across the full c
 
     ```python
     from Modeling_Tool import GradientBoostingModel
-    model = GradientBoostingModel('lgb', {'n_estimators': 200, 'learning_rate': 0.05})
-    model.fit(train_woe[features], train_woe['bad_flag'],
-              test_woe[features],  test_woe['bad_flag'])
+    woe_features = [f"{f}_woe" for f in features]
+    model = GradientBoostingModel("lgb", {
+        "n_estimators": 200, "learning_rate": 0.05,
+        "early_stopping_rounds": 20, "eval_metric": "auc",
+    })
+    model.fit(train_woe[woe_features], train_woe["bad_flag"],
+              test_woe[woe_features],  test_woe["bad_flag"])
     ```
 
 === "Excel report"
 
     ```python
     from ExcelMaster.ExcelMaster import ExcelMaster
-    em = ExcelMaster('model_report.xlsx', verbose=False)
-    ws = em.add_worksheet('Performance')
-    em.write_dataframe(ws, perf, title='Model Performance', titleformat='BLUE_H2')
-    em.insert_image(ws, 'roc_curve.png', figScale=(600, 400))
+    em = ExcelMaster("model_report.xlsx", verbose=False)
+    ws = em.add_worksheet("Performance")
+    em.write_dataframe(ws, perf, title="Model Performance", titleformat="BLUE_H2")
+    em.insert_image(ws, "roc_curve.png", figScale=(0.8, 0.8))   # scale factors
     em.close_workbook()
     ```
 
@@ -111,7 +115,7 @@ SuperModelingFactory brings together three capabilities needed across the full c
 
 ## Version
 
-- **Version**: 0.7.2
+- **Version**: 0.8.2
 - **Author**: Jingkai Sun
 - **License**: [Business Source License 1.1](https://github.com/Kyle-J-Sun/SuperModelingFactory/blob/main/LICENSE) (converts to Apache 2.0 after 2030-06-24; contact the author for a commercial-use license)
 
