@@ -339,10 +339,10 @@ The governance parameters (`min_bad_count` and the rest) are listed in [Binning 
 !!! note "Fit log"
 
     `fit` and the `refine_*` methods log one line per feature (`n_bins`, `IV`, whether the WOE is monotone) at INFO level.
-    Importing SMF calls `logging.basicConfig(level=logging.INFO)`, unless logging is already configured, so these lines
-    show up. Some of the log text is in Chinese in 0.8.2: the first and last lines say "start fitting N features" and "fit
-    finished: k of N features monotone". To silence the INFO lines, run `logging.getLogger().setLevel(logging.WARNING)` after
-    importing SMF.
+    The first line reads `[MonotoneWOEBinner] Fitting N features ...` and the last one `[MonotoneWOEBinner] Fit finished
+    (greedy): k/N features monotone`. Importing SMF calls `logging.basicConfig(level=logging.INFO)`, unless logging is
+    already configured, so these lines show up. To silence the INFO lines, run
+    `logging.getLogger().setLevel(logging.WARNING)` after importing SMF.
 
 ### Saving and reloading bins (Format A)
 
@@ -401,7 +401,7 @@ binner.export_woe_report("output/woe_report.xlsx")
   one panel (scaled by 0.62) in a grid of up to 3 columns.
 - `export_woe_report` writes a workbook with two sheets. The first has a summary table and one bin table per feature, with
   special-value rows in purple. The second embeds the overall chart of every feature. It needs `xlsxwriter` and `Pillow`,
-  which SMF installs. Sheet names and headers are in Chinese in 0.8.2.
+  which SMF installs. The sheets are named `WOE Bin Details` and `WOE Bin Charts`.
 
 #### How the by-group IV and WOE lines are computed
 

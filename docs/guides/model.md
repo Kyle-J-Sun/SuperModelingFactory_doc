@@ -503,7 +503,8 @@ print(analyzer.get_stable_vars(top_n=5))                     # variables kept in
 print(analyzer.get_perf_trend(dataset="hd", metric="AUC"))   # metric per round on one split
 ```
 
-`plot_var_reduction(figsize=(8, 4), save_path=None)` plots the number of variables per round; its axis labels are in Chinese.
+`plot_var_reduction(figsize=(8, 4), save_path=None)` plots the number of variables per round (axes *Elimination Round* and
+*Number of Variables Kept*).
 
 ## 4. Persistence and scoring
 

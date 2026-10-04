@@ -19,7 +19,7 @@ SuperModelingFactory/
 │   ├── Pipeline/         #   Seven one-click pipelines, config schema and registry helpers
 │   ├── UAT/              #   UATConsistencyChecker and comparison helpers
 │   ├── _utils/           #   Private helpers shared across subpackages (logging, NaN guards, sentinels)
-│   └── ref_font/         #   CJK fonts bundled for the WOE plots
+│   └── ref_font/         #   Fonts (including CJK) bundled for the WOE plots
 ├── ExcelMaster/          # Cursor-based Excel writer, preset formats, report templates
 └── Report/               # Report_Tool: model performance, WOE plot, and variable-importance sheets
 ```

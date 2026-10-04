@@ -511,11 +511,11 @@ grouping column.
     - **Gap.** Each function sets `em.gap_number` for its own layout and leaves it at `0` or `1`. Set it again if your
       code depends on a specific gap.
     - **Images.** The functions resize their image files in place.
-    - **Chinese headings.** Several sections are titled with fixed Chinese strings that cannot be changed through
-      arguments. The multi-model sheet is headed *multi-model evaluation (untuned version)* with the sub-headings *using
-      third-party features directly* and *modeling after WOE processing of the features*. The final-model sheet is
-      headed *final model evaluation* and *modeling with the original features*. Both variable-importance templates are
-      headed *feature importance evaluation*. Tables, plots, and the other titles are in English.
+    - **Fixed headings.** Several sections carry titles that cannot be changed through arguments. The multi-model sheet
+      is headed *Multi-Model Evaluation (Untuned)* with the sub-headings *Using Third-Party Features Directly* and
+      *Modeling on WOE-Transformed Features*. The final-model sheet is headed *Final Model Evaluation* with the
+      sub-heading *Modeling on Original Features*. Both variable-importance templates are headed *Feature Importance
+      Evaluation*.
 
 ## 4. Full Pipeline: Output a Modeling Report
 
@@ -646,11 +646,12 @@ logs a message, and keeps the existing format, so presets cannot be overridden.
     The default `cell_scale=True` writes an explicit size for every row. Pass `cell_scale=False`; see
     [Basic Usage](#2-basic-usage).
 
-??? question "Chinese text in the figures appears as empty boxes"
+??? question "Non-Latin text in the figures appears as empty boxes"
 
     This concerns figures only; text written to cells is stored as Unicode and drawn by Excel. matplotlib needs a font
-    that contains the glyphs. Register one before you create the figures. SMF ships three Chinese fonts in
-    `Modeling_Tool/ref_font/` (`KaiTi.ttf`, `WeiRuanYaHei.ttf`, and `simsun.ttc`):
+    that contains the glyphs, which matters when your data has labels in a non-Latin script such as CJK. Register one
+    before you create the figures. SMF ships three CJK fonts in `Modeling_Tool/ref_font/` (`KaiTi.ttf`,
+    `WeiRuanYaHei.ttf`, and `simsun.ttc`):
 
     ```python
     from pathlib import Path

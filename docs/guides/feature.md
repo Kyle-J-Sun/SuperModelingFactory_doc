@@ -857,11 +857,12 @@ encoding of the final model. The two binners can disagree about weak variables: 
     The weighted path without WOE bins works on numeric columns only. Set `iv_use_woe_bins=True` (and the other `*_use_woe_bins`
     flags you need) with a monotone binner that declares the categorical variables.
 
-??? question "The log shows messages in Chinese"
+??? question "A warning says a stage eliminated all variables"
 
-    Some progress and warning messages of the binners and of `feature_screen` are written in Chinese. They are informational.
-    For example, a warning that says a stage eliminated every variable and all variables were kept appears when
-    `on_empty_stage='keep_all_warn'` takes effect; the `summary` frame then has a `<stage>_fallback` row.
+    With the default `on_empty_stage='keep_all_warn'`, a stage that would drop every variable keeps all of them instead and
+    issues a `UserWarning` such as `[feature_screen] stage 'psi' eliminated all 40 variables; keeping all of them
+    (on_empty_stage='keep_all_warn')`. The `summary` frame then has a `<stage>_fallback` row. Loosen that stage's threshold,
+    or pass `on_empty_stage='raise'` to fail with a `ValueError` instead.
 
 ## Notes on Specific Versions
 

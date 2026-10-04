@@ -103,7 +103,7 @@ class FrameRunner:
 
 runner = FrameRunner({"offline_scores": offline, "online_scores": online})
 
-# The checker logs its progress at INFO level, and some of those messages are in Chinese. Keep warnings only.
+# The checker logs its progress at INFO level. Keep warnings only.
 logging.getLogger("Modeling_Tool.UAT.UAT_Consistency_Checker").setLevel(logging.WARNING)
 ```
 
@@ -152,8 +152,8 @@ summary_df = checker.run()
 print(summary_df)
 ```
 
-`summary_df` has the columns `Check Item`, `Detail`, and `Status`. Some `Detail` texts are partly in Chinese (for example,
-the clause that says a main-score mismatch can also mean one side is empty).
+`summary_df` has the columns `Check Item`, `Detail`, and `Status`. The `Detail` of the main-score check reads like
+`3 flow_ids mismatch (|diff| > 1e-06 or one side null)`: a flow_id also counts as a mismatch when only one side has a score.
 
 !!! warning "The report takes minutes"
 
@@ -303,7 +303,7 @@ name. Rows present on one side only are counted by `check_coverage()` and left o
 | `Time Field Consistency` | Time-field summary and mismatching rows. Present only when `time_featlist` is set |
 | `Per Flow-ID Report` | flow_ids with feature mismatches, flow_ids with a main-score mismatch, and a sample of 50 clean flow_ids |
 
-Some titles inside the workbook are in Chinese. The font of every cell is set by `excel_font`.
+The font of every cell is set by `excel_font`.
 
 ## 8. Compare Two DataFrames You Already Have
 

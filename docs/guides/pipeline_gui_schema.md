@@ -11,14 +11,14 @@ importing any frontend package. The schema layer, available since 0.5.4, gives y
 The GUI itself should live outside the modeling package. SMF is the source of truth for what can be configured; it does not
 depend on Streamlit or any other frontend.
 
-!!! warning "Display text is in Chinese in 0.8.2"
+!!! note "Display text"
 
-    The human-readable strings are Chinese: `display_name`, `description`, `use_case`, and `audience` of the registry
-    entries, `label`, `description`, and `group` of the fields, and most messages from `validate_pipeline_config`. Field
+    The human-readable strings are English: `display_name`, `description`, `use_case`, and `audience` of the registry
+    entries, `label`, `description`, and `group` of the fields, and the messages from `validate_pipeline_config`. Field
     names, option values, types, and defaults are language-neutral. If your GUI needs another language, key your own
     translations on the registry `key` and the field `name`.
 
-    Curated text is also incomplete. A field without a curated label gets its title-cased name as `label` (16 of the 260
+    Curated text is incomplete. A field without a curated label gets its title-cased name as `label` (16 of the 260
     fields in 0.8.2, for example `Score Cols`), and for most fields (201 of 260) `description` just repeats `label`. Do not
     rely on `description` as help text: the [Top-Level Pipelines](../pipeline_one_click.md) page describes the parameters of
     each Pipeline.
@@ -100,7 +100,7 @@ Each registry item has these keys:
 | `pipeline_class_name`, `config_class_name`, `result_class_name` | Class names |
 | `module_path`, `import_path` | Where the classes are defined, and the package that exports them (`Modeling_Tool.Pipeline`); generated code imports from `import_path` |
 | `run_requires_data` | `False` when `run()` takes no DataFrame |
-| `run_method` | The call to show on the card. For `score_consistency_uat` it lists both forms, `run()` and `run(offline_data=..., online_data=...)`, joined by the Chinese word for "or" |
+| `run_method` | The call to show on the card. For `score_consistency_uat` it lists both forms, `run()` and `run(offline_data=..., online_data=...)`, joined by the word `or` |
 | `result_attrs` | Headline attributes of the result object. The result dataclasses have more fields than these |
 
 `run_requires_data=False` means the generated code should not pass `data=your_dataframe`. `ScoreConsistencyUATPipeline.run`
@@ -139,12 +139,12 @@ Each field item has these keys:
 | `type` | The type hint as text (see the note below the table). Choose a control from `widget`, not from this text |
 | `default` | The default as JSON/YAML-safe data (tuples and ranges become lists), or its `repr()` text when it cannot be converted |
 | `has_default` | Whether the dataclass declares a default. It is `True` for every field in 0.8.2, so every Config can be built with no arguments |
-| `label`, `description` | Display text (Chinese in 0.8.2) |
+| `label`, `description` | Display text |
 | `widget` | `text`, `number`, `select`, `multiselect`, `toggle`, `slider`, `textarea`, `json`, or `hidden` |
 | `options` | Allowed values for `select` and `multiselect`, for example `["equal_freq", "monotone"]` for `woe_engine`; otherwise `None` |
 | `min_val`, `max_val`, `step` | Numeric control hints, mostly for sliders; otherwise `None` |
 | `required` | The form should ask for this field. It comes from a fixed list per Pipeline (`credit_model`: `target_col`) and does not mean "has no default" |
-| `group` | Name of the suggested form section (Chinese in 0.8.2). Sections are inferred from the field name, so a few assignments are rough: `main_model_score_col` of `score_consistency_uat` lands in the model-training section |
+| `group` | Name of the suggested form section: `Basic settings`, `Data input`, `Sample split`, `Output and reports`, `WOE/Binning`, `Model training`, `Evaluation settings`, `Analysis settings`, or `CSV batching`. Sections are inferred from the field name, so a few assignments are rough: `main_model_score_col` of `score_consistency_uat` lands in the model-training section |
 | `depends_on` | Display condition `{field_name: value}`, or `None`. Only four fields have one: `warm_start_score_col` (`{"warm_start_enabled": True}`) and the three `monotone_refine_*_params` fields of `feature_validation` |
 | `since_version` | Reserved: `None` for every field in 0.8.2 |
 | `yaml_serializable` | `False` for the code-only fields listed under [Dict Export](#dict-export) |
@@ -318,7 +318,7 @@ for msg in messages:
     print(msg)
 ```
 
-This prints one message (in Chinese in 0.8.2): `warm_start_score_col` is required when `warm_start_enabled` is on. The
+This prints one message, `warm_start_score_col is required when warm_start_enabled is on.` The
 validator returns a list of strings, errors first, then warnings, each prefixed with `WARNING: `. An empty list means it
 found nothing. `values` can be a dictionary or a Config instance. A key you leave out counts as unset: a required key such as
 `target_col` is reported as empty, and the others fall back to the Config default. Unknown keys are not reported (use
@@ -340,9 +340,6 @@ The validator is intentionally lightweight. It catches common form mistakes befo
 | `score_consistency_uat` | `main_model_score_col` empty; `numeric_coercion_mode` not `safe`, `aggressive`, or `off`; `comparison_block_size` not positive | |
 | `sample_analysis` | `target_cols` or `time_col` empty; `materialize_split=True` without `id_col` | |
 | `mock_sample` | `n_samples` below 1; `applied_sample` not 0 or 1; `min_num_feature_business_type` above `min(num_features, 10)` | `n_samples` below 1000 |
-
-The messages for `lr_search_params`, `group_specs`, `cross_metrics`, and `pairwise_cross_agg_dict` are in English; all others
-are Chinese in 0.8.2.
 
 ## Code Generation
 

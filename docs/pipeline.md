@@ -157,7 +157,8 @@ and report at the end of [Step 9](#step-9-excel-report), which exist on `Monoton
 !!! note "What `fit` prints"
 
     `MonotoneWOEBinner.fit` prints one line per feature with the number of bins, the IV, and whether the bin WOEs are
-    monotone. The two summary lines around them (fitting started and finished) are in Chinese in 0.8.2.
+    monotone. The first and last lines summarize the run (`Fitting N features ...` and `Fit finished (greedy): k/N features
+    monotone`).
 
 ### Categorical features
 
@@ -578,7 +579,7 @@ woe_engine.export_woe_report("output/woe_report.xlsx")
 ```
 
 `plot_woe_graph` writes `<feature>_by_apply_month.png` files into the folder, and `export_woe_report` writes the bin tables
-and the figures into one workbook. Both print Chinese progress messages in 0.8.2.
+and the figures into one workbook. Both print a progress message for every file they write.
 
 ## Step 10: UAT Consistency Check
 
@@ -636,7 +637,7 @@ print(summary_df)                                                 # Check Item, 
 
     When a main score does not match, the checker lists the offending rows with a hard-coded `launch_time` column. If the
     offline frame has no such column, `run()` raises `KeyError: "['launch_time'] not in index"`. The checker also logs its
-    progress to the console, in mostly Chinese text in 0.8.2.
+    progress to the console at INFO level.
 
 ## Condensed Script
 

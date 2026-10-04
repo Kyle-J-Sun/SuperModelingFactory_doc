@@ -149,9 +149,10 @@ mkdocs serve    # open http://127.0.0.1:8000 in your browser
     python -c "import platform; print(platform.machine())"  # expected output: arm64
     ```
 
-??? question "Chinese characters in plots appear as empty boxes"
+??? question "Non-Latin characters in plots appear as empty boxes"
 
-    matplotlib's default font has no CJK glyphs, so it prints `Glyph ... missing from font(s) DejaVu Sans` and draws boxes.
+    matplotlib's default font (DejaVu Sans) has no CJK glyphs, so labels in such scripts print `Glyph ... missing from font(s)
+    DejaVu Sans` and are drawn as boxes.
     The WOE plots already use the KaiTi font that SMF bundles for their titles and tables; for every other figure, register
     a CJK font. The snippet below uses the bundled font, so no system font is needed:
 
