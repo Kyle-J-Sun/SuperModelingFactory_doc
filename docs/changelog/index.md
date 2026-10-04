@@ -11,6 +11,8 @@ An overview of every SuperModelingFactory release. All `0.3.x` releases predate 
 ## Version Index
 
 <div class="grid cards" markdown>
+- :material-tag-outline: **[Unreleased](unreleased.md)** - All docstrings, comments, messages, report headings, and GUI metadata are English; seven defects found while verifying the documentation are fixed
+
 - :material-tag: **[v0.8.2](v0.8.2.md)** - Seven defect batches: `unseen_special_policy` for declared-but-unseen special values, warnings visible at import again, SMF's own warning noise and the bugs behind it, single-class evaluation, bool features in binning/WOE/FVP, and no more process-wide pandas option changes or writes into the caller's DataFrame
 
 - :material-tag: **[v0.8.1](v0.8.1.md)** - By-group WOE chart IV fixed to in-group IV (special bins, fitted SV decisions, unsmoothed single-class cells excluded), SV decisions in Format-A attrs, sparse bin-id alignment, dict-wrapped `load_woe_bins`, and joblib ≥ 1.6 compatibility for `ParallelApplyEngine`
