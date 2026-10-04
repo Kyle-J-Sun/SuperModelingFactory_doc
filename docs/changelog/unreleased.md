@@ -20,7 +20,7 @@ Every docstring, comment, and user-visible string is English, and the four repos
 
 ## 2. Fixes Found While Verifying the Documentation
 
-The guides were checked against the installed package, and seven defects surfaced. Each has a regression test in `test_doc_audit_regressions.py` that fails without the fix.
+The guides and the docstrings were checked against the installed package, and ten defects surfaced. Each has a regression test in `test_doc_audit_regressions.py` that fails without the fix.
 
 | Defect | Fix |
 |---|---|
@@ -31,3 +31,6 @@ The guides were checked against the installed package, and seven defects surface
 | `calibrate` of `LightGBMModel`, `XGBoostModel`, `CatBoostModel`, and `GradientBoostingModel` defaulted to `cv='prefit'`, which scikit-learn 1.8 removed, so every call raised `InvalidParameterError` | The fitted estimator is wrapped in `FrozenEstimator` when it exists; older scikit-learn keeps `cv='prefit'` |
 | `BackwardEliminationAnalyzer.get_perf_trend` returned `None` for every value, because it only read dictionary summaries while `BackwardVariableEliminator` stores DataFrames | It reads the stored DataFrames |
 | `GradientBoostingModel.param_search` turned integer parameters into floats (`num_leaves=7.0`, which LightGBM rejects), and `refit=True` kept fitting with the pre-search parameters | `best_params_` keeps native types and the model uses the merged parameters |
+| `TextEncryptor.decrypt` raised `ValueError` for any text with a non-ASCII character, because `encrypt` stored the plaintext length in characters and `decrypt` compared it with the length in bytes | The length prefix is the byte length. Ciphertexts of ASCII text are unchanged, so existing ones keep decrypting |
+| `ExcelFormat.base_filepath` used `str.strip`, which removes characters and not a prefix (`out2/report.xlsx` gave `ut2/`) | It is the directory part of the path, including the trailing separator |
+| `compute_overfitting_shift` told the caller that unequal column counts "are the the same" | The message says "are not the same" |
