@@ -1,28 +1,35 @@
 # Installation
 
-## Quick Install
+SuperModelingFactory (SMF) is a pure-Python package: it ships as one universal wheel plus a source distribution, so
+installing it needs no compiler. The heavy lifting is done by its dependencies (NumPy, pandas, scikit-learn, LightGBM,
+XGBoost, CatBoost), which pip installs for you.
+
+## Install
 
 ```bash
 pip install supermodelingfactory
 ```
 
-macOS users also need to install the OpenMP runtime (required by lightgbm):
+The command installs three importable packages: `Modeling_Tool` (modeling engine), `ExcelMaster` (Excel writer), and
+`Report` (report templates).
+
+macOS users also need the OpenMP runtime, which LightGBM requires:
 
 ```bash
 brew install libomp
 ```
 
-## Supported Environments
+## Requirements
 
-| Operating system | Architecture | Python |
-|---|---|---|
-| macOS 11+ | arm64 (Apple Silicon) | 3.10 / 3.11 / 3.12 / 3.13 |
-| Linux | x86_64 (manylinux_2_28) | 3.10 / 3.11 / 3.12 / 3.13 |
-| Windows | x86_64 | 3.10 / 3.11 / 3.12 / 3.13 |
+| Requirement | Supported |
+|---|---|
+| Python | 3.10, 3.11, 3.12, 3.13 |
+| NumPy | 1.23 or later, including 2.x |
+| pandas | 1.5 or later, below 3.0 |
+| Operating system | Any platform on which the dependencies install. The automated tests run on Linux |
 
-!!! note "Other platforms"
-    SMF ships plain Python source, so no compiler is needed. On platforms without a prebuilt wheel (for example an Intel Mac),
-    `pip` installs from the source distribution.
+The other runtime dependencies are installed automatically: SciPy, scikit-learn, joblib, python-dateutil, LightGBM,
+XGBoost, CatBoost, matplotlib, seaborn, XlsxWriter, openpyxl, Pillow, and tqdm.
 
 ## Optional Dependencies
 
@@ -30,30 +37,30 @@ Features that need extra packages are kept behind extras:
 
 | Extra | Install | Enables |
 |---|---|---|
-| `odps` | `pip install 'supermodelingfactory[odps]'` | Alibaba Cloud MaxCompute: `ODPSRunner`, `proc_means_odps`, `ParallelODPSManager` |
-| `explain` | `pip install 'supermodelingfactory[explain]'` | `ModelExplainer`: SHAP, Owen value, LIME |
-| `stats` | `pip install 'supermodelingfactory[stats]'` | `statsmodels`-based VIF gates and LR diagnostics |
-| `imblearn` | `pip install 'supermodelingfactory[imblearn]'` | SMOTE and imbalanced-learn samplers |
-| `optuna` | `pip install 'supermodelingfactory[optuna]'` | Optuna search in `GradientBoostingModel.param_search` and the pipelines |
-| `mic` | `pip install 'supermodelingfactory[mic]'` | MIC correlation in `build_coalition_structure` (Python < 3.11 only) |
+| `odps` | `pip install 'supermodelingfactory[odps]'` | Alibaba Cloud MaxCompute access: `ODPSRunner`, `ParallelODPSManager`, `proc_means_odps` |
+| `explain` | `pip install 'supermodelingfactory[explain]'` | The SHAP, Owen value, and LIME methods of `ModelExplainer` (PDP, ICE, and ALE need no extra) |
+| `stats` | `pip install 'supermodelingfactory[stats]'` | `statsmodels` for variance inflation factors: `FeatureSelectionAnalyzer.compute_vif`, `CorrelationFilter.calculate_vif`, and `FeatureScreenConfig(vif_enabled=True)` |
+| `imblearn` | `pip install 'supermodelingfactory[imblearn]'` | imbalanced-learn samplers: `StratifiedSampler.balance(method='smote')`, and `SampleBalancer` with `method='nearmiss'`, `'tomek'`, or `'enn'` |
+| `optuna` | `pip install 'supermodelingfactory[optuna]'` | Optuna search: `GradientBoostingModel.param_search(engine='optuna')` and the Optuna stage of `CreditModelPipeline` |
+| `mic` | `pip install 'supermodelingfactory[mic]'` | MIC correlation in `build_coalition_structure(corr_method='mic')`. The extra installs `minepy` on Python below 3.11 only |
 
 Combine extras with commas: `pip install 'supermodelingfactory[explain,stats,optuna]'`.
 
 !!! note "Notebook display"
-    `PerformanceEvaluator.evaluate()` prints its table with `IPython.display` by default. In a plain script pass
-    `display=False`, or `pip install ipython`.
+    `PerformanceEvaluator.evaluate()` and `get_perf_summary()` print their tables through `IPython.display` by default.
+    In a plain script, pass `display=False`, or run `pip install ipython`.
 
-## Developer / Test Environment Dependencies
-
-If you plan to run the full [`SuperModelingFactory_pytest`](https://github.com/Kyle-J-Sun/SuperModelingFactory_pytest) suite locally, install its `requirements-dev.txt`:
+## Verify the Installation
 
 ```bash
-git clone https://github.com/Kyle-J-Sun/SuperModelingFactory_pytest.git
-cd SuperModelingFactory_pytest
-pip install -r requirements-dev.txt
+python -c "import Modeling_Tool; print(Modeling_Tool.__version__)"
 ```
 
-That file declares **packages that are not runtime dependencies of the main package but are required by the test suite** (`pyodps`, `shap`, `lime`, `statsmodels`, `PyYAML`). Without them, dozens of tests are silently skipped, which masks real regressions. Target baseline: **0 skipped / 0 failed**.
+The command prints `0.8.2` (or the release you installed). To check that the three packages import:
+
+```bash
+python -c "import Modeling_Tool, ExcelMaster, Report; print('OK')"
+```
 
 ## Upgrade
 
@@ -61,27 +68,69 @@ That file declares **packages that are not runtime dependencies of the main pack
 pip install --upgrade supermodelingfactory
 ```
 
-## Verify the Installation
+## Work from a Source Checkout
 
 ```bash
-python -c "
-from Modeling_Tool import WOE_Master, LRMaster, PSICalculator
-import Modeling_Tool
-print('SMF version:', Modeling_Tool.__version__)
-print('OK')
-"
+git clone https://github.com/Kyle-J-Sun/SuperModelingFactory.git
+cd SuperModelingFactory
+pip install -e .
 ```
 
-## Previewing the Documentation Site Locally
+## Test Environment for Maintainers
+
+The regression suite lives in the private `SuperModelingFactory_pytest` repository. Besides SMF's own dependencies, it
+needs packages that are not runtime dependencies of SMF: `pyodps`, `shap`, `lime`, `statsmodels`, and `PyYAML`. They are
+listed in the suite's `requirements-dev.txt`:
 
 ```bash
+pip install -r requirements-dev.txt
+```
+
+Without them, the tests that cover the optional features are skipped, which hides regressions. The release baseline is
+0 skipped and 0 failed.
+
+## Preview the Documentation Site
+
+The API pages are generated from the SMF source tree, so check out the two repositories **side by side** with these exact
+folder names:
+
+```bash
+git clone https://github.com/Kyle-J-Sun/SuperModelingFactory.git
 git clone https://github.com/Kyle-J-Sun/SuperModelingFactory_doc.git
 cd SuperModelingFactory_doc
 pip install -r requirements-docs.txt
 mkdocs serve    # open http://127.0.0.1:8000 in your browser
 ```
 
-## FAQ
+## Troubleshooting
+
+??? question "`No matching distribution found for supermodelingfactory`"
+
+    pip prints `Requires-Python >=3.10` for every release when the interpreter is older than 3.10. Install SMF with
+    Python 3.10 or later:
+
+    ```bash
+    python --version
+    ```
+
+??? question "`AttributeError: _ARRAY_API not found` when importing `Modeling_Tool`"
+
+    A compiled dependency (usually matplotlib) was built for NumPy 1.x, but NumPy 2.x is installed. Upgrade the package
+    named in the traceback, or pin NumPy below 2. See the [FAQ](faq.md#why-does-import-modeling_tool-fail-with-_array_api-not-found).
+
+??? question "`ModuleNotFoundError: No module named 'odps'`"
+
+    The ODPS extra is not installed. `ODPSRunner` needs it, and so do the star imports `from Modeling_Tool.Core import *`
+    and `from Modeling_Tool import *`:
+
+    ```bash
+    pip install 'supermodelingfactory[odps]'
+    ```
+
+??? question "`ModuleNotFoundError: No module named 'IPython'` from an evaluation call"
+
+    The call tried to display a table. Pass `display=False` (or `disp=False` for the `Model_Evaluation_Tool` methods), or
+    install IPython. See the [FAQ](faq.md#evaluation-fails-with-no-module-named-ipython-outside-a-notebook).
 
 ??? question "`OSError: Library not loaded: @rpath/libomp.dylib` (macOS)"
 
@@ -93,34 +142,32 @@ mkdocs serve    # open http://127.0.0.1:8000 in your browser
 
 ??? question "`Bad CPU type in executable` (Apple Silicon)"
 
-    The current Python interpreter is the Intel build. Switch to an arm64 Python installed via Homebrew or conda, and verify it with:
+    The current Python interpreter is the Intel build. Switch to an arm64 Python installed via Homebrew or conda, and
+    verify it with:
 
     ```bash
     python -c "import platform; print(platform.machine())"  # expected output: arm64
     ```
 
-??? question "`ModuleNotFoundError: No module named 'odps'`"
-
-    Install the ODPS extra dependencies:
-
-    ```bash
-    pip install 'supermodelingfactory[odps]'
-    ```
-
-??? question "`ImportError` on an unsupported Python version or platform"
-
-    Check your environment against the supported list above and reinstall:
-
-    ```bash
-    pip debug --verbose
-    ```
-
 ??? question "Chinese characters in plots appear as empty boxes"
 
-    Install a CJK font, then refresh the font cache:
+    matplotlib's default font has no CJK glyphs, so it prints `Glyph ... missing from font(s) DejaVu Sans` and draws boxes.
+    The WOE plots already use the KaiTi font that SMF bundles for their titles and tables; for every other figure, register
+    a CJK font. The snippet below uses the bundled font, so no system font is needed:
 
-    ```bash
-    # Linux
-    sudo apt install fonts-noto-cjk fonts-wqy-zenhei
-    fc-cache -fv
+    ```python
+    import os
+
+    import matplotlib.pyplot as plt
+    from matplotlib import font_manager
+
+    import Modeling_Tool
+
+    font_path = os.path.join(os.path.dirname(Modeling_Tool.__file__), "ref_font", "KaiTi.ttf")
+    font_manager.fontManager.addfont(font_path)
+    plt.rcParams["font.family"] = font_manager.FontProperties(fname=font_path).get_name()
+    plt.rcParams["axes.unicode_minus"] = False
     ```
+
+    Run it once per session, before drawing. You can also install a system CJK font (for example
+    `sudo apt install fonts-noto-cjk` on Debian or Ubuntu) and set `plt.rcParams["font.family"]` to its name.

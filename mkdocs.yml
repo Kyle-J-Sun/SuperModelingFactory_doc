@@ -157,6 +157,7 @@ nav:
       - Modeling_Tool.Sample: api/sample.md
       - Modeling_Tool.Explainability: api/explainability.md
       - Modeling_Tool.UAT: api/uat.md
+      - Modeling_Tool.Pipeline: api/pipeline.md
       - ExcelMaster: api/excelmaster.md
       - Report: api/report.md
   - FAQ: faq.md

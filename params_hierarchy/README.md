@@ -1,10 +1,173 @@
-﻿# Pipeline Params Hierarchy
+# Pipeline Parameter Hierarchy
 
-This folder stores the JSON parameter hierarchy metadata for SMF top-level pipelines.
+This folder holds one JSON file per top-level SMF Pipeline. Each file describes the Pipeline's `*Config` dataclass as a
+hierarchy: which parameters belong together, what each one means and defaults to, and the rules that tie parameters
+together. People use the files to write Pipeline documentation, review a configuration, and explain how parameters
+interact.
 
-Maintenance rule:
+**The files are written by hand. The SMF package does not read, generate, or validate them**, and the GUI schema is not
+built from them (see [Relation to the GUI schema](#relation-to-the-gui-schema)). They stay correct only if you update them in
+the same change as the code.
 
-- Whenever the main SMF package adds a new Pipeline, add its `*_pipeline_params_hierarchy.json` here.
-- Whenever any Pipeline config parameter is added, removed, renamed, or its dependency/default behavior changes, update the matching JSON here in the same change.
-- Keep the top-level JSON structure grouped by `required` and `optional`, then preserve the pipeline-specific category hierarchy underneath.
-- These files are intended to support documentation, GUI/schema generation, and human review of Pipeline configuration relationships.
+| File | Pipeline | Config class |
+|---|---|---|
+| `credit_model_pipeline_params_hierarchy.json` | `CreditModelPipeline` | `CreditModelPipelineConfig` |
+| `feature_validation_pipeline_params_hierarchy.json` | `FeatureValidationPipeline` | `FeatureValidationPipelineConfig` |
+| `reject_inference_pipeline_params_hierarchy.json` | `RejectInferencePipeline` | `RejectInferencePipelineConfig` |
+| `score_comparison_pipeline_params_hierarchy.json` | `ScoreComparisonPipeline` | `ScoreComparisonPipelineConfig` |
+| `score_consistency_uat_pipeline_params_hierarchy.json` | `ScoreConsistencyUATPipeline` | `ScoreConsistencyUATPipelineConfig` |
+| `sample_analysis_pipeline_params_hierarchy.json` | `SampleAnalysisPipeline` | `SampleAnalysisPipelineConfig` |
+| `mock_sample_pipeline_params_hierarchy.json` | `MockSamplePipeline` | `MockSamplePipelineConfig` |
+
+File names follow `<key>_pipeline_params_hierarchy.json`, where `<key>` is a key of `Modeling_Tool.PIPELINE_REGISTRY`.
+
+## File structure
+
+```json
+{
+  "pipeline": "MockSamplePipeline",
+  "config_class": "MockSamplePipelineConfig",
+  "hierarchy": {
+    "required": [],
+    "optional": [
+      {
+        "level1": "Sample Size and Output Scope",
+        "level2": [
+          {
+            "name": "Sample Count",
+            "params": {
+              "n_samples": "Initial number of full application samples, default 80000",
+              "applied_sample": "1 outputs all applications; 0 outputs only approved samples"
+            },
+            "rules": [
+              "When applied_sample=0, the final output is about n_samples * approve_rate rows"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "requirement_note": "What \"required\" means for this Pipeline",
+  "underlying_method_params": {}
+}
+```
+
+| Key | Content |
+|---|---|
+| `pipeline`, `config_class` | Class names. They must match the entry in `PIPELINE_REGISTRY` |
+| `hierarchy.required`, `hierarchy.optional` | Lists of level-1 groups. `required` collects the inputs you confirm before a run (target, identifiers, data source). It does not mean "has no default": every Config field has one |
+| `level1` | Title of a group |
+| `level2[].name` | Title of a sub-group |
+| `level2[].params` | Config field name mapped to its description: meaning, default, allowed values, and the release that introduced it. For a dictionary-valued field, the value can be a nested mapping of key to description |
+| `level2[].rules` | Rules between parameters, in prose: dependencies, conflicts, precedence |
+| `level2[].children` | Detail that belongs to the sub-group, such as the batching fields listed under `enable_batch` |
+| `requirement_note` | What "required" means for this Pipeline |
+| `underlying_method_params` | Where each dictionary-valued field goes: a field such as `woe_params`, or a helper such as `Model_Evaluation_Tool`, with its `source` or `passes_to` and the keys it accepts (`constructor`, `accepted_params`, and so on) |
+
+Names under `params` are normally Config field names. A few sub-groups also list the keys of a dictionary-valued field (the
+feature validation file documents the keys of `selection_params`, such as `psi_threshold`, this way), and `children` can hold
+value lists such as `business_types`. Those names are not Config fields.
+
+A description states the effective default. Where the dataclass default is `None`, the text says what the Pipeline uses
+instead: for `evaluation_splits`, the file says `[ins, oos]`, which is what `CreditModelPipeline` resolves `None` to.
+
+## Relation to the GUI schema
+
+SMF has a second description of the same Config classes, generated by code:
+`extract_pipeline_schema()` (see the [Pipeline GUI Schema](../docs/guides/pipeline_gui_schema.md) guide).
+
+| | `params_hierarchy/*.json` | `extract_pipeline_schema()` |
+|---|---|---|
+| Source | Written by hand | Generated from the Config dataclasses and the metadata tables in `Modeling_Tool/Pipeline/field_meta.py` |
+| Reader | People | GUI code and validators |
+| Strength | Grouping, rules between parameters, defaults in prose, dictionary keys | Name, type, default, widget, options, range, and a short dependency flag for every field |
+| `required` | Inputs to confirm before a run | A short fixed list of fields a form must ask for (`FieldMeta.required`) |
+
+A new Config field appears in the generated schema without any change, with an automatic label. Add it to the tables in
+`field_meta.py` to give it a curated label, options, or range, and add it to the JSON file here to document it.
+
+## Keep the files in sync with the Config dataclasses
+
+Change the matching JSON file in the same pull request as the Config change in `Modeling_Tool/Pipeline/`:
+
+1. **New field.** Add it to the `params` of the right sub-group, with its default, allowed values, and the release that
+   introduced it. Add a `rules` entry if it interacts with other parameters.
+2. **Removed or renamed field.** Update or delete it everywhere in the file, including the `rules` text and
+   `underlying_method_params`.
+3. **Changed default or dependency.** Update the description and the `rules`.
+4. **New dictionary key.** When a dictionary-valued field (`woe_params`, `selection_params`, and so on) accepts a new key,
+   document the key in `params` or `underlying_method_params`.
+5. **New Pipeline.** Register it in `field_meta.py` (`_build_pipeline_registry`), then add its
+   `<key>_pipeline_params_hierarchy.json` here.
+6. **Run the check below** until it prints `OK`.
+7. Update the parameter tables in the [Top-Level Pipelines](../docs/pipeline_one_click.md) page and the changelog for the
+   release.
+
+The check confirms that every Config field appears in its file, that the class names match the registry, and that no file
+is missing or stray. It also lists the names that are not Config fields, so you can confirm that they are dictionary keys or
+value lists. It does not compare defaults or rules: review those by hand. Run it from the root of this repository, with SMF
+installed:
+
+```python
+import dataclasses
+import json
+import sys
+from pathlib import Path
+
+from Modeling_Tool import PIPELINE_REGISTRY
+
+FOLDER = Path("params_hierarchy")
+
+
+def documented_names(node):
+    """Return every key found under a "params" or "children" mapping, at any depth."""
+    found = set()
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in ("params", "children") and isinstance(value, dict):
+                found.update(value)
+            found |= documented_names(value)
+    elif isinstance(node, list):
+        for item in node:
+            found |= documented_names(item)
+    return found
+
+
+problems = 0
+expected = set()
+for key, entry in PIPELINE_REGISTRY.items():
+    path = FOLDER / f"{key}_pipeline_params_hierarchy.json"
+    expected.add(path.name)
+    if not path.exists():
+        print(f"MISSING FILE  {path.name}")
+        problems += 1
+        continue
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if (data["pipeline"], data["config_class"]) != (entry.pipeline_class.__name__, entry.config_class.__name__):
+        print(f"{path.name}: pipeline/config_class do not match the registry")
+        problems += 1
+    fields = {f.name for f in dataclasses.fields(entry.config_class)}
+    documented = documented_names(data["hierarchy"])
+    for name in sorted(fields - documented):
+        print(f"{path.name}: Config field is not documented: {name}")
+        problems += 1
+    others = sorted(documented - fields)
+    if others:
+        print(f"{path.name}: not Config fields (expected for dictionary keys and value lists): {others}")
+
+for stray in sorted({p.name for p in FOLDER.glob("*_pipeline_params_hierarchy.json")} - expected):
+    print(f"STRAY FILE    {stray}: no matching entry in PIPELINE_REGISTRY")
+    problems += 1
+
+print("OK" if not problems else f"{problems} problem(s)")
+sys.exit(1 if problems else 0)
+```
+
+## Conventions
+
+- Keep each file valid JSON in UTF-8 with two-space indentation (`python -m json.tool <file>` checks it).
+- Write English only, and spell parameter names exactly as in the Config class.
+- Name the release in which a behavior changed, for example `since 0.7.1`. Release `0.7.0` was never published, so read the
+  existing descriptions that say "since 0.7.0" as 0.7.1.
+- Keep the top-level layout (`required` and `optional`, then the Pipeline's own categories) so that the files stay
+  comparable across Pipelines.

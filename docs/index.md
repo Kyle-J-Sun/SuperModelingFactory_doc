@@ -1,126 +1,154 @@
 # SuperModelingFactory
 
-> **An end-to-end Python modeling toolchain for credit scorecard development**
+SuperModelingFactory (SMF) is a Python toolkit for credit-risk scorecard development: sample design, WOE binning, feature
+screening, model training, evaluation, explainability, online/offline consistency checks, and Excel reporting. You can call
+each building block yourself, or hand a DataFrame to a one-click pipeline.
 
-SuperModelingFactory brings together three capabilities needed across the full credit-risk modeling workflow:
+SMF installs three Python packages:
 
-| Sub-project | Role | Core capabilities |
-|--------|---------|---------|
-| **[Modeling_Tool](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/Modeling_Tool)** | Modeling engine | Data binning, WOE encoding, feature analysis, model training and evaluation, sample management |
-| **[ExcelMaster](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/ExcelMaster)** | Reporting engine | Programmatic Excel workbook generation with charts, conditional formatting, and cursor-based streaming writes |
-| **[Report](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/Report)** | Report templates | Model performance reports, bulk WOE plot export, multi-model comparison reports |
+| Package | Role | What it provides |
+|---|---|---|
+| **[Modeling_Tool](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/Modeling_Tool)** | Modeling engine | Binning and WOE encoding, feature screening (PSI, IV, correlation), logistic regression and gradient-boosting models, evaluation, explainability, sample management, reject inference, UAT checks, one-click pipelines |
+| **[ExcelMaster](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/ExcelMaster)** | Excel engine | A cursor-based writer for formatted workbooks: tables, images, charts, and conditional formatting |
+| **[Report](https://github.com/Kyle-J-Sun/SuperModelingFactory/tree/main/Report)** | Report templates | Lay out modeling artifacts (performance CSVs, plot images, variable importances) as sheets of an Excel workbook |
 
----
+New to SMF? [Install it](installation.md), then run the [Quickstart](quickstart.md) on synthetic data.
 
-## What It Helps You Do
+## What SMF Helps You Do
 
-!!! tip "Typical scenarios"
-
-    - Start from a behavior-scoring sample and **produce a scorecard training sample in 5 minutes**
-    - Use **WOE / IV / PSI** for feature screening and stability monitoring
-    - Train **Logistic Regression / LightGBM / XGBoost / CatBoost** models and automatically produce Gains / ROC / KS reports
-    - Support **sample-weighted** training and evaluation (`weight_col` / `sample_weight`, for balance weighting, oversampling correction, and similar scenarios)
-    - Handle **reject inference** and **distribution shift**
-    - Export formatted modeling reports in one click with **ExcelMaster**
-    - Check online/offline score consistency with the **UAT module**
-
----
+- Split a modeling sample, balance classes, infer labels for rejected applicants, and correct distribution shift.
+- Bin variables, encode them with WOE, and screen features by PSI, IV/KS, and correlation.
+- Train logistic regression, LightGBM, XGBoost, or CatBoost models, with optional sample weights
+  (`weight_col` / `sample_weight`).
+- Evaluate models with KS, AUC, lift, Gains tables, and champion/challenger comparisons.
+- Explain models with SHAP, Owen value, PDP, ICE, ALE, and LIME.
+- Check that online and offline scores and features agree before a model goes live (UAT).
+- Write formatted Excel reports, or run the whole workflow with the one-click pipelines.
 
 ## Quick Overview
 
-=== "Sample splitting"
+The four tabs continue from one another, so run them in order in one Python session. The first tab builds synthetic data;
+the [Quickstart](quickstart.md) walks through the same flow with explanations.
+
+=== "1. Data and split"
 
     ```python
+    import numpy as np
+    import pandas as pd
     from Modeling_Tool import SampleSplitter
+
+    rng = np.random.default_rng(42)
+    n = 6000
+    data = pd.DataFrame({
+        "age": rng.normal(35, 8, n).clip(18, 70),
+        "income": rng.lognormal(10, 0.4, n),
+        "score_b": rng.normal(600, 60, n),
+        "utilization": rng.uniform(0, 1, n),
+        "n_overdue": rng.poisson(0.3, n),
+    })
+    logit = -2.2 - 0.02 * (data["score_b"] - 600) + 0.5 * data["n_overdue"] - 0.8 * data["utilization"]
+    data["bad_flag"] = rng.binomial(1, 1 / (1 + np.exp(-logit)))
+    features = ["age", "income", "score_b", "utilization", "n_overdue"]
+
     splitter = SampleSplitter(test_size=0.3, random_state=42, stratify=True)
     train_df, test_df = splitter.split_df(data, target="bad_flag")
     ```
 
-=== "WOE encoding"
+=== "2. WOE encoding"
 
     ```python
     from Modeling_Tool import WOE_Master
+
     woe = WOE_Master(train_data=train_df, varlist=features, dep="bad_flag")  # numeric features
     woe.fit(nbins=10, equal_freq=True)
-    train_woe = woe.transform(train_df)   # adds `<feature>_woe` columns
-    test_woe  = woe.transform(test_df)
+    train_woe = woe.transform(train_df)   # adds one `<feature>_woe` column per feature
+    test_woe = woe.transform(test_df)
+    woe_features = [f"{f}_woe" for f in features]
     ```
 
-=== "Model training"
+=== "3. Model training"
 
     ```python
     from Modeling_Tool import GradientBoostingModel
-    woe_features = [f"{f}_woe" for f in features]
+
     model = GradientBoostingModel("lgb", {
         "n_estimators": 200, "learning_rate": 0.05,
-        "early_stopping_rounds": 20, "eval_metric": "auc",
+        "early_stopping_rounds": 20, "eval_metric": "auc", "verbose": -1,
     })
     model.fit(train_woe[woe_features], train_woe["bad_flag"],
-              test_woe[woe_features],  test_woe["bad_flag"])
+              test_woe[woe_features], test_woe["bad_flag"])
     ```
 
-=== "Excel report"
+=== "4. Evaluation and Excel report"
 
     ```python
+    from Modeling_Tool import PerformanceEvaluator
     from ExcelMaster.ExcelMaster import ExcelMaster
-    em = ExcelMaster("model_report.xlsx", verbose=False)
+
+    perf = (
+        PerformanceEvaluator(tgt_name="bad_flag", model=model, feature_cols=woe_features)
+        .add_dataset("train", train_woe)
+        .add_dataset("test", test_woe)
+        .evaluate(display=False)          # display=True needs IPython (notebooks)
+    )
+    print(perf[["index", "KS", "AUC"]])
+
+    em = ExcelMaster("model_report.xlsx", verbose=False)    # `verbose` is required
     ws = em.add_worksheet("Performance")
     em.write_dataframe(ws, perf, title="Model Performance", titleformat="BLUE_H2")
-    em.insert_image(ws, "roc_curve.png", figScale=(0.8, 0.8))   # scale factors
     em.close_workbook()
     ```
-
----
 
 ## Documentation Map
 
 <div class="grid cards" markdown>
 
-- :material-rocket-launch: **[Quickstart](quickstart.md)**
-
-    Run your first scorecard training pipeline in 5 minutes.
-
 - :material-package-variant: **[Installation](installation.md)**
 
-    Core dependencies, optional dependencies, MaxCompute access.
+    Requirements, optional extras, and how to verify the install.
+
+- :material-rocket-launch: **[Quickstart](quickstart.md)**
+
+    A complete scorecard workflow on synthetic data in about five minutes.
 
 - :material-graph: **[Architecture](architecture.md)**
 
-    Module dependency graph, design principles, naming conventions.
+    Package layout, import rules, and where each class lives.
 
 - :material-pipe: **[End-to-End Pipelines](pipeline.md)**
 
-    The complete modeling workflow, from sample splitting to Excel report.
+    The manual modeling workflow step by step, and the [seven one-click pipelines](pipeline_one_click.md).
 
 - :material-book-open-variant: **[User Guides](guides/index.md)**
 
-    Organized by scenario: sample / WOE / feature / model / evaluation / UAT / report.
+    One guide per task: samples, WOE, feature screening, models, evaluation, explainability, UAT, Excel reports, ODPS.
 
 - :material-api: **[API Reference](api/index.md)**
 
-    Detailed descriptions of every public class, method, and function.
+    Signatures and docstrings of every public subpackage, and the list of top-level names.
+
+- :material-frequently-asked-questions: **[FAQ](faq.md)**
+
+    Import errors, warnings, ODPS credentials, and sample-weight keywords.
+
+- :material-history: **[ChangeLog](changelog/index.md)**
+
+    One page per release, with behavior changes called out.
 
 </div>
 
----
+## Who It Is For
 
-## Who It's For
+- **Credit-risk modelers** developing application, behavior, and collection scorecards.
+- **Model validators and auditors** who need UAT consistency checks, PSI monitoring, and variable interpretability.
+- **Data scientists** who want reusable binning, WOE, backward elimination, and reject-inference code.
+- **Modeling-platform developers** who build on SMF as the underlying library.
 
-- **Credit-risk modelers**: develop application (A-card), behavior (B-card), and collection (C-card) scorecards and anti-fraud models
-- **Model validation / audit**: UAT consistency, PSI monitoring, variable interpretability
-- **Data scientists**: reuse modules for binning / WOE / backward elimination / reject inference
-- **Modeling platform developers**: build on SuperModelingFactory as the underlying library
-
----
-
-## Version
+## Version and License
 
 - **Version**: 0.8.2
 - **Author**: Jingkai Sun
-- **License**: [Business Source License 1.1](https://github.com/Kyle-J-Sun/SuperModelingFactory/blob/main/LICENSE) (converts to Apache 2.0 after 2030-06-24; contact the author for a commercial-use license)
-
----
-
-## Next Steps
-
-👉 [Quickstart](quickstart.md) → [Installation](installation.md) → [Architecture](architecture.md)
+- **License**: [Business Source License 1.1](https://github.com/Kyle-J-Sun/SuperModelingFactory/blob/main/LICENSE).
+  Personal study, academic research, internal evaluation, prototyping, and teaching are allowed. **Production use**, such
+  as deploying SMF inside a credit-risk, lending, scoring, or other revenue-generating pipeline, requires a commercial
+  license from the author. The license converts to Apache 2.0 on 2030-06-24.

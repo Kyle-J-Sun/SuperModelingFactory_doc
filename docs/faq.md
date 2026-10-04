@@ -6,7 +6,7 @@ This page collects frequently asked questions and solutions encountered while us
 
 ## Environment and Dependencies
 
-### Q1: Importing the package fails with `_ARRAY_API not found` / `NameError: name 'exit' is not defined`
+### Why does `import Modeling_Tool` fail with `_ARRAY_API not found`?
 
 **Symptom**
 
@@ -76,7 +76,7 @@ NumPy 2.x installed
 
 ---
 
-### Q2: Importing the package fails with `AttributeError: module 'numpy' has no attribute 'float'`
+### Why does the import fail with `AttributeError: module 'numpy' has no attribute 'float'`?
 
 **Symptom**
 
@@ -111,7 +111,7 @@ from Modeling_Tool.Core import *
 
 **Fixed in**
 
-This problem is fully fixed in the source by two changes (see commits `b0038ac` / `f92505b`):
+This problem is fully fixed in the source by two changes:
 
 1. **`GBM_Tool.py`**: the module-level `import lightgbm as lgb` / `import xgboost as xgb` were removed; lightgbm/xgboost are now lazy-loaded inside each function or method that uses them (through the `_get_lgb()` / `_get_xgb()` helpers).
 2. **`Modeling_Tool/__init__.py`**: the top-level eager `from .Model import (...)` block was removed in favor of lazy loading through `__getattr__` (consistent with the existing `ODPSRunner` lazy-loading pattern).
@@ -161,7 +161,7 @@ If you are using a compiled wheel package (`/opt/conda/...`) rather than a sourc
 | NumPy ≥ 1.24 + dask ≥ 2022.01 | Works |
 | Source install of the latest SuperModelingFactory | Fixed; not affected |
 
-### Q2b: After upgrading to 0.8.2, my notebook shows many more warnings
+### After upgrading to 0.8.2, why does my notebook show many more warnings?
 
 **Cause**
 
@@ -204,9 +204,18 @@ Avoid the bare `warnings.filterwarnings("ignore")` again: it also silences SMF's
 
 ---
 
+### Evaluation fails with `No module named 'IPython'` outside a notebook
+
+`PerformanceEvaluator.evaluate`, `get_perf_summary`, and some other evaluation functions print their result table with
+`IPython.display.display` when `display=True`, which is the default. IPython is not a declared dependency of SMF, so a plain
+Python environment without it raises `ModuleNotFoundError`. Either pass `display=False` (the table is still returned), or
+install it with `pip install ipython`.
+
+---
+
 ## ODPS Access Key Configuration
 
-### Q3: How do I manage ODPS credentials and package imports uniformly with `config.py`?
+### How do I manage ODPS credentials and package imports uniformly with `config.py`?
 
 **Pain points**
 
@@ -216,6 +225,15 @@ When using `ODPSRunner` in a Jupyter notebook or script, two problems are common
 2. Every file repeats a long list of `from Modeling_Tool.XXX import *` lines, which is noisy and easy to get wrong by missing a submodule.
 
 The recommended approach is to manage the AccessKey centrally in the **system-level shared path** `/opt/workspace/.env`, and keep a single `config.py` in the project root that loads it explicitly. Multiple projects can then share one AK instead of configuring each repository. Every notebook needs only one line at the top, `from config import *`, which both loads the credentials and imports the package.
+
+---
+
+!!! note "What `ODPSRunner` reads"
+
+    `ODPSRunner()` takes no arguments. It reads `ALIBABA_CLOUD_ACCESS_KEY_ID` and `ALIBABA_CLOUD_ACCESS_KEY_SECRET` (both
+    required: a missing one raises `KeyError`), plus `ODPS_PROJECT` and `ODPS_ENDPOINT`. If the last two are not set, it
+    falls back to built-in defaults (project `mex_anls` and a Singapore VPC endpoint) that belong to the author's
+    environment, so always set both. `pyodps` must be installed (`pip install 'supermodelingfactory[odps]'`).
 
 ---
 
@@ -328,6 +346,7 @@ from Modeling_Tool.Model import *     # noqa: F401,F403
 **Step 5: Use it in a notebook**
 
 ```python
+# check: skip   (needs your own config.py and ODPS credentials)
 # First cell of the notebook
 from config import *
 
@@ -335,10 +354,10 @@ from config import *
 #   1. os.environ already holds ALIBABA_CLOUD_ACCESS_KEY_ID / _SECRET / ODPS_PROJECT / ODPS_ENDPOINT
 #   2. All SMF classes such as LRMaster / WOE_Master / PerformanceEvaluator are ready to use
 
-odps = ODPSRunner()                            # no need to pass access_key; it is read from os.environ automatically
-df   = odps.read_sql("SELECT * FROM ... LIMIT 100")
+odps = ODPSRunner()                            # no arguments; credentials are read from os.environ
+df   = odps.run_sql("SELECT * FROM ... LIMIT 100")      # returns a DataFrame (to_df=True by default)
 
-woe  = WOE_Master(...)                          # use directly, no need for from Modeling_Tool.WOE import *
+woe  = WOE_Master(train_data=train_df, varlist=features, dep="bad_flag")   # use directly, no extra import needed
 lr   = LRMaster(params={"C": 1.0})
 ```
 
@@ -385,20 +404,22 @@ lr   = LRMaster(params={"C": 1.0})
 
 ## Sample Weights
 
-### Q4: When should I use sample weights? What is the difference between `weight_col` and `sample_weight`?
+### Which keyword passes sample weights: `weight_col` or `sample_weight`?
 
 Typical scenarios: correcting sampling bias (giving original samples higher weight after oversampling), weighting by loan balance/amount, time-decay weighting, and so on.
 
-| Parameter | Layer | Notes |
-|------|--------|------|
-| `weight_col` | Training (`LRMaster.fit`), evaluation (`PerformanceEvaluator`), DataFrame-based APIs | Resolved from a DataFrame column; using the same name as the business table field is recommended |
-| `sample_weight` | `GradientBoostingModel.fit`, low-level `calc_roc` / `evaluate_performance` | Pass a 1-D numpy array directly |
+| Argument | Where | Notes |
+|---|---|---|
+| `weight_col` | `LRMaster` (`fit`, `stepwise_selection`, `get_aic`, `get_bic`, `calibrate_model`), `PerformanceEvaluator`, `GainsTableCalculator`, `Model_Evaluation_Tool`, `cross_risk`, `BackwardVariableEliminator` | Name of a column of the DataFrame you pass |
+| `sample_weight` | `GradientBoostingModel.fit` and the single-backend classes, and the array-based evaluation functions (`calc_roc`, `calc_pr`, `calc_equid_*`, `calc_lift_apt`, the `'sample_weight'` key of `evaluate_performance` datasets) | A 1-D array with one weight per row |
 
-`weight_col` and `sample_weight` **cannot be passed together** (`resolve_sample_weight` raises an error). The `wgt` / `wgt_col` aliases are also accepted.
+Weights must be finite, non-negative, one per row, and sum to more than 0. APIs that accept both forms (for example
+`cross_risk`) raise `ValueError` if you pass both; `wgt` and `wgt_col` are accepted as aliases there. `LRMaster.fit`
+takes only `weight_col`.
 
-If you trained with weights but forget to pass them at evaluation time, metrics are computed with equal weights (1 per row), which is inconsistent with the training objective. Pass the same weight column consistently through the training and evaluation chain.
+If you trained with weights but forget to pass them at evaluation time, metrics are computed with equal weights (1 per row), which is inconsistent with the training objective. Pass the same weights consistently through the training and evaluation chain.
 
-For the detailed semantics (`N` vs `N_RAW`, weighted AUC/KS/Lift), see [Model Evaluation — Sample-Weighted Evaluation](guides/eval.md#sample-weighted-evaluation) and [Model Training — Sample Weights](guides/model.md#sample-weights).
+For the argument each API takes and the weighted metric semantics (`N` vs `N_RAW`, weighted AUC/KS/Lift), see [Model Training: Sample Weights](guides/model.md#sample-weights) and [Model Evaluation: Sample-Weighted Evaluation](guides/eval.md#sample-weighted-evaluation).
 
 ---
 

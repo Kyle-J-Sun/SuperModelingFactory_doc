@@ -1,199 +1,286 @@
 # ODPS Data Extraction
 
-SuperModelingFactory's [`Modeling_Tool.Core.ODPS_Tool`](../api/core.md) provides `ODPSRunner` — a wrapper around SQL execution, data download, and upload for Alibaba Cloud MaxCompute (ODPS).
+SMF talks to Alibaba Cloud MaxCompute (ODPS) through [PyODPS](https://pyodps.readthedocs.io/). `ODPSRunner` runs SQL and
+moves DataFrames in and out of tables, `proc_means_odps` computes descriptive statistics inside MaxCompute,
+`ParallelODPSManager` pulls and pushes large tables in parallel chunks, and `parse_sql_file` fills SQL templates.
+
+| I want to... | Use | Section |
+|---|---|---|
+| Run SQL and get a DataFrame, a CSV file, or both | `ODPSRunner.run_sql` | [1](#1-quickstart), [2](#2-run_sql-parameter-semantics) |
+| Fill `{placeholders}` in a SQL file | `parse_sql_file` | [4](#4-complete-example-extract-a-sample-to-local-disk) |
+| Summarize numeric columns without downloading rows | `proc_means_odps` | [5](#5-proc_means_odps-odps-side-descriptive-statistics) |
+| Pull or push a large table in parallel chunks | `ParallelODPSManager` | [6](#6-parallelodpsmanager-concurrent-pullupload) |
+| Download a table or partition, create or update a table | `download_table`, `upload_df`, `insert_df` | [8](#8-other-odpsrunner-methods) |
+| Pull a table with thousands of columns | `pull_attributes_in_batch` | [9](#9-related-utility-functions) |
+
+## Prerequisites
+
+Install the optional dependency:
+
+```bash
+pip install 'supermodelingfactory[odps]'
+```
+
+`ODPSRunner()` takes no arguments. It reads its configuration from environment variables when it is created:
+
+| Variable | Required | Default | Meaning |
+|---|---|---|---|
+| `ALIBABA_CLOUD_ACCESS_KEY_ID` | Yes | none (`KeyError` if unset) | AccessKey ID |
+| `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | Yes | none (`KeyError` if unset) | AccessKey secret |
+| `ODPS_PROJECT` | No | `mex_anls` | Project that unqualified table names refer to. The default is the library author's project, so always set it |
+| `ODPS_ENDPOINT` | No | `https://service.ap-southeast-1-vpc.maxcompute.aliyun-inc.com/api` | MaxCompute endpoint. The default is an Alibaba Cloud VPC endpoint (note `-vpc` in the host name), meant for access from inside Alibaba Cloud's network; elsewhere, set the public endpoint of your region |
+
+```bash
+export ALIBABA_CLOUD_ACCESS_KEY_ID="<your-access-key-id>"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="<your-access-key-secret>"
+export ODPS_PROJECT="<your-project>"
+export ODPS_ENDPOINT="https://service.<region>.maxcompute.aliyun.com/api"    # from Alibaba Cloud's endpoint list
+```
+
+Never write AccessKeys into source code, notebooks, or documentation, and keep any `.env` file out of version control.
+The [FAQ](../faq.md) shows how to load them from a shared `.env` file. `ODPSRunner` reads only an AccessKey pair; it has
+no argument for an STS token.
+
+!!! note "Which snippets need a live project"
+
+    Every snippet that creates an `ODPSRunner`, directly or through `proc_means_odps`, `ParallelODPSManager`, or
+    `pull_attributes_in_batch`, connects to MaxCompute. Table names such as `my_project.loan_sample` are placeholders for
+    your own tables. `parse_sql_file`, `ODPSRunner.cre_table_schema`, and `ParallelODPSConfig` need no connection and
+    run offline. The snippets share one Python session: `odps` is created in the quickstart and reused below.
 
 ## 1. Quickstart
 
 ```python
-from Modeling_Tool.Core.ODPS_Tool import ODPSRunner
+# check: skip   (needs MaxCompute credentials)
+import os
 
-odps = ODPSRunner()
+from Modeling_Tool import ODPSRunner
 
-# 1) Pull data into a DataFrame
-df = odps.run_sql("SELECT * FROM mex_anls.drv LIMIT 1000")
-print(df.head())
+os.makedirs("data", exist_ok=True)
+odps = ODPSRunner()                      # reads the credentials from the environment
 
-# 2) Pull data straight to a CSV on disk (recommended for large tables)
+# 1) Pull a query result into a DataFrame
+df = odps.run_sql("SELECT * FROM my_project.loan_sample LIMIT 1000")
+print(df.shape)
+
+# 2) Write the result to a CSV file and return no DataFrame
 _ = odps.run_sql(
-    "SELECT * FROM mex_anls.drv",
+    "SELECT * FROM my_project.loan_sample",
     to_df=False,
-    csv_path="/data/drv.csv",
+    csv_path="data/loan_sample.csv",
 )
 
-# 3) Get both the DataFrame and the file on disk
+# 3) Get the DataFrame and the CSV file
 df = odps.run_sql(
-    "SELECT * FROM mex_anls.drv",
-    csv_path="/data/drv.csv",
+    "SELECT * FROM my_project.loan_sample",
+    csv_path="data/loan_sample.csv",
 )
 ```
 
+`ODPSRunner` logs the SQL text, timestamps, and duration of every call with `logging.info`. Importing SMF configures the
+root logger at `INFO`; to silence these lines, call `logging.getLogger().setLevel(logging.WARNING)` after the import.
+
 ## 2. `run_sql` Parameter Semantics
 
-| `to_df` | `csv_path` | Behavior | Returns |
-|---------|-----------|------|------|
-| `True` | `None` | Download into memory | DataFrame |
-| `True` | Set | Download + write CSV | DataFrame |
-| `False` | `None` | **No download** (for DDL/INSERT) | Empty DataFrame |
-| `False` | Set | Download + write CSV (frees memory) | Empty DataFrame |
+`run_sql(sql, to_df=True, n_process=1, csv_path=None)` runs one SQL statement. `to_df` and `csv_path` are independent:
+setting either one triggers the download.
 
-!!! warning "The counterintuitive `to_df=False + csv_path`"
+| `to_df` | `csv_path` | Downloads the result | Writes a CSV | Returns |
+|---|---|---|---|---|
+| `True` (default) | `None` (default) | Yes | No | The result DataFrame |
+| `True` | A path | Yes | Yes | The result DataFrame |
+| `False` | `None` | No: the statement only runs | No | An empty DataFrame |
+| `False` | A path | Yes | Yes | An empty DataFrame |
 
-    Historically, `to_df=False` caused `csv_path` to be **silently ignored** as well — see [§7 Historical pitfalls](#7-common-pitfalls).
-    The current version has fixed this: `to_df` and `csv_path` are independent of each other, and setting either one triggers the download.
+Use `to_df=False` without `csv_path` for statements that return no rows, such as `CREATE TABLE ... AS SELECT` and
+`INSERT`. `n_process` is passed to PyODPS's `to_pandas` and enables a multi-process download when it is above 1. The CSV is
+written without the pandas index.
+
+!!! warning "The result always passes through memory"
+
+    `to_df=False` only skips returning the DataFrame. The result is still downloaded into memory in one piece and then
+    written to the CSV, so peak memory is that of the full result. For results that do not fit in memory, use
+    [`ParallelODPSManager.pull`](#6-parallelodpsmanager-concurrent-pullupload).
+
+!!! warning "Create the CSV folder first"
+
+    `run_sql` does not create the folder of `csv_path`. Writing the CSV is part of the download retry loop (see
+    [Retry Policy](#31-retry-policy)), so a missing folder causes six downloads and ends in a `SystemError`; the real cause
+    appears only in the log.
 
 ## 3. Internals
 
 ### 3.1 Retry Policy
 
-- **Execution stage** (`execute_sql`) — runs only once, with no retry (to avoid being billed twice)
-- **Download stage** (`to_pandas` + `to_csv`) — up to 6 retries, suited to network jitter
+- **Execution** (`execute_sql`) runs once and is never resubmitted, so a retry cannot run, and bill, a statement twice.
+  An error such as a syntax error, a missing permission, or a quota limit propagates unchanged.
+- **Download and CSV write** (`to_pandas`, then `to_csv`) make up to six attempts in total. After the sixth failure
+  `run_sql` raises `SystemError`; the causes are in the log lines `download failed [i/6]`.
+- PyODPS also retries its HTTP requests on its own (`options.retry_times = 6`, which `ODPSRunner` sets).
 
 ### 3.2 Wide-Table Schema Patch
 
-When a SQL result has more than 200 columns, `ODPSRunner` automatically enables a thread-safe wide-schema patch:
+When a result has more than 200 columns, the PyODPS tunnel puts every column name in the request URL and the server can
+answer `HTTP 414 (Request-URI Too Long)`. `ODPSRunner` then temporarily replaces
+`InstanceDownloadSession._build_input_stream` so that the request carries no column list and the server returns all
+columns. The patch is applied and removed automatically. A lock and a reference count keep concurrent downloads safe: the
+original method comes back only after the last download has finished.
 
-```text
-HTTP 414 (URI Too Long) ← the original request carries all column names as URL query parameters
-                         after the patch → the columns parameter is removed, and the server returns everything
-```
+### 3.3 Connection Configuration
 
-The patch is restored automatically and is transparent to the caller. When several threads download wide tables at the same time, an internal lock and reference count ensure the original ODPS method is restored only after the last download task exits, so concurrent patch/unpatch calls cannot overwrite each other.
+`ODPSRunner.__init__` builds `odps.ODPS(access_id, secret, project, endpoint=...)` from the four environment variables in
+[Prerequisites](#prerequisites). It then sets four **process-wide** PyODPS options, which apply to every PyODPS client in
+the process: `options.retry_times = 6`, `options.pool_maxsize = 200`, `options.connect_timeout = 3600`, and
+`options.read_timeout = 3600`.
 
-### 3.3 Connection Configuration in `__init__`
+The PyODPS client is available as `odps.o`. Use it for anything SMF does not wrap, for example
+`odps.o.list_instances(status="running")` to see the running jobs of your project.
 
-```python
-class ODPSRunner:
-    def __init__(self):
-        self.o = ODPS(
-            "<ALIBABA_CLOUD_ACCESS_KEY_ID>",      # AccessKey ID
-            "<ALIBABA_CLOUD_ACCESS_KEY_SECRET>",  # AccessKey Secret
-            "mex_anls",                          # ← default project
-            endpoint="https://service.ap-southeast-1-vpc.maxcompute.aliyun-inc.com/api",
-        )
-        options.retry_times = 6
-        options.pool_maxsize = 200
-        options.connect_timeout = 3600
-        options.read_timeout = 3600
-```
-
-!!! warning "Credential configuration"
-
-    The current implementation reads the Alibaba Cloud credentials from environment variables. Never write real credentials into source code or documentation.
-    
-    1. Inject through environment variables:
-       ```python
-       self.o = ODPS(
-           os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"],
-           os.environ["ALIBABA_CLOUD_ACCESS_KEY_SECRET"],
-           os.environ["ODPS_PROJECT"],
-           endpoint=os.environ["ODPS_ENDPOINT"],
-       )
-       ```
-    2. Add `.env` to `.gitignore` to avoid leaking it
-    3. In the long run, consider switching to a RAM Role / STS Token
-
-## 4. Complete Example — Extract a Sample to Local Disk
+## 4. Complete Example: Extract a Sample to Local Disk
 
 ```python
+# check: skip   (needs MaxCompute credentials)
 from pathlib import Path
-from Modeling_Tool.Core.ODPS_Tool import ODPSRunner
+
+from Modeling_Tool import ODPSRunner
 from Modeling_Tool.Core.utils import parse_sql_file, mkdir_if_not_exist
 
-odps = ODPSRunner()
-
-# 1) Render the SQL template
+# 1) A SQL template. parse_sql_file removes the comments and fills the {placeholders}.
+Path("sql").mkdir(exist_ok=True)
+Path("sql/00_sample.sql").write_text(
+    "-- development sample\n"
+    "SELECT flow_id, {tgt_name}, {varlist}\n"
+    "FROM my_project.loan_sample\n"
+    "WHERE dt = '{dt}'\n"
+)
 sql = parse_sql_file(
     sql_path="sql/00_sample.sql",
-    tgt_name="IS_DPD7",
-    varlist="score_b, income, age, n_overdue",  # placeholder substitution
+    tgt_name="bad_flag",
+    varlist="score_b, income, age, n_overdue",
+    dt="2026-01-01",
 )
+print(sql)
 
-# 2) Output directory
-out_dir = Path("data/")
-mkdir_if_not_exist(str(out_dir))
-csv_path = out_dir / "sample_drv.csv"
+# 2) The output folder
+mkdir_if_not_exist("data")
+csv_path = Path("data") / "sample_drv.csv"
 
-# 3) Run the SQL, write only the CSV, use no memory
+# 3) Run the SQL and write only the CSV
+odps = ODPSRunner()
 _ = odps.run_sql(sql, to_df=False, csv_path=str(csv_path), n_process=4)
 print(f"Sample extracted: {csv_path}")
 ```
 
+`parse_sql_file(sql_path=None, sql_query=None, split=False, format_select=False, **kwargs)`:
+
+- Give exactly one of `sql_path` (a file) and `sql_query` (a string); otherwise it raises `AttributeError`.
+- Every keyword argument fills the `{name}` placeholder of the same name. Values must be strings, so write
+  `n="20"`, not `n=20`. A placeholder without an argument stays in the SQL and triggers a `UserWarning`.
+- It removes `--` and `/* */` comments and returns one string that ends with `;`. With several statements the string joins
+  them with `; `, and `split=True` returns a list instead. `run_sql` accepts one statement per call.
+- `format_select=True` reformats the `SELECT` list with one column per line.
+- `mkdir_if_not_exist(folder_path)` creates the folder and returns `0`, or returns `1` if it already exists.
+
 ## 5. `proc_means_odps`: ODPS-Side Descriptive Statistics
 
-`proc_means_odps()` computes descriptive statistics for numeric variables directly in MaxCompute, and downloads only the small aggregated result as a pandas DataFrame. It suits scenarios with very many rows or very many features, where you do not want to `SELECT *` the full table first.
+`proc_means_odps()` computes descriptive statistics for numeric columns inside MaxCompute and downloads only the small
+aggregated result as a DataFrame. Use it for tables with very many rows or columns, where you do not want to `SELECT *`
+first.
 
 ```python
+# check: skip   (needs MaxCompute credentials)
 from Modeling_Tool import proc_means_odps
 
 summary = proc_means_odps(
-    input_table_name="mex_anls.feature_wide_table",
-    skip_cols=["flow_id", "badflag"],
+    input_table_name="my_project.loan_sample",
+    skip_cols=["flow_id", "bad_flag"],
     batch_size=50,
 )
+print(summary.head())
 ```
 
-The default output has one row per variable:
+The result has one row per variable:
 
 ```text
 attribute, N_ALL, N, MEAN, STD, MIN,
 Q5, Q15, Q25, Q50, Q75, Q95, Q99, MAX, MISSING_RATE
 ```
 
+`N_ALL` is the number of rows, `N` the number of valid values, and `MISSING_RATE = 1 - N / N_ALL`. `STD` is the sample
+standard deviation and is `NaN` when `N < 2`.
+
 ### 5.1 Statistics by Group
 
-`group` accepts a string or a list of columns, and the output structure matches the numeric `proc_means_by_grp()`:
+`group` takes a column name or a list of columns. The group columns come first in the result, and the rows are sorted by
+the group values, then by variable.
 
 ```python
+# check: skip   (needs MaxCompute credentials)
 grouped = proc_means_odps(
-    input_table_name="mex_anls.feature_wide_table",
+    input_table_name="my_project.loan_sample",
     select_cols=["age", "credit_limit", "income"],
     group=["apply_month", "channel"],
     where_clause="dt >= '2026-01-01'",
 )
+print(grouped.head())
 ```
 
-The default is `include_missing_group=False`: records where any group column is NULL do not enter the grouped result, consistent with the default of pandas `groupby`. Set it to `True` to keep NULL groups.
+By default (`include_missing_group=False`) rows where any group column is NULL are left out, as in a pandas `groupby`. Set
+it to `True` to keep them as their own group.
 
 ### 5.2 Column Selection and Batches
 
-- `select_cols=None`: automatically choose numeric columns from the ordinary table columns; partition columns are not analyzed automatically.
-- `select_cols=[...]`: analyze only the specified numeric columns; explicitly passing a non-numeric column raises an error.
-- `skip_cols=[...]`: remove columns from the candidates; when it overlaps with `select_cols`, `skip_cols` takes precedence.
-- `group` columns take part only in grouping and are not analyzed again as metric variables.
-- `batch_size=50`: each ODPS aggregation SQL handles 50 features. It limits the SQL width; it is not a row-level chunk and never downloads source data rows.
+- `select_cols=None` analyzes every numeric ordinary column. String columns and partition columns are skipped, and the
+  target column is analyzed too if it is numeric, so list it in `skip_cols`.
+- `select_cols=[...]` analyzes only those columns. A non-numeric column raises `ValueError`.
+- `skip_cols=[...]` removes columns from the candidates and wins over `select_cols`. Every listed column must exist.
+- `group` columns are never analyzed as variables.
+- `batch_size=50` is the number of variables per aggregation statement. It limits the width of the SQL; it never splits
+  or downloads source rows.
 
-Each feature batch scans the source table only once, computing `COUNT/AVG/STDDEV_SAMP/MIN/PERCENTILE/MAX` for all variables in that batch at the same time, and then converts the small wide aggregated result into a long table locally. If any batch fails, the function raises immediately, and neither the CSV nor the ODPS result table gets a half-finished output.
+Each batch scans the table once and computes `COUNT`, `AVG`, `STDDEV_SAMP`, `MIN`, the percentiles, and `MAX` for all its
+variables together, then the small wide result is reshaped into a long table locally. If any batch fails,
+`proc_means_odps` raises a `RuntimeError` that names the batch and its first and last variable, and it writes neither the
+CSV nor the result table.
 
 ### 5.3 Quantiles and Special Missing Values
 
-By default, approximate quantiles suited to large tables are used:
+By default the percentiles are approximate, which suits large tables:
 
 ```python
+# check: skip   (needs MaxCompute credentials)
 approx = proc_means_odps(
-    "mex_anls.feature_wide_table",
+    "my_project.loan_sample",
     q=[0.05, 0.5, 0.95],
     quantile_method="approx",
     percentile_accuracy=10000,
 )
 ```
 
-When you need something closer to pandas linear interpolation, choose the exact mode explicitly:
+For linear interpolation as in pandas, ask for the exact mode:
 
 ```python
+# check: skip   (needs MaxCompute credentials)
 exact = proc_means_odps(
-    "mex_anls.feature_wide_table",
+    "my_project.loan_sample",
     q=[0.05, 0.5, 0.95],
     quantile_method="exact",
 )
 ```
 
-`approx` uses MaxCompute `PERCENTILE_APPROX`, and `exact` uses `PERCENTILE_CONT`. The exact mode needs more compute resources and is not recommended as the default on very large tables or high-cardinality group combinations.
+`"approx"` uses MaxCompute's `PERCENTILE_APPROX` and `"exact"` uses `PERCENTILE_CONT`, which can need much more compute on
+very large tables or on many groups.
 
-Special missing values are converted to NULL before the SQL aggregation:
+The quantile columns are named `Q<percent>`: `0.05` becomes `Q5`. The percent is `int(q * 100)`, which truncates, so
+floating-point error lowers a few labels by one (`0.29`, `0.57`, and `0.58` become `Q28`, `Q56`, and `Q57`). Each quantile
+must map to a distinct whole percent, so values such as `0.001` or `0.505` raise `ValueError`.
+
+Special missing values are turned into NULL before the aggregation, so they count neither in `N` nor in the statistics:
 
 ```python
+# check: skip   (needs MaxCompute credentials)
 summary = proc_means_odps(
-    "mex_anls.feature_wide_table",
+    "my_project.loan_sample",
     select_cols=["age", "income"],
     spec_missing_value={
         "age": [-1, -999],
@@ -202,93 +289,141 @@ summary = proc_means_odps(
 )
 ```
 
-`N_ALL` is the total sample count of the filtered group, `N` is the valid sample count after excluding SQL NULL and special missing values, and `MISSING_RATE = 1 - N / N_ALL`.
+`spec_missing_value` is a number, a list of numbers (applied to every analyzed column), or a dictionary from column to a
+number or list. Dictionary keys must be analyzed columns.
 
 ### 5.4 CSV and ODPS Output
 
-By default, only a DataFrame is returned, and no local file or remote table is created:
+By default the function only returns a DataFrame and creates no file or table:
 
 ```python
-summary = proc_means_odps("mex_anls.feature_wide_table")
+# check: skip   (needs MaxCompute credentials)
+summary = proc_means_odps("my_project.loan_sample")
 ```
 
-You can optionally write a CSV, always without the pandas index:
+Write a CSV, without the pandas index; missing parent folders are created:
 
 ```python
+# check: skip   (needs MaxCompute credentials)
 summary = proc_means_odps(
-    "mex_anls.feature_wide_table",
+    "my_project.loan_sample",
     output_csv="output/feature_means.csv",
 )
 ```
 
-Writing back to MaxCompute requires an explicitly specified mode:
+Write the result back to MaxCompute. The mode is required, so a production table is never overwritten by mistake:
 
 ```python
+# check: skip   (needs MaxCompute credentials)
 summary = proc_means_odps(
-    "mex_anls.feature_wide_table",
-    output_table_name="mex_anls.feature_means_report",
-    output_table_mode="overwrite",  # or "append"
+    "my_project.loan_sample",
+    output_table_name="my_project.feature_means_report",
+    output_table_mode="overwrite",           # or "append"
 )
 ```
 
-- `overwrite` uses `ODPSRunner.upload_df(..., atomic=True)` to replace the target table atomically.
-- `append` requires the target table to already exist, with column names, order, and types fully compatible with the result.
-- The input table and output table cannot be the same table.
-- The first version supports writing only to non-partitioned result tables.
+- `"overwrite"` creates the table, or replaces it atomically through `ODPSRunner.upload_df(..., atomic=True)`, with a schema
+  inferred from the result. It adds no `py_inserttime` column.
+- `"append"` needs an existing table whose column names, order, and types match the result; otherwise it raises
+  `ValueError`.
+- The output table must differ from the input table. `"append"` needs an unpartitioned target, and `"overwrite"` always
+  creates an unpartitioned table.
 
 ### 5.5 Parameter Table
 
+`proc_means_odps(input_table_name, skip_cols=None, select_cols=None, batch_size=50, group=None, *, q=None,
+quantile_method='approx', percentile_accuracy=10000, where_clause=None, spec_missing_value=None,
+include_missing_group=False, sqlrunner=None, output_csv=None, output_table_name=None, output_table_mode=None)`.
+Every parameter after `group` is keyword-only.
+
 | Parameter | Default | Description |
 |---|---:|---|
-| `input_table_name` | Required | MaxCompute table name; `table` or `project.table` is supported. |
-| `skip_cols` | `None` | Columns excluded from the candidate metric variables. |
-| `select_cols` | `None` | Explicit metric variables; if omitted, numeric ordinary columns are chosen automatically. |
-| `batch_size` | `50` | Number of features handled by each aggregation SQL. |
-| `group` | `None` | One or several grouping columns; omitted means global statistics. |
-| `q` | `[.05,.15,.25,.5,.75,.95,.99]` | Quantile points; must be strictly increasing and within `[0,1]`. |
-| `quantile_method` | `"approx"` | `"approx"` or `"exact"`. |
-| `percentile_accuracy` | `10000` | Accuracy parameter of `PERCENTILE_APPROX`. |
-| `where_clause` | `None` | A single SQL filter condition, suited to partition pruning; must not contain a semicolon. |
-| `spec_missing_value` | `None` | A global numeric sentinel, or per-column numeric sentinels. |
-| `include_missing_group` | `False` | Whether to keep combinations where a group column is NULL. |
-| `sqlrunner` | `None` | An already-initialized `ODPSRunner`; created lazily if omitted. |
-| `output_csv` | `None` | Optional CSV output path. |
-| `output_table_name` | `None` | Optional MaxCompute result table. |
-| `output_table_mode` | `None` | Required when writing a result table: `"overwrite"` or `"append"`. |
+| `input_table_name` | Required | Table identifier: `table`, `project.table`, or `project.schema.table`. Letters, digits, and underscores only |
+| `skip_cols` | `None` | Columns excluded from the variables |
+| `select_cols` | `None` | Explicit variables; if omitted, the numeric ordinary columns are used |
+| `batch_size` | `50` | Variables per aggregation statement |
+| `group` | `None` | One or several grouping columns; omitted means global statistics |
+| `q` | `None` | Quantile points in `[0, 1]`, strictly increasing. `None` means `[0.05, 0.15, 0.25, 0.5, 0.75, 0.95, 0.99]` |
+| `quantile_method` | `"approx"` | `"approx"` or `"exact"` |
+| `percentile_accuracy` | `10000` | Accuracy argument of `PERCENTILE_APPROX` |
+| `where_clause` | `None` | One SQL condition, wrapped in parentheses and combined with `AND`; useful for partition pruning. It must not contain `;` |
+| `spec_missing_value` | `None` | Numeric sentinel(s) treated as missing |
+| `include_missing_group` | `False` | Keep the combinations where a group column is NULL |
+| `sqlrunner` | `None` | An `ODPSRunner` to reuse; if omitted, one is created from the environment |
+| `output_csv` | `None` | Path of an optional CSV file |
+| `output_table_name` | `None` | Name of an optional result table |
+| `output_table_mode` | `None` | `"overwrite"` or `"append"`; required with `output_table_name` |
 
-The first version of `proc_means_odps` analyzes only numeric variables; `UNIQUE/TOP/FREQ` for categorical variables are not computed by this function.
+`proc_means_odps` analyzes numeric variables only. It does not compute `UNIQUE`, `TOP`, or `FREQ` for categorical columns.
 
 ## 6. `ParallelODPSManager` Concurrent Pull/Upload
 
-`ParallelODPSManager` is a high-level wrapper around `ODPSRunner + ParallelApplyEngine`, suited to processing a large table concurrently by chunk:
+`ParallelODPSManager(config, odps_runner=None)` combines `ODPSRunner` with `ParallelApplyEngine` to process a large table
+chunk by chunk. If you pass no `odps_runner`, it creates one. `ParallelODPSPuller` is an alias of the same class.
 
-- `pull()`: hash-buckets by `unique_key`, or, when there is no `unique_key`, automatically materializes a ROW_NUMBER temp table and buckets by it; it runs the SQL concurrently to pull data and merges it into a local CSV.
-- `push()`: takes a pandas DataFrame or a local CSV, splits it into chunks by row, uploads them to ODPS temp tables, writes them into the target table with `UNION ALL`, and cleans up the temp tables.
+- `pull()` splits one query into chunks by hash of `unique_key` or, without a key, by a ROW_NUMBER staging table. It runs
+  the chunks concurrently and merges them into one local CSV.
+- `push()` takes a DataFrame or a CSV path, splits it by rows, uploads every chunk to a temporary ODPS table, and writes
+  all chunks into the target table with `UNION ALL`.
+
+`ParallelODPSConfig` fields:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `unique_key` | `None` | Column used for hash bucketing in `pull()` |
+| `chunk_size` | `None` | Rows per chunk. Cannot be combined with `n_chunks` |
+| `n_chunks` | `None` | Number of chunks |
+| `n_jobs` | `3` | Number of parallel workers |
+| `backend` | `"thread"` | `"thread"`, `"process"`, or `"sequential"` |
+| `pull_split_strategy` | `"auto"` | `"auto"` (hash with a `unique_key`, ROW_NUMBER without), `"hash"`, or `"row_number"` |
+| `row_number_order_by` | `None` | `ORDER BY` expression of the ROW_NUMBER staging table; `None` means `ORDER BY 1` |
+| `row_number_col` | `"__smf_parallel_odps_rn__"` | Name of the helper row-number column |
+| `validate_unique_key` | `True` | In hash mode, run a probe query before pulling |
+| `chunk_filter_key` | `"chunk_filter"` | Name of the placeholder in the SQL template |
+| `tmp_dir` | `Path("data/_chunks")` | Local folder for chunk files |
+| `tmp_table_prefix` | `"tmp_parallel_odps"` | Prefix of temporary ODPS tables |
+| `cleanup_tmp` | `True` | Drop temporary tables when the run ends |
+| `keep_tmp_on_error` | `False` | Keep temporary tables when the run fails |
+
+`pull()` and `push()` need `n_chunks` or `chunk_size`, and they use the same configuration.
 
 ### 6.1 Concurrent pull
 
-The SQL template must contain `{chunk_filter}`, placed in the `WHERE` clause of the base table you want to split. If the template lacks this placeholder, `pull()` raises `ValueError` before any ODPS query, to avoid every chunk repeatedly pulling the full data:
-
-```sql
-SELECT flow_id, score, apply_time
-FROM mex_anls.source_table
-WHERE 1 = 1
-  AND {chunk_filter}
-```
+`pull(sql_path, out_path, count_query=None, **template_kwargs)` reads a SQL template that **must contain
+`{chunk_filter}`**, placed in the `WHERE` clause of the table you split. A template without it raises `ValueError` before
+any query runs, which prevents every chunk from pulling the whole table. Extra keyword arguments fill other placeholders
+of the template and must be strings.
 
 #### Hash Bucketing: Recommended When You Have a Stable Key
 
-When `unique_key` is configured, `pull_split_strategy="auto"` uses hash bucketing. Before running the concurrent chunks, SMF first runs a probe SQL to verify that `unique_key` is usable in the current SQL scope; if the check fails, it raises `ValueError` and does not enter the concurrent pull.
+With a `unique_key` and `pull_split_strategy="auto"`, each chunk receives this filter:
 
-Python call:
+```sql
+ABS(HASH(flow_id)) % 20 = <chunk_id>
+```
+
+Before the chunks run, SMF sends one probe query to check that `unique_key` is visible in the SQL scope. If the probe
+fails, `pull()` raises `ValueError` that quotes the first line of the ODPS error and stops. Set `validate_unique_key=False`
+to skip the probe.
 
 ```python
+# check: skip   (needs MaxCompute credentials)
+from pathlib import Path
+
 from Modeling_Tool import ParallelODPSConfig, ParallelODPSManager
+
+Path("sql").mkdir(exist_ok=True)
+Path("sql/pull_sample.sql").write_text(
+    "SELECT flow_id, score_b, apply_month\n"
+    "FROM my_project.loan_sample\n"
+    "WHERE 1 = 1\n"
+    "  AND {chunk_filter}\n"
+)
 
 manager = ParallelODPSManager(
     ParallelODPSConfig(
         unique_key="flow_id",
-        pull_split_strategy="auto",  # auto + unique_key => hash
+        pull_split_strategy="auto",   # auto + unique_key => hash
         n_chunks=20,
         n_jobs=5,
         backend="thread",
@@ -300,31 +435,42 @@ summary = manager.pull(
     sql_path="sql/pull_sample.sql",
     out_path="data/sample.csv",
 )
+print(summary)
 ```
 
-Each chunk automatically gets this injected:
+`pull()` returns a dictionary:
 
-```sql
-ABS(HASH(flow_id)) % 20 = <chunk_id>
-```
+| Key | Value |
+|---|---|
+| `pull_strategy` | `"hash"` or `"row_number"` |
+| `staging_table` | Name of the ROW_NUMBER staging table, or `None` in hash mode |
+| `n_chunks` | Number of chunks |
+| `total_rows` | Rows in the merged CSV |
+| `out_path` | Path of the merged CSV |
+| `per_chunk_rows` | Rows of each chunk, in chunk order |
 
-If you do not pass `n_chunks` directly, you can pass `chunk_size`; `pull()` then first runs `count_query` to derive the number of chunks. For complex wide-table joins, it is advisable to hand-write a lighter `count_query`.
+The CSV holds the chunks in chunk order, with one header. If you pass `chunk_size` instead of `n_chunks`, `pull()` first
+runs a count query to derive the number of chunks. For a complex join, pass a cheaper `count_query` yourself.
 
-#### ROW_NUMBER Bucketing: Used Automatically When There Is No unique_key
+If a chunk fails, `pull()` raises `RuntimeError` (`1/4 ODPS pull chunks failed`, followed by the errors), writes no CSV,
+and leaves the files of the finished chunks in `tmp_dir`.
 
-When `unique_key=None` and `pull_split_strategy="auto"`, SMF automatically uses ROW_NUMBER bucketing:
+#### ROW_NUMBER Bucketing: Used Automatically When There Is No `unique_key`
 
-1. First render the original SQL with `{chunk_filter}=1=1`.
-2. Materialize the result into an ODPS temp table and add an internal row-number column.
-3. Pull each chunk concurrently with `WHERE (row_number_col - 1) % n_chunks = chunk_id`.
-4. Delete the internal row-number column before writing the local CSV.
-5. Clean up the temp table according to `cleanup_tmp` / `keep_tmp_on_error`.
+With `unique_key=None` and `pull_split_strategy="auto"`, SMF:
+
+1. Renders the SQL with `{chunk_filter}` set to `1=1`.
+2. Materializes the result in an ODPS staging table with an extra row-number column.
+3. Pulls each chunk with `WHERE (row_number_col - 1) % n_chunks = chunk_id`.
+4. Drops the row-number column before writing the CSV.
+5. Drops the staging table according to `cleanup_tmp` and `keep_tmp_on_error`.
 
 ```python
+# check: skip   (needs MaxCompute credentials)
 manager = ParallelODPSManager(
     ParallelODPSConfig(
         unique_key=None,
-        pull_split_strategy="auto",  # auto + no unique_key => row_number
+        pull_split_strategy="auto",   # auto + no unique_key => row_number
         n_chunks=20,
         n_jobs=5,
         backend="thread",
@@ -334,190 +480,281 @@ manager = ParallelODPSManager(
 
 summary = manager.pull(
     sql_path="sql/pull_sample.sql",
-    out_path="data/sample.csv",
+    out_path="data/sample_rn.csv",
 )
+print(summary["staging_table"])
 ```
 
-The default row-number expression is:
-
-```sql
-ROW_NUMBER() OVER (ORDER BY 1)
-```
-
-If you want a more stable row-number order, pass `row_number_order_by`:
+The default row-number expression is `ROW_NUMBER() OVER (ORDER BY 1)`. For a reproducible numbering, set
+`row_number_order_by`:
 
 ```python
-ParallelODPSConfig(
+# check: skip   (continues a snippet that needs MaxCompute credentials)
+config = ParallelODPSConfig(
     unique_key=None,
     pull_split_strategy="row_number",
-    row_number_order_by="apply_time, flow_id",
+    row_number_order_by="apply_month, flow_id",
     chunk_size=500000,
 )
 ```
 
-ROW_NUMBER mode creates an ODPS temporary staging table, with higher performance and storage cost than hash mode; as long as you can provide a stable and reasonably evenly distributed key, `unique_key` hash bucketing is still preferred.
+ROW_NUMBER mode creates a temporary table, so it costs more compute and storage than hash mode. Prefer `unique_key` when
+you have a stable, evenly distributed key.
 
 ### 6.2 Concurrent push
 
-`push()` accepts a DataFrame or a CSV path. The write mode for the target table must be specified explicitly, to avoid overwriting a production table by mistake:
+`push(data, target_table, write_mode=None)` accepts a DataFrame or a CSV path. `write_mode` is required, `"overwrite"` or
+`"append"`, so a table is never replaced by accident.
 
 ```python
+# check: skip   (continues a snippet that needs MaxCompute credentials or local files)
+import pandas as pd
+
+scores = pd.read_csv("data/sample.csv")          # the file written by pull() above
+
 summary = manager.push(
-    data=df_or_csv_path,
-    target_table="mex_anls.target_table",
-    write_mode="overwrite",  # required: "overwrite" or "append"
+    data=scores,
+    target_table="my_project.loan_scores",
+    write_mode="overwrite",
+)
+print(summary["total_rows"], summary["n_chunks"])
+
+summary = manager.push(
+    data="data/sample.csv",                      # a CSV path is read in chunks
+    target_table="my_project.loan_scores",
+    write_mode="append",
 )
 ```
 
-Execution flow:
+`push()` returns a dictionary with `n_chunks`, `total_rows`, `target_table`, `write_mode`, `tmp_tables`, `per_chunk_rows`,
+`union_sql`, and `final_sql`. Execution flow:
 
-1. Split the DataFrame by row; for CSV input, `pd.read_csv(..., chunksize=...)` splits it as a stream into local temporary chunk files.
-2. Each chunk is uploaded to its own ODPS tmp table, for example `tmp_parallel_odps_<run_id>_0000`.
-3. All tmp tables are written into the final target table through `UNION ALL`.
-4. On success, the tmp tables are cleaned up; on failure they are also cleaned up by default, unless `keep_tmp_on_error=True`.
+1. A DataFrame is split by rows. A CSV is read with `pd.read_csv(..., chunksize=...)` and written to temporary local chunk
+   files.
+2. Each chunk is uploaded with `ODPSRunner.upload_df` to its own ODPS table, such as `tmp_parallel_odps_<run_id>_0000`.
+   `upload_df` returns only after the table is visible, so the final `UNION ALL` never runs too early and you need no
+   `sleep` or polling.
+3. All temporary tables are combined into the target table with `UNION ALL`.
+4. Temporary tables are dropped after success and, by default, after a failure too. With `keep_tmp_on_error=True` they stay
+   after a failure.
 
-Each chunk's `upload_df()` returns only after the atomic rename of the temp table has completed, so the final `UNION ALL` never runs before the tmp tables are visible. Callers do not need to add any extra `sleep` or polling.
-
-Write modes:
-
-| `write_mode` | Behavior |
+| `write_mode` | Final statement |
 |---|---|
-| `"overwrite"` | Drop the target table first, then `CREATE TABLE target AS SELECT ... UNION ALL ...`. |
-| `"append"` | Append to the existing target table with `INSERT INTO TABLE target SELECT ... UNION ALL ...`. |
+| `"overwrite"` | Drops the target table, then runs `CREATE TABLE target AS SELECT ... UNION ALL ...` |
+| `"append"` | Runs `INSERT INTO TABLE target SELECT ... UNION ALL ...` |
+
+!!! warning "`overwrite` is not atomic"
+
+    The target table is dropped before the final `CREATE TABLE ... AS`. If that statement fails, the target is gone. Set
+    `keep_tmp_on_error=True` to keep the temporary tables, which hold the data, for recovery.
+
+!!! warning "The target table gets an extra `py_inserttime` column"
+
+    The chunks are uploaded without an explicit schema, so each temporary table, and therefore the table created by
+    `"overwrite"`, ends with a string column `py_inserttime` (the upload time). For `"append"`, the existing target must
+    already have the DataFrame's columns in the same order, followed by `py_inserttime`; a table without it makes the
+    `INSERT` fail with a column-count error.
+
+`push()` does not support partitioned target tables.
 
 ### 6.3 Backend Recommendations
 
-| backend | Recommendation |
+| `backend` | Recommendation |
 |---|---|
-| `"thread"` | The default recommendation for ODPS IO tasks; it shares the connection pool, and the `ODPSRunner` wide-table download patch is already thread-safe. |
-| `"sequential"` | Use when debugging chunk SQL, upload logic, and tmp-table cleanup. |
-| `"process"` | Each worker creates a new `ODPSRunner()` and does not pass live connections across processes; suited to scenarios needing stronger isolation at higher overhead. |
-
-The first version of `push()` does not support partitioned target tables; if partitioned writes are needed, a `partition` parameter can be added later.
+| `"thread"` | The default choice for ODPS I/O. The workers share the manager's `ODPSRunner` and its connection pool, and the wide-table patch is thread-safe |
+| `"sequential"` | One chunk after the other. Use it to debug chunk SQL, upload logic, and cleanup |
+| `"process"` | Every chunk task creates its own `ODPSRunner()`, so the credentials must be in the environment of the worker processes. Stronger isolation at a higher overhead |
 
 ## 7. Common Pitfalls
 
-### ❌ Pitfall 1: `to_df=False + csv_path` historically wrote no CSV
+### Pitfall 1: `to_df=False` does not save memory while downloading
+
+`run_sql` with `to_df=False` and a `csv_path` still holds the whole result in memory until the CSV is written. Use
+`ParallelODPSManager.pull` or narrower queries for large results. See [section 2](#2-run_sql-parameter-semantics).
+
+### Pitfall 2: A table with more than 200 columns
+
+`ODPSRunner` applies the wide-schema patch by itself, so `HTTP 414 (Request-URI Too Long)` does not reach you. See
+[section 3.2](#32-wide-table-schema-patch).
+
+### Pitfall 3: Every `run_sql` call submits a new job
+
+`run_sql` submits the SQL again each time, even if nothing changed. Cache results you reuse:
 
 ```python
-# The "illusion" before the fix (≤ v1.0.0):
-odps.run_sql(sql, to_df=False, csv_path="x.csv")
-# → the SQL ran, the CSV was not written, a silent failure
-```
+# check: skip   (continues a snippet that needs MaxCompute credentials or local files)
+from pathlib import Path
 
-**After the fix (current version)**: setting either one triggers the download.
+import pandas as pd
 
-### ❌ Pitfall 2: A table with 200+ columns triggers HTTP 414
-
-```text
-odps.errors.InternalServerError: HTTP 414 (Request-URI Too Long)
-```
-
-This is handled automatically by `ODPSRunner`'s thread-safe wide-schema patch, with no manual intervention needed.
-
-### ❌ Pitfall 3: An ODPS Instance is one-shot
-
-`execute_sql` re-issues the SQL every time, even if the dataset has not changed. To avoid repeated cost/time:
-
-```python
-# Pattern A: cache on disk
+csv_path = Path("data/loan_sample.csv")
 if csv_path.exists():
     df = pd.read_csv(csv_path)
 else:
-    odps.run_sql(sql, to_df=False, csv_path=str(csv_path))
-    df = pd.read_csv(csv_path)
-
-# Pattern B: cache intermediate results with Modeling_Tool.Core.utils.save_model
-from Modeling_Tool.Core.utils import save_model, load_model
-save_model(df, "data/cached.pkl")
+    df = odps.run_sql("SELECT * FROM my_project.loan_sample", csv_path=str(csv_path))
 ```
 
-### ❌ Pitfall 4: Long-running big queries hit the Bash 120s timeout
+A CSV loses dtypes such as dates; `df.to_pickle("data/loan_sample.pkl")` and `pd.read_pickle` keep them.
 
-`run_sql` is synchronous and blocking; for queries that take minutes you should:
+### Pitfall 4: `upload_df` replaces the table and `insert_df` overwrites by default
 
-1. **Start in the background** — with `nohup` + `&`, see the [appendix](#appendix-starting-a-long-query-in-the-background)
-2. **Poll the status** — check progress through `odps.instances`
-3. **Write to a log file** — redirect to `/tmp/odps_<ts>.log` for easy tracing
+`upload_df` always replaces the whole table, even with `partition=`. `insert_df` replaces the table or partition contents
+by default (`overwrite=True`). See [section 8](#8-other-odpsrunner-methods).
 
-### Appendix: Starting a Long Query in the Background
+### Pitfall 5: Long queries block the process
+
+`run_sql` returns when the query has finished and the result is downloaded. Run jobs that take minutes or hours in the
+background, or from a scheduler, and write their output to a log file. For example, save the code of
+[section 4](#4-complete-example-extract-a-sample-to-local-disk) as `extract_sample.py` and run:
 
 ```bash
-cd /path/to/project
-export PYTHONPATH="$(pwd):$PYTHONPATH"
-
-nohup python3 -u -c "
-import sys
-sys.path.insert(0, '.')
-from Modeling_Tool.Core.ODPS_Tool import ODPSRunner
-odps = ODPSRunner()
-_ = odps.run_sql(open('big_query.sql').read(), to_df=False, csv_path='out.csv')
-" > /tmp/odps_$(date +%s).log 2>&1 &
-PID=$!
-echo "ODPS job PID=$PID, log=/tmp/odps_*.log"
+nohup python -u extract_sample.py > "odps_$(date +%s).log" 2>&1 &
 ```
+
+`ODPSRunner` does not return the job id. To see the running jobs of your project, use
+`odps.o.list_instances(status="running")`.
+
+### Error lookup
+
+| Message | Cause | Fix |
+|---|---|---|
+| `KeyError: 'ALIBABA_CLOUD_ACCESS_KEY_ID'` | The credentials are not in the environment when `ODPSRunner()` is created | Export the variables from [Prerequisites](#prerequisites) before you start Python |
+| `ModuleNotFoundError: No module named 'odps'` | PyODPS is not installed | `pip install 'supermodelingfactory[odps]'` |
+| `SystemError: break: ...` from `run_sql` | Six download attempts failed | Read the log lines `download failed [i/6]`. Typical causes: a missing folder for `csv_path`, or a network or endpoint problem |
+| `ValueError: pull SQL template must contain {chunk_filter}` | The SQL file has no `{chunk_filter}` placeholder | Add it to the `WHERE` clause |
+| `ValueError: unique_key validation failed for pull SQL: ...` | The probe query failed: the key is not visible in the SQL scope, or the SQL itself is wrong | Fix the key or the SQL; the message quotes the first line of the ODPS error |
+| `ValueError: chunk_size or n_chunks is required ...` | Neither is set in `ParallelODPSConfig` | Set one of them |
+| `ValueError: write_mode is required ...` | `push()` was called without a valid `write_mode` | Pass `"overwrite"` or `"append"` |
+| `UserWarning: Missing argument(s) ... in the given SQL file` | A `{placeholder}` got no keyword argument | Pass it to `parse_sql_file` |
+| `TypeError: replace() argument 2 must be str, not int` | A template value is not a string | Pass `"20"` instead of `20` |
+| `ValueError: The values set to records are against the schema, expect len N, got len M` | The DataFrame has other columns than the table, for example it still contains the partition column | Pass exactly the table's non-partition columns, in order |
 
 ## 8. Other `ODPSRunner` Methods
 
 ### `download_table(table_name, partition=None, n_process=1, csv_path=None)`
 
-Pulls an **entire table** directly (rather than a SQL query), inferring the schema automatically:
+Reads a whole table, or one partition, through the table tunnel instead of running a query:
 
 ```python
+# check: skip   (continues a snippet that needs MaxCompute credentials or local files)
 df = odps.download_table(
-    "mex_anls.drv",
-    partition={"dt": "2025-08-18"},
-    csv_path="out.csv",
+    "my_project.loan_sample",
+    partition="dt=2026-01-01",
+    csv_path="data/loan_sample_0101.csv",
 )
+print(df.shape)
 ```
 
-### `upload_df(df, table_name, table_schema=None, partition=None)`
+`partition` is a partition spec string such as `"dt=2026-01-01"` (several levels: `"dt=2026-01-01,hr=01"`) or a
+dictionary such as `{"dt": "2026-01-01"}`. `n_process` above 1 turns on a parallel download; in the current
+implementation that always uses 10 processes. `csv_path` is written without the index.
 
-Uploads a DataFrame to a new ODPS table:
+### `upload_df(df, table_name, table_schema=None, partition=None, atomic=True)`
+
+Creates a table from a DataFrame and writes all rows. **An existing table of the same name is replaced.**
 
 ```python
-schema = ODPSRunner.cre_table_schema(df, partition_name="dt")
-odps.upload_df(df, "mex_anls.my_table", table_schema=schema, partition="dt=2025-08-18")
+# check: skip   (continues a snippet that needs MaxCompute credentials or local files)
+import pandas as pd
+
+scores = pd.DataFrame({
+    "flow_id": ["F001", "F002", "F003"],
+    "score": [0.12, 0.34, None],
+    "scored_at": pd.to_datetime(["2026-01-01", "2026-01-01", "2026-01-02"]),
+})
+
+schema = ODPSRunner.cre_table_schema(scores)
+odps.upload_df(scores, "my_project.my_scores", table_schema=schema)
 ```
 
-On upload, the schema is first inferred from the original pandas dtypes, and then `np.nan`, `pd.NA`, and `NaT` are converted to ODPS `NULL` in a copy of the records; the DataFrame passed in by the caller is not modified, and there is no need to call `npnan2none()` beforehand. The default atomic replacement uses blocking DDL: the target-table backup, the tmp-table rename, and failure recovery all wait for the ODPS Instance to succeed before moving to the next step.
-
-### `insert_df(df, table_name, overwrite=True, partition=None)`
-
-Appends to an **existing** table:
+- `atomic=True` (default) writes the data to a temporary table and renames it over the target, so a failure before the
+  swap leaves the original table untouched. `atomic=False` drops the old table first, so a failure leaves no table.
+- Without `table_schema` the schema is inferred with `cre_table_schema`, and a string column `py_inserttime` (the upload
+  time) is **appended to the data**. Pass a schema to avoid it.
+- `np.nan`, `pd.NA`, and `NaT` become `NULL` in a copy of the records. The DataFrame you pass is not modified, and there is
+  no need to call `npnan2none()` first.
+- For a partitioned table, build the schema from a frame that contains the partition column and upload the data without
+  it, because the partition value comes from `partition`:
 
 ```python
-odps.insert_df(df, "mex_anls.my_table", overwrite=False, partition="dt=2025-08-19")
+# check: skip   (continues a snippet that needs MaxCompute credentials or local files)
+schema = ODPSRunner.cre_table_schema(scores.assign(dt="2026-01-01"), partition_name="dt")
+odps.upload_df(scores, "my_project.my_scores_by_day", table_schema=schema, partition="dt=2026-01-01")
 ```
 
-### `cre_table_schema(df, partition_name=None)` (staticmethod)
+`upload_df` replaces the whole table also with `partition=`: afterwards the table holds only that partition. To add or
+replace one partition of an existing table, use `insert_df`.
 
-Infers the ODPS schema from a DataFrame:
+### `insert_df(df, table_name, overwrite=True, partition=None, atomic=True)`
+
+Writes a DataFrame into an **existing** table. The DataFrame's columns must match the table's non-partition columns in
+number, order, and type, because values are written by position.
 
 ```python
-schema = ODPSRunner.cre_table_schema(df, partition_name="dt")
-# integer → bigint, float32 → float, float64 → double
-# boolean → boolean, datetime → datetime, object/string/category → string
+# check: skip   (continues a snippet that needs MaxCompute credentials or local files)
+# Append to a partition of the table created above; other partitions stay untouched
+odps.insert_df(scores, "my_project.my_scores_by_day", overwrite=False, partition="dt=2026-01-02")
+
+# Replace the contents of one partition (the default overwrite=True)
+odps.insert_df(scores, "my_project.my_scores_by_day", partition="dt=2026-01-02")
 ```
 
-Currently unsupported dtypes such as complex and timedelta raise a clear `TypeError` and are not silently downcast.
+- `overwrite=True` is the default and **replaces** the data: without `partition` the table is truncated first (this path is
+  not atomic); with `partition` that partition is replaced, atomically through a staging partition when `atomic=True`.
+  `overwrite=False` appends.
+- If the table has a `py_inserttime` column and the DataFrame does not, the column is filled with the insert time.
+
+### `cre_table_schema(df, partition_name=None)` (static method)
+
+Infers an ODPS schema from a DataFrame:
+
+```python
+# check: skip   (continues a snippet that needs MaxCompute credentials)
+schema = ODPSRunner.cre_table_schema(scores)
+print([(column.name, str(column.type)) for column in schema.columns])
+```
+
+| pandas dtype | ODPS type |
+|---|---|
+| bool | `boolean` |
+| any integer, including nullable `Int64` | `bigint` |
+| `float32` | `float` |
+| other floats, including nullable `Float64` | `double` |
+| datetime | `datetime` |
+| string, `object`, category | `string` |
+
+Complex and timedelta columns, and any other unsupported dtype, raise `TypeError` instead of being converted silently.
+`partition_name` marks the column of that name as a partition column; if `df` has no such column it has no effect.
 
 ## 9. Related Utility Functions
 
-[`Modeling_Tool.Core.utils.pull_attributes_in_batch`](../api/core.md) provides the ability to split `{varlist}` into batches — strongly recommended when a single SQL pull has more than 2000 columns:
+`pull_attributes_in_batch(table_name, varlist, batch_num=6, unikey='flow_id', main_info_select=['*'], add_query='')` pulls a
+table whose attribute columns are too many for one query. It creates its own `ODPSRunner()`.
 
 ```python
-from Modeling_Tool.Core.utils import pull_attributes_in_batch
+# check: skip   (needs MaxCompute credentials)
+from Modeling_Tool import pull_attributes_in_batch
 
-# Internally splits varlist into N batches, runs run_sql several times and concatenates the results
+varlist = [f"x{i:03d}" for i in range(1, 1001)]      # the attribute columns of the table
+
 result_df = pull_attributes_in_batch(
-    table_name="mex_anls.drv",
-    varlist=big_varlist,            # 1000+ columns
-    batch_num=6,                    # ~167 columns per batch
-    unikey="FLOW_ID",
-    main_info_select=["*"],
+    table_name="my_project.wide_attrs",
+    varlist=varlist,
+    unikey="flow_id",
 )
+print(result_df.shape)
 ```
+
+It splits `varlist` into about six vertical batches and runs `SELECT <unikey>, <batch columns> FROM <table> <add_query>` for
+each. A last query, `SELECT <main_info_select> EXCEPT (<varlist>) FROM <table> <add_query>`, reads the remaining columns.
+The pieces are merged on `unikey` with an inner join.
+
+- `varlist` needs at least six names; fewer raise `ValueError`.
+- `batch_num` is accepted but ignored: the number of batches is fixed at about six. Do not rely on it.
+- `unikey` must be unique per row and must be spelled as in the downloaded result; MaxCompute returns lower-case column
+  names, so write `flow_id`.
+- Keep `main_info_select` at `['*']`: the query uses MaxCompute's `SELECT * EXCEPT (...)` form.
+- `add_query` is text appended after `FROM <table>` in every query, for example `"WHERE dt = '2026-01-01'"`.
 
 ## 10. Next Steps
 
