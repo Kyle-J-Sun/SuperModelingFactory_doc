@@ -19,7 +19,8 @@ Usage::
 
 A page that continues earlier pages can be executed with ``--prelude FILE``: a Python file that is executed first and
 defines the objects the page assumes. A block whose first line is ``# check: skip`` is never executed (use it for
-snippets that need credentials, a GUI, or a network), but it is still checked statically.
+snippets that need credentials, a GUI, or a network), but it is still checked statically. A call that passes `...` as an
+argument is treated as elided pseudo-code: it is checked for unknown keywords but not for missing arguments.
 
 Exit status is 1 if any problem is found, 0 otherwise.
 """
@@ -123,7 +124,10 @@ def _check_call(sig, call, label, problems, base_line, skip_first=False):
             problems.append((line, f"{label}: unknown keyword `{keyword.arg}` (valid: {sorted(names)})"))
         elif keyword.arg in positional_names:
             problems.append((line, f"{label}: `{keyword.arg}` given both positionally and by keyword"))
-    if not has_star_args and not has_star_kwargs:
+    elided = any(isinstance(a, ast.Constant) and a.value is Ellipsis for a in call.args) or any(
+        isinstance(k.value, ast.Constant) and k.value.value is Ellipsis for k in call.keywords
+    )
+    if not has_star_args and not has_star_kwargs and not elided:
         given = set(positional_names) | {k.arg for k in call.keywords if k.arg}
         for p in params:
             if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY) and p.default is p.empty and p.name not in given:

@@ -72,7 +72,9 @@ SuperModelingFactory_doc/
   Add `--run` to also execute the blocks of a page in order, in one namespace, and report exceptions. Pages written to run
   on their own (such as `docs/quickstart.md` and `docs/guides/eval.md`) need nothing else; a page that continues
   another one can be run with `--prelude FILE`, a Python file that defines the objects it assumes. Mark a snippet that needs
-  credentials or a GUI with `# check: skip` as its first line: it is then checked statically but not executed.
+  credentials or a GUI with `# check: skip` as its first line: it is then checked statically but not executed. A call that
+  passes `...` as an argument counts as elided pseudo-code (common in release notes): its keywords are checked, but not
+  the missing arguments.
 
   ```bash
   python tools/check_examples.py --run docs/quickstart.md docs/guides/eval.md
