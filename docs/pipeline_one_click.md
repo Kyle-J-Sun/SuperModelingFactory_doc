@@ -621,7 +621,7 @@ The four `sv_*` keys govern only **special-value bins** (including `[Missing]`),
 
 ### Model Parameters
 
-`train_models` controls which models are trained, and `model_params` overrides the default parameters by model name.
+`train_models` controls which models are trained, and `model_params` overrides the default parameters by model name. The GBM models (`lgb`, `xgb`, `cat`) are seeded with the top-level `random_state`; put `random_state` in `model_params[name]` to give one model its own seed.
 
 ```python
 model_params={
@@ -958,7 +958,7 @@ result.high_corr_pairs
 | `oot_col` | `"oot_flag"` | Numeric OOT flag column of the fallback split: rows with 0 or a missing value are INS/OOS candidates and non-zero rows are OOT. A non-numeric flag raises `TypeError`. Not used when labels define the splits. |
 | `sample_col` / `oot_col` | `"sample_ind"` / `"oot_flag"` | Compatible split fields consistent with `CreditModelPipeline`; `sample_col` is used when `split_col` is not passed. |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS split configuration. |
-| `random_state` | `42` | Seed of the random INS/OOS split unless `split_config` contains its own `random_state`. |
+| `random_state` | `42` | Seed of the random INS/OOS split (unless `split_config` contains its own `random_state`), the Optuna searches, the explanation sampling, and the LightGBM, XGBoost, and CatBoost models: the final models, their Optuna candidates, and the backward-elimination proxy. A `random_state` in `model_params[name]` takes precedence for that model. |
 | `time_dims` | `["apply_month"]` | Time dimensions. |
 | `population_dims` | `[]` | Population dimensions, such as channel, product, and strategy version. |
 | `group_specs` | `None` | Custom grouping specs; supports `{"monthly": ["apply_month"]}` or `[ {"name": "monthly", "columns": ["apply_month"]} ]`; when omitted, global/time/population/time x population are combined automatically. |
