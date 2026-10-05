@@ -55,3 +55,7 @@ Six more defects came out of documenting the functions that the first pass had d
 
 !!! warning "Results that change"
     A direct call of `plot_boxplot` or `write_boxplot` with the default `y_percentage=False` used to draw the values times 100 and now draws them as they are; the hyperparameter box plots of the reports pass `y_percentage=True` and do not change. `cross_risk_weighted_mean` returns a higher mean for every cell that has NaN values. `PROP` of the weighted `get_gains_table` is smaller in the regular bins when `spec_values` matches rows.
+
+## 5. Known Issues
+
+Five issues found during the audit are not fixed yet: `random_state` does not reach the LightGBM and XGBoost models of the credit-model pipeline, `backward_model` runs XGBoost for any value except `"lgb"`, `iv_equal_freq` and `tie_breaker` have no effect, `CorrelationFilter(spec_values=...)` is ignored by the default IV and KS, and `explain_owen` keeps a stale partition tree. The guides and the API reference describe each one as it behaves today. The [FAQ](../faq.md#known-issues) lists them with their workarounds.
