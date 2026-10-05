@@ -20,7 +20,7 @@ Every docstring, comment, and user-visible string is English, and the four repos
 
 ## 2. Fixes Found While Verifying the Documentation
 
-The guides and the docstrings were checked against the installed package, and ten defects surfaced. Each has a regression test in `test_doc_audit_regressions.py` that fails without the fix.
+The guides and the docstrings were checked against the installed package, and eleven defects surfaced. Each has a regression test in `test_doc_audit_regressions.py` that fails without the fix.
 
 | Defect | Fix |
 |---|---|
@@ -34,3 +34,9 @@ The guides and the docstrings were checked against the installed package, and te
 | `TextEncryptor.decrypt` raised `ValueError` for any text with a non-ASCII character, because `encrypt` stored the plaintext length in characters and `decrypt` compared it with the length in bytes | The length prefix is the byte length. Ciphertexts of ASCII text are unchanged, so existing ones keep decrypting |
 | `ExcelFormat.base_filepath` used `str.strip`, which removes characters and not a prefix (`out2/report.xlsx` gave `ut2/`) | It is the directory part of the path, including the trailing separator |
 | `compute_overfitting_shift` told the caller that unequal column counts "are the the same" | The message says "are not the same" |
+| `ModelExplainer.lime_explain_instance` and `lime_global_importance` raised `AttributeError: 'NoneType' object has no attribute 'copy'` when neither `X_train` nor `background_data` was available, because the intended `ValueError` was checked too late | The check runs first, so the message is `LIME requires X_train or background_data` |
+
+## 3. Complete Docstrings and Parameter Tables
+
+Every public class, function, and method of `Modeling_Tool`, `ExcelMaster`, and `Report` now documents exactly the parameters of its signature, in signature order, in the NumPy layout that the [API Reference](../api/index.md) renders. The Config dataclasses of the Pipelines list every field with its type, default, and behavior, and the parameter tables on the [Top-Level Pipelines](../pipeline_one_click.md) page have a row for every field (34 were missing). The pytest test `test_public_docstring_parameters.py` keeps the docstrings in step with the signatures.
+
