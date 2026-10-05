@@ -251,9 +251,9 @@ print("base value:", reason_codes.attrs["base_value"])
 |---|---|
 | `coalition_structure` | The dictionary from 3.1. If omitted, the explainer reuses its cached structure or builds one from `background_data` (or from `X` when there is none) |
 | `prior_groups`, `threshold`, `method`, `corr_method` | Used only when the structure is built here. Passing `prior_groups` always rebuilds the structure, even if you also pass `coalition_structure` |
-| `background_data` | Background sample for building the structure and the SHAP explainer; defaults to the explainer's own. It has no effect on an explainer that is already built unless `rebuild=True` |
+| `background_data` | Background sample for building the structure and the SHAP explainer; defaults to the explainer's own. A background whose values differ from those the cached explainer was built with makes it rebuild |
 | `model_output` | `"probability"` (default) or `"log_odds"`. Use `"log_odds"` for reason codes: group contributions then add up on the log-odds scale |
-| `rebuild` | Force a new SHAP `PartitionExplainer`. It is rebuilt automatically when `model_output` changes |
+| `rebuild` | Force a new SHAP `PartitionExplainer`. It is rebuilt automatically when the coalition structure (its features and linkage), the background values, or `model_output` differ from those it was built with, and reused otherwise, for example when only `X` changes |
 | `**explain_kwargs` | Passed to the SHAP call, for example `max_evals` (default 500) and `silent` |
 
 It returns a `shap.Explanation` and caches the results as `owen_values_`, `owen_expected_value_`, and `owen_explanation_`.

@@ -431,7 +431,6 @@ These behaviors are present in 0.8.2 and in the current `main`. Each one has bee
 |---|---|---|
 | **`iv_equal_freq` and `tie_breaker` have no effect** (`FeatureScreenConfig`, `lr_elimination_params`) | `iv_equal_freq`: the default IV binning uses decision-tree bins, which take precedence, so `True` and `False` give the same IV, and weighted runs always use weighted equal-frequency bins. `tie_breaker`: the truncation stage breaks ties by feature name, and the LR p-value elimination resolves equal p-values by column order, whatever the value | Tune the IV binning with `iv_bins` and `iv_min_bin_prop`, or compute the IV on the screening WOE bins with `iv_use_woe_bins=True`. The tie-breaking is deterministic, so it needs no workaround |
 | **`CorrelationFilter(spec_values=...)` is ignored by the default IV and KS** | With the default binning the argument is stored and not used, so special values do not get bins of their own when the IV or KS decides which of two correlated variables stays | Pass `woe_binner` (a fitted `WOE_Master` or `MonotoneWOEBinner`) or `woe_engine="monotone"`; `spec_values` takes effect with those |
-| **`ModelExplainer.explain_owen` keeps its first partition tree** | The explainer is cached and rebuilt only when `rebuild=True` or `model_output` changes. A new `prior_groups`, `coalition_structure`, or `background_data` updates `coalition_structure_` but not the tree the explainer uses | Pass `rebuild=True` whenever the grouping or the background changes |
 
 ---
 
