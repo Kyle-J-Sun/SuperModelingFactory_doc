@@ -375,7 +375,7 @@ print(var_corr_filter(train_df, features, corr_cutpoint=0.7))     # columns: VAR
 | `woe_engine` | `'master'` | `'monotone'` without a `woe_binner` fits a `MonotoneWOEBinner` on `data`. Any other value behaves like `'master'` |
 | `woe_engine_params` | `None` | Constructor arguments for that self-fitted binner (`fit_params` is passed to `fit`) |
 | `tree_binning`, `chi2_method`, `chi2_p`, `init_equi_bins`, `seed`, `missing_rate_ref` | `False`, `False`, `0.999`, `1000`, `42`, `-9999999` | Binning controls of the default IV and KS computation. Ignored when a `woe_binner` is given |
-| `spec_values` | `[]` | Stored but not used by the default IV computation; it takes effect only with a `woe_binner` or `woe_engine='monotone'` |
+| `spec_values` | `[]` | Special values (for example `-1` or `999` for "no record") that get rows or bins of their own in the IV and KS calculation, instead of being mixed into the numeric bins. It works with the default computation and with an engine alike, and it can change which variable of a correlated group is kept. The correlation itself is still computed on the raw values |
 
 !!! note "Raw values decide the correlation, the binner decides the winner"
 
