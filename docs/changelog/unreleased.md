@@ -40,3 +40,18 @@ The guides and the docstrings were checked against the installed package, and el
 
 Every public class, function, and method of `Modeling_Tool`, `ExcelMaster`, and `Report` now documents exactly the parameters of its signature, in signature order, in the NumPy layout that the [API Reference](../api/index.md) renders. The Config dataclasses of the Pipelines list every field with its type, default, and behavior, and the parameter tables on the [Top-Level Pipelines](../pipeline_one_click.md) page have a row for every field (34 were missing). The pytest test `test_public_docstring_parameters.py` keeps the docstrings in step with the signatures.
 
+## 4. Further Fixes
+
+Six more defects came out of documenting the functions that the first pass had described as they behaved. Each has regression tests in `test_doc_audit_regressions.py` that fail without the fix.
+
+| Defect | Fix |
+|---|---|
+| `ExcelMaster.add_worksheet(auto_fit=True)` raised `AttributeError`, because it called `worksheet.auto_fit()` and xlsxwriter only has `autofit()` | `close_workbook` fits the columns of those sheets with `autofit()` once the data is written. A column is only widened, never narrowed below the width the sheet already has |
+| `write_duo_chart` without `y2_list` raised `TypeError`, because it built the second chart from `None` | Only the first chart is built and inserted. With `retChart=True` the result is `(chart1, None)`, and `write_combined_chart` accepts `chart2=None` |
+| `multi_subset_wrapper({})` raised `UnboundLocalError`, because the final `return` used a loop variable of a loop that never ran | It returns an empty DataFrame that has only the column `subset_var_name` |
+| `plot_boxplot` and `write_boxplot` multiplied the values by 100 whatever `y_percentage` said, so `y_percentage=False` only dropped the percent labels | `y_percentage=True` multiplies by 100 and formats the axis as percent; `False` draws the values as they are |
+| `cross_risk_weighted_mean` kept the weight of a NaN row in the denominator while adding nothing to the numerator, so NaN values pulled the mean towards 0 | A NaN row is skipped. A cell whose values are all NaN is NaN |
+| The weighted `get_gains_table` divided the regular bins by the weight of the non-special rows and the special rows by the weight of all rows, so `PROP` added up to more than 1 with `spec_values` | `PROP` is the share of the weight of all rows in every row, so it adds up to 1 |
+
+!!! warning "Results that change"
+    A direct call of `plot_boxplot` or `write_boxplot` with the default `y_percentage=False` used to draw the values times 100 and now draws them as they are; the hyperparameter box plots of the reports pass `y_percentage=True` and do not change. `cross_risk_weighted_mean` returns a higher mean for every cell that has NaN values. `PROP` of the weighted `get_gains_table` is smaller in the regular bins when `spec_values` matches rows.

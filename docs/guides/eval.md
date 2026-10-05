@@ -283,7 +283,7 @@ The index is `(_bin_num, _bin_range)`. With the default `ascending=False`, bin 0
 | Column | Meaning |
 |---|---|
 | `MIN`, `MAX` | Lowest and highest score in the bin |
-| `N`, `PROP` | Rows in the bin, and their share of all rows |
+| `N`, `PROP` | Rows in the bin, and their share of all rows. With `spec_values`, each special score gets a row of its own after the bins, and `PROP` adds up to 1 over all rows |
 | `PERF_CNT` | Rows with an observed target |
 | `AVG_SCORE`, `UNIQUE_SCORE` | Mean score, and the number of distinct score values |
 | `AVG_BAD`, `AVG_GOOD`, `N_BAD`, `N_GOOD` | Bad rate, good rate, and the bad and good counts |

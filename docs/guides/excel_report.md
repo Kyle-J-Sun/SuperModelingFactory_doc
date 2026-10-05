@@ -208,13 +208,13 @@ The methods used above:
 
 | Method | Purpose |
 |---|---|
-| `add_worksheet(name, hide_grid=True, reset_loc=True, cell_scale=True, auto_fit=False, zoom_perc=100, tab_color=None)` | Add a sheet and, by default, reset the cursor |
+| `add_worksheet(name, hide_grid=True, reset_loc=True, cell_scale=True, auto_fit=False, zoom_perc=100, tab_color=None)` | Add a sheet and, by default, reset the cursor. `auto_fit=True` widens the columns to fit their content when `close_workbook()` runs, once everything is written |
 | `merge_col(worksheet, loc=None, nrows=1, ncols=1, text='', skipby='row', cformat='BLUE_H4', retCellRange=None)` | Merge cells and write a heading |
 | `write_dataframe(worksheet, df, loc=None, title=None, index=False, header=True, skipby='row', titleformat='BLUE_H4', headerformat='TABLE_HEADER', valueformat='----', retCellRange=None)` | Write a DataFrame with an optional title row. `index=True` writes the index as the first column |
 | `write_text_content(worksheet, input_text=None, txt_path=None, loc=None, retCellRange=None)` | Write multi-line text. Start a line with `{FORMAT_NAME}` to style it |
 | `insert_image(worksheet, figPath, figScale=(1, 1), loc=None, skipby='row', retCellRange=None)` | Insert a picture |
 | `write_chart(worksheet, df, y_list, x=None, title='', chart_size=(30, 13), chart_type='line', ...)` | One chart; `chart_type` is `'line'`, `'column'`, `'stacked_column'`, or `'pie'`. `outputData=True` writes the chart data above the chart |
-| `write_duo_chart(worksheet, df, y1_list, y2_list=None, x=None, c1_type='column', c2_type='line', y1_axis_range=(0, 1), y2_axis_range=None, ..., title='', chart_size=(30, 13))` | Two chart types on one x axis, with a secondary y axis |
+| `write_duo_chart(worksheet, df, y1_list, y2_list=None, x=None, c1_type='column', c2_type='line', y1_axis_range=(0, 1), y2_axis_range=None, ..., title='', chart_size=(30, 13))` | Two chart types on one x axis, with a secondary y axis. Without `y2_list` only the first chart is drawn |
 | `set_color_scale(worksheet, cell_range, colors=('#F8696B', '#FFEB84', '#63BE7B'))` | Two- or three-color scale; `cell_range` is `"B2:B6"` or `[first_row, first_col, last_row, last_col]` |
 | `set_data_bar(worksheet, cell_range, bar_color='#63C384')` | Data bars |
 | `set_cell_format(worksheet, cell_range, cformat, cell_condition=None)` | Apply a preset or custom format, optionally only where `cell_condition=(">", 0.2)` or `("between", (0.1, 0.3))` holds |
