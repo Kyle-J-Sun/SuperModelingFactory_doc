@@ -394,7 +394,8 @@ both issue a `UserWarning`.
 !!! warning "Performance"
 
     Owen, PDP, ICE, ALE, and LIME all call the model many times. PDP, ICE, and ALE stack the grid rows and predict in
-    batches of `prediction_batch_size` (default 100000, `None` for a single call); lower it to cap peak memory. On large
+    batches of `prediction_batch_size` (default 100000, `None` for a single call); lower it to cap the memory of each predict
+    call (the stacked grid itself is still built in memory; `sample_size` shrinks it). On large
     data, use `sample_size`, a small `background_data` sample, and a modest `max_evals`. Owen values are the slowest
     method: in our tests, explaining one row took about a second with 100 background rows and `max_evals=500`.
 

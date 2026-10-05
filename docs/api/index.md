@@ -2,12 +2,14 @@
 
 The reference pages list the public classes and functions of each subpackage with their signatures, defaults, and
 docstrings. They are generated from the SMF source by [mkdocstrings](https://mkdocstrings.github.io/python/), so they
-describe the release the site was built from (0.8.2).
+describe the source the site was built from (0.8.2 plus the [unreleased changes](../changelog/unreleased.md)).
 
-!!! note "Docstring language"
+!!! note "Docstrings"
 
-    Parameter names, order, and defaults come straight from the code. Many docstrings are written in Chinese, and some
-    descriptions are outdated. The [User Guides](../guides/index.md) explain the behavior in English with runnable examples.
+    Parameter names, order, and defaults come straight from the code. Every public class, function, and method documents all
+    of its parameters in the NumPy docstring layout (`Parameters`, `Returns`, `Raises`), and a test in the pytest suite
+    (`test_public_docstring_parameters.py`) keeps the docstrings in step with the signatures. The
+    [User Guides](../guides/index.md) explain the behavior in more depth, with runnable examples.
 
 ## Subpackages
 
