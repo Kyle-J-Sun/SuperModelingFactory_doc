@@ -142,9 +142,11 @@ it gets a bin of its own.
 - If `-999999` is in `spec_values` but a variable has no missing values in the fit sample, then missing values that show up
   later get a `NaN` WOE (the log says `Failed to Map WOE values for N Records`). Fit on data that contains missing values,
   or impute before scoring.
-- `WOE_Master` applies no smoothing. A bin without bads (or without goods) gets a WOE of `-inf` (`+inf`). This happens
-  mostly with `equal_freq=False` and very rare targets. `MonotoneWOEBinner` adds a small `eps` and never returns an infinite
-  WOE.
+- A bin without bads (or without goods) gets a finite WOE in `WOE_Master`: `eps` (`1e-06`) is added to its two shares,
+  `ln((bad_pct + eps) / (good_pct + eps))`, as `MonotoneWOEBinner` does. The WOE of every other bin is not smoothed. Such
+  bins are common with a strong predictor or a rare target, also with equal-frequency bins. Before the next release
+  `WOE_Master` returned `-inf` (`+inf`) for them, which made LR and XGBoost training fail. The helpers `calc_woe` and
+  `calc_iv` and the Gains tables still return `-inf` (`+inf`) for a zero share.
 
 ### Methods and attributes
 
@@ -556,8 +558,10 @@ monotone in the training sample).
 
 ??? question "A bin has a WOE of `-inf`"
 
-    The bin has no bads (or no goods), and `WOE_Master` applies no smoothing. Use fewer or equal-frequency bins, or fit with
-    `MonotoneWOEBinner`, which adds `eps` to the shares.
+    The bin has no bads (or no goods). `WOE_Master` fits such a bin with a finite WOE (`eps` is added to its two shares),
+    so the value comes from a table built by an earlier version, from `calc_woe` / `calc_iv`, or from a Gains table, which
+    still return `-inf` (`+inf`) for a zero share. Refit with the current version, or use fewer bins, or fit with
+    `MonotoneWOEBinner`.
 
 ??? question "`WOE_Master.fit(chi2_config=...)` raises `ValueError: Bin edges must be unique`"
 
