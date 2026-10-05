@@ -163,6 +163,7 @@ result.oot_summary        # summary of mature-sample filtering of the external O
 | `train_ri_models` | `True` | Whether to train follow-up models on each RI-augmented dataset and compare OOT performance. |
 | `ri_model_type` | `"lgb"` | Model type used for post-RI modeling; supports `"lgb"`, `"xgb"`, `"cat"`, `"lr"`. The `_weight` of Fuzzy Augment is passed to all four models. |
 | `ri_model_params` | `{}` | Post-RI model parameter overrides; the default parameters are selected independently by `ri_model_type`. |
+| `lr_nan_handling` | `"fillna_median"` | NaN/Inf handling for logistic-regression models only (pre-score and RI models). The fill modes impute with values learned on the training frame, re-applied at scoring time, with a `UserWarning` when values were filled. `"raise"` raises `ValueError` on non-finite features. Gradient-boosting models ignore it. |
 | `include_no_ri_benchmark` | `True` | Whether to additionally train an approved-only benchmark model, with the method name `no_ri_benchmark`. |
 | `ri_validation_frac` | `0.2` | When there is no explicit OOS, the share split off from the approved training pool as validation; training excludes the validation/OOT rows. |
 | `save_models` | `False` | Whether to save the pre-score and post-RI model pkl files. |
@@ -309,7 +310,7 @@ flowchart LR
     Z --> AB["Performance evaluation<br/>predicting with each model's feature source"]
     AA --> AB
     AB --> AC{"Explainability"}
-    AC -->|explain_models / owen_enabled| AD["SHAP / LIME / PDP / ALE / ICE / Owen"]
+    AC -->|explain_models / owen_enabled| AD["SHAP importance / summary plot / Owen"]
     AC -->|off| AE["Skip explanation"]
     AD --> AF["CSV / Excel / Result"]
     AE --> AF
@@ -467,11 +468,12 @@ If the business flow has finished candidate selection and needs a formal accepta
 | `save_woe_artifacts` | `True` | When `save_models=True`, whether to also save the WOE table and WOE engine, to ease model reuse. |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS split configuration. |
 | `synthesize_missing_oot` | `False` | Whether to synthesize an OOT from a copy of OOS when there is no real OOT; off by default, and only an explicit `True` synthesizes it and issues a warning. |
-| `evaluation_splits` | `["ins", "oos"]` | Split allowlist for default model evaluation, charts, and Excel; a real OOT must be included explicitly, and `extra_eval_datasets` is not restricted by this. |
+| `evaluation_splits` | `None` | Split allowlist for default model evaluation, charts, and Excel. `None` means `["ins", "oos"]`, so a real OOT must be included explicitly. A listed split that does not exist in the run is skipped silently, and `extra_eval_datasets` is not restricted by this. |
 | `forbidden_splits` | `[]` | Hard gate for forbidden splits; every consumption point of search, backward, and evaluation validates it. |
-| `search_eval_splits` | `["oos"]` | Default eval sets for LR search and Optuna; by default OOT is not used for candidate tuning. |
+| `search_eval_splits` | `None` | Eval sets for LR search and Optuna. `None` means `["oos"]`, so OOT is not used for candidate tuning. A split that you list explicitly and that is absent from the run raises `ValueError`. |
+| `search_objective_when_no_oot` | `"max_primary"` | Objective of the LR and Optuna searches when `oot` is not among the search eval splits (with OOT it is `"oot_gap_penalized"`). `"max_primary"` maximizes the AUC on `oos`; `"oot_gap_penalized"` needs a gap reference split and therefore raises `ValueError` here. |
 | `backward_validation_split` | `"oos"` | Validation source for backward. |
-| `backward_report_splits` | `[]` | Default source for the per-round `test_data_dict` of backward; by default OOT is not read. |
+| `backward_report_splits` | `None` | Splits on which backward reports performance after each round (the per-round `test_data_dict`). `None` means none, so OOT is not read. |
 | `feature_selection` | See the table below | Switches and thresholds for PSI, IV, and correlation screening. |
 | `screening_artifact` | `None` | The `FeatureScreeningArtifact` produced by FVP; once passed, CM's internal screening is skipped. |
 | `feature_validation_result` | `None` | Convenience field: pass the FVP result directly, and it is converted internally to `screening_artifact`. |
@@ -489,6 +491,8 @@ If the business flow has finished candidate selection and needs a formal accepta
 | `lr_search_param_grid` | `{"C": [0.01, 0.1, 1.0, 10.0]}` | LR parameter grid; searched as a Cartesian product. |
 | `lr_search_params` | `{}` | Overrides `objective`, `primary_set`, `gap_ref_sets`, `metric`, `refit`, and `verbose` of the LR search. This is a holdout search and does not accept `cv`; an illegal key raises a `ValueError` listing the allowed parameters before the search. |
 | `use_lr_search_params` | `True` | Whether to merge the LR best params into the final LR training parameters. |
+| `lr_elimination_mode` | `None` | Backward elimination of the final LR model: `None` keeps every feature, `"pvalue"` refits the LR without its feature of highest coefficient p-value until every p-value is at most `pvalue_threshold` (see `lr_elimination_params`). Any other value raises `ValueError`. The dropped features are recorded in `feature_selection_summary["lr_elimination"]`; the model's final features are `result.models["lr"][2]`, while `result.selected_features`, `selected_woe_features` and `model_feature_sets` still show the list from before the elimination. |
+| `lr_elimination_params` | `{}` | Settings of the p-value elimination: `pvalue_threshold` (default 0.05), `min_features` (default 1; the elimination stops when this many features remain) and `max_iterations` (default 20). `tie_breaker` is accepted but has no effect; any other key raises `ValueError`. |
 | `warm_start_enabled` | `False` | Whether to enable the GBM prior-score warm-start. |
 | `warm_start_score_col` | `None` | The prior-score column in the input data. This column is copied by position to each split after the WOE transform (since v0.3.18, the length is validated through `copy_column_length_checked`); if the upstream WOE / `dropna` / fit-query changes the row count, a `ValueError` is raised right at the copy step, rather than silently stitching on misaligned scores. |
 | `warm_start_score_type` | `"probability"` | `"probability"` is clipped and converted to log-odds; `"log_odds"` is used directly as the init score. |
@@ -499,15 +503,19 @@ If the business flow has finished candidate selection and needs a formal accepta
 | `backward_model` | `"lgb"` | The proxy model used by backward. |
 | `backward_params` | `{}` | Backward initialization and run parameters. |
 | `use_backward_features` | `True` | Whether to retrain the models with the features selected by backward. |
+| `candidate_mode` | `False` | `True` forbids any consumption of OOT in the candidate stage: `"oot"` is added to `forbidden_splits` and the OOT frame is removed from the working splits. Explicit settings that request OOT (`synthesize_missing_oot=True`, `"oot"` in `evaluation_splits`, `search_eval_splits` or `backward_report_splits`, or `backward_validation_split="oot"`) raise `ValueError` when the pipeline is created. |
 | `optuna_models` | `["lgb", "xgb", "cat"]` | Models to run the Optuna search on. Pass `[]` to turn it off. |
 | `optuna_n_trials` | `5` | Number of Optuna trials per model. |
 | `optuna_params` | `{}` | Optuna search-space and general-parameter overrides. |
-| `explain_models` | `["lr", "lgb", "cat"]` | Models to run the main SHAP/LIME/PDP/ALE/ICE explanation path on. Pass `[]` to turn it off. |
-| `explain_params` | `{"sample_n": 500, "background_n": 200}` | Explanation sample size, background sample size, and Owen parameters. |
-| `owen_enabled` | `True` | Whether to compute the Owen value. |
+| `explain_models` | `["lr", "lgb", "cat"]` | Trained models explained with SHAP: `feature_importance` and, with charts, `shap_summary.png`. `[]` together with `owen_enabled=False` skips the explanations altogether. |
+| `explain_params` | `{"sample_n": 500, "background_n": 200}` | Explanation settings: `sample_n`, `background_n`, and the Owen options listed in [Explain / Owen Parameters](#explain--owen-parameters). Omitted keys take their defaults. |
+| `owen_enabled` | `True` | Whether to compute Owen values (Shapley values over groups of related features) for every trained model except `xgb`. While it is `True`, the explanations also run for trained models that are not in `explain_models` (Owen values only). |
 | `business_prior_groups` | `None` | Business prior groups for the Owen value. |
 | `perf_pct_bins` | `10` | Number of bins for performance evaluation. |
 | `perf_min_bin_prop` | `0.03` | Minimum bin share for performance evaluation. |
+| `eval_target_cols` | `None` | Extra label columns evaluated against the same model scores in addition to `target_col` (duplicates removed; the results are stacked with a `tgt_name` column). They must exist in the input data and in every `extra_eval_datasets` frame, are not used for training, and are not excluded from inferred `feature_cols`. |
+| `all_missing_score_value` | `None` | Score given in the evaluation to rows whose raw model features are all missing (for example -1), the rule of the scoring API; `None` applies no override. It is stored in the saved model metadata. The raw features must be present in every evaluated frame (`KeyError` otherwise). |
+| `special_score_values` | `None` | Sentinel scores (for example `[-1]`) that get their own evaluation bin and are left out of the quantile edges and the ranking metrics. |
 | `gains_ascending` | `True` | Since 0.7.1, scores ascend by default and bin 1 is low-score, low-risk; the Gains table, the weighted path, and the evaluation plots use the same direction. |
 | `eval_weight_col` | `"inherit"` | `"inherit"` reuses the training `weight_col`; `None` forces unweighted evaluation; a string can specify a separate evaluation weight column. |
 
@@ -558,9 +566,9 @@ feature_selection={
 | `corr_threshold` | `0.75` | Correlation threshold. |
 | `corr_max_iterations` | `10` | Maximum number of iterations for correlation removal. |
 | `corr_block_size` | `256` | Feature-column block size for weighted pairwise Pearson; reducing it lowers peak memory on very wide tables. |
-| `psi_use_woe_bins` | `False` | Whether to reuse the WOE bin boundaries to compute PSI (requires `woe_engine="monotone"` or a prefit binner passed in). |
-| `iv_use_woe_bins` | `False` | Whether to reuse the WOE bin boundaries to compute IV. |
-| `corr_use_woe_bins` | `False` | Whether the IV/KS arbitration in correlation reuses the WOE bins. |
+| `psi_use_woe_bins` | `False` | Compute PSI on the bins of the screening WOE engine (a prefit engine, or one fitted from `woe_engine`) instead of the default binning. A weighted run that has an engine always bins PSI with it. |
+| `iv_use_woe_bins` | `False` | Compute IV on the bins of the screening WOE engine instead of the default binning. A weighted run that has an engine always bins IV with it. |
+| `corr_use_woe_bins` | `False` | Let the screening WOE engine take part in the correlation stage: non-numeric features are WOE-encoded so that they enter the correlation matrix (otherwise they are skipped with a warning and kept), and on unweighted runs the engine's bins also give the IV that decides between two correlated features. |
 
 `CreditModelPipeline._feature_selection` now delegates uniformly to `feature_screen`; by default it keeps the v0.3.8 equal-frequency/tree binning behavior, and once `*_use_woe_bins` is turned on, it aligns with the `FeatureValidationPipeline` basis.
 
@@ -946,12 +954,18 @@ result.high_corr_pairs
 | `batch_corr_mode` | `"within_batch"` | CSV batch correlation mode: `within_batch` computes only within-batch correlation, `block_pairwise` additionally reads batches pairwise to capture cross-batch high correlation, and `off` skips correlation. |
 | `batch_corr_pair_chunk_size` | `None` | With `block_pairwise`, the variable sub-block size for each cross-batch correlation computation, used to further control the memory peak. |
 | `split_col` | `None` | The recommended new field name for the sample split; values go through `strip().lower()`. It must contain non-empty `ins/oos`; `oot` is optional, and other values (such as `ft_oot`) are kept as extra evaluation sets. Takes precedence over `sample_col`. |
+| `sample_col` | `"sample_ind"` | Legacy label column, used when `split_col` is None and the column exists with non-empty `ins` and `oos` values; otherwise the data are split with `oot_col` and `split_config`. Never treated as a feature. |
+| `oot_col` | `"oot_flag"` | Numeric OOT flag column of the fallback split: rows with 0 or a missing value are INS/OOS candidates and non-zero rows are OOT. A non-numeric flag raises `TypeError`. Not used when labels define the splits. |
 | `sample_col` / `oot_col` | `"sample_ind"` / `"oot_flag"` | Compatible split fields consistent with `CreditModelPipeline`; `sample_col` is used when `split_col` is not passed. |
 | `split_config` | `{"test_size": 0.3, "stratify": True}` | INS/OOS split configuration. |
+| `random_state` | `42` | Seed of the random INS/OOS split unless `split_config` contains its own `random_state`. |
 | `time_dims` | `["apply_month"]` | Time dimensions. |
 | `population_dims` | `[]` | Population dimensions, such as channel, product, and strategy version. |
 | `group_specs` | `None` | Custom grouping specs; supports `{"monthly": ["apply_month"]}` or `[ {"name": "monthly", "columns": ["apply_month"]} ]`; when omitted, global/time/population/time x population are combined automatically. |
 | `min_group_size` | `100` | Minimum sample-count guard for PSI/IV/KS groups. |
+| `distribution_enabled` | `True` | Whether to build `distribution_summary`. |
+| `distribution_params` | `{"q": [0.05, 0.15, 0.25, 0.5, 0.75, 0.95, 0.99]}` | Keys: `q` (quantiles of the numeric summary), `spec_missing_value` (value counted as missing, default None) and `feature_block_size` (columns per block, default 128). |
+| `woe_enabled` | `True` | Whether to fit WOE binning per target on the INS rows with an observed target. It needs a target. Without it PSI, IV/KS and correlation use their own binning. |
 | `distribution_params.feature_block_size` | `128` | Number of columns in each wide-table feature block for distribution statistics. |
 | `woe_engine` | `"monotone"` | Default `MonotoneWOEBinner`; `"equal_freq"` is also supported, using `WOE_Master`. |
 | `woe_fit_query` | `None` | A pandas `query()` expression that filters only the rows of the INS used for the WOE fit; PSI/IV/KS and the transform are still based on the full splits. The fit audit is written to the `fit_filter` row of `woe_artifacts["refine_summary"]`. |
@@ -965,17 +979,29 @@ result.high_corr_pairs
 | `monotone_refine_dtree_params` | `{}` | Passed through to `refine_dtree(df, features, max_bins, min_samples_leaf, monotone, n_jobs)`. |
 | `monotone_refine_chi2_enabled` | `False` | Whether to call `refine_chi2()`. |
 | `monotone_refine_chi2_params` | `{}` | Passed through to `refine_chi2(df, features, chi2_p, chi2_init_size, n_jobs)`. |
+| `woe_plot_groups` | `[]` | Group columns for extra WOE plots by group (`figs/woe/<target>/by_<group>`). Plots are written only while `write_outputs` and `plot_outputs` are both True. |
+| `psi_enabled` | `True` | Whether to compute `psi_summary` and `psi_details`. |
 | `psi_reference_dataset` | `"ins"` | PSI benchmark; one of `ins/oos/oot/external`. |
 | `psi_reference_data` | `None` | External PSI benchmark; required when `psi_reference_dataset="external"`. |
+| `psi_group_dims` | `["sample", "time", "population"]` | Grouping of the PSI: `'sample'` is the split, `'time'` and `'population'` expand to `time_dims` and `population_dims`, other names are column names. An overall PSI is computed only when no group column remains (`'global'` adds nothing by itself). |
 | `psi_use_woe_bins` | `True` | Whether to reuse the step-3 WOE bin boundaries. |
+| `psi_params` | `{"buckets": 10, "equal_freq": True, "min_bin_prop": 0.05}` | Keyword arguments of `PSICalculator`. |
+| `ivks_enabled` | `True` | Whether to compute `ivks_summary`. It needs a target. |
+| `ivks_group_dims` | `["global", "time", "population"]` | Groupings of the IV/KS report: `'global'` for all rows, `'time'` and `'population'` for each column of `time_dims` and `population_dims`, other names as single group columns. |
 | `psi_params.feature_block_size` | `64` | Number of columns in each feature block for WOE binning and grouped PSI counting. |
 | `ivks_use_woe_bins` | `True` | Whether to reuse the step-3 WOE bin boundaries to compute IV/KS. |
+| `ivks_params` | `{"iv_cut": 0.0}` | `iv_cut` (minimum IV of the reported features), `feature_block_size` (columns per block with WOE bins, default 64) and, without WOE bins, other keyword arguments of `VarExtractionInsights`. |
+| `corr_enabled` | `True` | Whether to compute `corr_matrix`, `high_corr_pairs` and `correlated_detail`. |
 | `ivks_params.feature_block_size` | `64` | Number of columns in each feature block when computing IV/KS with the reused WOE bins. |
 | `corr_include_incumbent` | `True` | Whether the correlation includes existing features. |
 | `corr_use_woe_bins` | `True` | Whether the IV/KS in the correlation comparison reuses the step-3 WOE bins. |
+| `corr_params` | `{"corr_cutpoint": 0.75, "method": "pearson", "max_iterations": 10, "base_metric": "iv"}` | `corr_cutpoint` (pairs with a larger absolute correlation are flagged), `method` (`'pearson'`, `'spearman'` or `'kendall'`), `max_iterations` of the removal loop and other `CorrelationFilter` arguments such as `base_metric`. |
+| `missing_rate_threshold` | `None` | Maximum missing rate of a feature on INS (NaN or the `missing_ref_value` sentinel). With `woe_fit_scope='post_missing_gate'` features above it are removed before the WOE fit and from all later stages (they are listed in `woe_artifacts['missing_gate_dropped']`). It is also the default threshold of the selection stage. `None` disables the gate. |
 | `selection_enabled` | `False` | Whether to run PSI/IV/correlation removal after validation, producing `selected_features` and a `FeatureScreeningArtifact` for CM to pick up. |
 | `selection_params` | `{}` | Screening thresholds and switches, with key names aligned to CM's `feature_selection` (such as `psi_threshold`, `iv_threshold`, `corr_threshold`, `*_use_woe_bins`); G06 can set `vif_use_woe_bins`. |
+| `selection_group_dims` | `None` | Columns of the group-stability gates (`monthly_iv_min`, `monthly_iv_cv_max`, `direction_consistency_min`). They are required when one of those gates is set (`ValueError`) and must exist in the INS split (`KeyError`). |
 | `weight_col` | `None` | Weight column for weighted screening; consistent with CM's `weight_col`. |
+| `synthesize_missing_oot` | `False` | When no OOT rows exist, True copies the OOS rows in as a stand-in OOT (with a `UserWarning`); False keeps OOT empty. `None` counts as False. |
 | `write_outputs` | `True` | Whether to output CSVs and intermediate artifacts; also the master switch for writing images to disk. |
 | `write_excel` | `True` | Whether to output the ExcelMaster report. |
 | `plot_outputs` | `True` | Whether to output the WOE analysis plots. Setting it to `False` still lets you keep CSV/Excel through `write_outputs=True` and `write_excel=True`; images are written only when both `write_outputs=True` and `plot_outputs=True`. |
@@ -1556,8 +1582,8 @@ result = ScoreConsistencyUATPipeline(cfg).run(
 | `offline_data` | `None` | Optional offline DataFrame; when passed together with `online_data`, DataFrame mode is used. |
 | `online_data` | `None` | Optional online DataFrame. |
 | `main_model_score_col` | `"credit_risk_v31_cdc_submodel_score"` | Main model score field name. |
-| `tol_score` | `1e-6` | Tolerance for the main model score and sub-model scores. |
-| `tol_feat` | `1e-2` | Tolerance for ordinary numeric features. |
+| `tol_score` | `1e-06` | Tolerance for the main model score and sub-model scores. |
+| `tol_feat` | `0.01` | Tolerance for ordinary numeric features. |
 | `time_featlist` | `[]` | Fields to compare with time semantics. |
 | `tol_time_seconds` | `60.0` | Second-level tolerance for time fields. |
 | `comparison_block_size` | `128` | Column block size for the per-flow wide-table consistency comparison; reducing it lowers peak memory. |
@@ -1566,6 +1592,8 @@ result = ScoreConsistencyUATPipeline(cfg).run(
 | `info_list` | `[]` | Fields attached to the detail report, also excluded from the automatic feature comparison. |
 | `include_submodel_scores` | `True` | When `True`, sub-model scores are checked automatically as ordinary features; when `False`, the dedicated check is enabled. |
 | `submodel_pairs` | `{}` | Mapping for the dedicated sub-model check, in the format `{offline_col: online_col}`. |
+| `numeric_coercion_mode` | `"safe"` | DataFrame mode only: how object-dtype columns of the merged frame become numeric. `"safe"` converts a column only if at least `numeric_coercion_min_ratio` of its non-null values parse as numbers (a warning is logged when some, but not enough, values parse); `"aggressive"` always converts and turns unparsable values into NaN (warning); `"off"` converts nothing. Any other value raises `ValueError`. In SQL mode the checker converts every object column that has at least one numeric value, and this field is ignored. |
+| `numeric_coercion_min_ratio` | `0.99` | DataFrame mode with `numeric_coercion_mode="safe"` only: minimum share of parsable non-null values required to convert an object column. |
 
 ### Dedicated Sub-Model Score Check
 
@@ -1685,7 +1713,7 @@ result = MockSamplePipeline(cfg).run()
 | `num_features` | `20` | Number of randomly generated feature variables. |
 | `min_num_feature_business_type` | `5` | Minimum number of business types the features must cover; must not exceed `num_features`, with at most 10 types. |
 | `random_state` | `42` | Random seed. |
-| `observation_timestamp` | Current date | The observation date for judging whether performance labels are mature; fixing it is recommended for tests or reproducible experiments. |
+| `observation_timestamp` | `None` | The observation date for judging whether performance labels are mature. `None` uses today's date at midnight, so fix it for tests or reproducible experiments. |
 | `application_months` | `18` | Number of months the application time looks back. |
 | `write_csv` | `False` | Whether to output a CSV. |
 | `output_path` | `"output/mock_sample/mock_sample.csv"` | CSV output path. |
@@ -1833,6 +1861,12 @@ result.split_recommendation
 | `random_seeds` | `range(3000, 3020)` | The set of random seeds used for repeated splitting, to observe the bad-rate perturbation. |
 | `min_sample_size` | `500` | The minimum-sample-size threshold for INS/OOS/OOT when screening the recommended scheme. If no candidate meets the threshold, the most stable combination is picked from all candidates. |
 | `approved_col` | `"is_approved"` | Approved-sample flag field, used for `label_coverage_summary.n_approved_observed`. It can be set to the actual field name, or to `None` to turn this metric off. |
+| `dry_run` | `False` | True makes `run` validate the input and return only the split-count estimate (a one-row `split_candidate_summary`, the other tables empty, `output_paths` empty) without any analysis or file output. |
+| `id_col` | `None` | Unique row identifier column, required when `materialize_split` is True (`ValueError` if empty, `KeyError` if absent from the data). It must have no duplicates among the mature rows of any target. |
+| `materialize_split` | `False` | True replays the recommended (OOT window, ratio, seed) of every target into row-level INS/OOS/OOT labels (`row_level_split`) and an audit record (`split_artifact`). A `ValueError` is raised if no recommendation exists. |
+| `oot_cutoff` | `None` | Used only when `materialize_split` is True: the OOT sample becomes the mature rows with `oot_time_dim >= oot_cutoff` (artifact `oot_basis="cutoff"`) instead of the recommended trailing window, and the INS/OOS pool is rebuilt from that boundary. The candidate statistics still use the trailing windows. |
+| `split_col_name` | `"sample_split"` | Name of the label column in `row_level_split`; its values are `"ins"`, `"oos"` and `"oot"`. |
+| `persist_split_map` | `False` | With `materialize_split=True`, write `row_level_split.csv` and `split_artifact.json` to `output_dir` (even when `write_outputs` and `write_excel` are False) and add their absolute paths to `output_paths`. |
 | `output_dir` | `"output/sample_analysis"` | Output directory for the CSV and Excel reports. |
 | `write_outputs` | `True` | Whether to output the 5 CSV detail tables. |
 | `write_excel` | `True` | Whether to use `ExcelMaster` to output `Sample_Analysis_Report.xlsx`. |
