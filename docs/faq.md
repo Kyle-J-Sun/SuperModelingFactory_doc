@@ -425,11 +425,7 @@ For the argument each API takes and the weighted metric semantics (`N` vs `N_RAW
 
 ## Known Issues
 
-These behaviors are present in 0.8.2 and in the current `main`. Each one has been reproduced or read in the code, is documented here and in the API reference as it behaves today, and is not fixed yet. The [Unreleased notes](changelog/unreleased.md) list what has been fixed so far.
-
-| Issue | What happens | Workaround |
-|---|---|---|
-| **`iv_equal_freq` and `tie_breaker` have no effect** (`FeatureScreenConfig`, `lr_elimination_params`) | `iv_equal_freq`: the default IV binning uses decision-tree bins, which take precedence, so `True` and `False` give the same IV, and weighted runs always use weighted equal-frequency bins. `tie_breaker`: the truncation stage breaks ties by feature name, and the LR p-value elimination resolves equal p-values by column order, whatever the value | Tune the IV binning with `iv_bins` and `iv_min_bin_prop`, or compute the IV on the screening WOE bins with `iv_use_woe_bins=True`. The tie-breaking is deterministic, so it needs no workaround |
+There are no open known issues at the moment. The issues that the documentation audit found have been fixed; the [Unreleased notes](changelog/unreleased.md) list them one by one, with the results that change.
 
 ---
 

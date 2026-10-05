@@ -1094,7 +1094,7 @@
           "default": "psi_params.min_bin_prop or 0.05"
         },
         "iv_equal_freq": {
-          "default": "psi_params.equal_freq or true"
+          "default": true
         },
         "iv_use_woe_bins": {
           "default": "Inherits ivks_use_woe_bins"

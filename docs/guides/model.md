@@ -677,7 +677,7 @@ print(lr_features)
 | `pvalue_threshold` | `0.05` | Stop when the largest coefficient p-value is at most this |
 | `min_features` | `1` | Never go below this many variables |
 | `max_iterations` | `20` | Maximum number of drops |
-| `tie_breaker` | | Accepted but has no effect: equal p-values are resolved by column order |
+| `tie_breaker` | | Only `"pvalue"` (or `None`) is accepted, and it changes nothing: equal p-values are resolved by column order. Any other value raises `ValueError` |
 
 The trajectory (`iteration`, `dropped_feature`, `p_value`, `n_remaining`) is also written to `lr_pvalue_elimination.csv` in
 `output_dir` when outputs are written, and evaluation and explanation use the reduced list. The reduced list is

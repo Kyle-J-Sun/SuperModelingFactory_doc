@@ -481,7 +481,7 @@ when one frame holds a split column with the values `ins`, `oos`, and `oot`. It 
 | `iv_enabled` | `True` | Run the IV stage |
 | `iv_threshold` | `0.02` | Drop a variable with a lower IV |
 | `iv_upper_threshold` | `None` | Drop a variable with a higher IV: suspected leakage (gate G02) |
-| `iv_bins`, `iv_min_bin_prop`, `iv_equal_freq` | `10`, `0.05`, `True` | Binning of the default IV. A weighted run without WOE bins uses weighted equal-frequency bins, ignores `iv_equal_freq`, and reads `min_bin_prop` instead of `iv_min_bin_prop` |
+| `iv_bins`, `iv_min_bin_prop`, `iv_equal_freq` | `10`, `0.05`, `True` | Binning of the default IV. `iv_equal_freq` must stay `True`: the IV binning cannot switch equal-frequency bins off, so `False` raises `ValueError`. A weighted run without WOE bins uses weighted equal-frequency bins and reads `min_bin_prop` instead of `iv_min_bin_prop` |
 | `iv_use_woe_bins` | `False` | Compute IV on the screening binner's bins |
 | `corr_enabled` | `True` | Run the correlation stage |
 | `corr_threshold` | `0.75` | Absolute correlation above which two variables are redundant |
@@ -691,7 +691,7 @@ order **VIF, group stability, multi-label, truncation** and record their evidenc
 | G06 VIF | `vif_enabled`, `vif_threshold=10.0`, `vif_min_features=2`, `vif_use_woe_bins`, `vif_tie_break_metric='iv'` | Repeatedly drops the variable with the highest VIF above the threshold, until none remains or `vif_min_features` is reached. Ties go to the lower IV |
 | G03 group stability | `monthly_iv_min`, `monthly_iv_cv_max`, `direction_consistency_min`, `min_group_n`, `insufficient_group_policy='keep_warn'` | Per-group IV floor, cap on the coefficient of variation of the group IVs, and floor on the share of groups with the same direction. Needs group evidence |
 | G04 multi-label | `target_rules`, `min_pass_count`, `per_target_iv_range`, `direction_reference_target` | A variable must pass its IV range and direction on all, any, or at least `min_pass_count` labels. Needs per-label evidence |
-| G05 truncation | `max_selected_features`, `min_selected_features`, `ranking_metric='iv'`, `tie_breaker='name'` | Keeps the top N variables by IV, ties broken by name. It never backfills: when fewer than `min_selected_features` survive, it only warns |
+| G05 truncation | `max_selected_features`, `min_selected_features`, `ranking_metric='iv'`, `tie_breaker='name'` | Keeps the top N variables by IV, ties broken by ascending name (`'name'` is the only accepted `tie_breaker`; any other value raises `ValueError`). It never backfills: when fewer than `min_selected_features` survive, it only warns |
 
 G02, G05, and G06 work directly in `feature_screen`. The demo adds two columns: `leaky_score`, which is almost a copy of
 the label, and `blend`, a mix of `score_b` and `utilization`. Pairwise correlation misses `blend` (about 0.65 with each

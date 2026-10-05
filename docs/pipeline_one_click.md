@@ -492,7 +492,7 @@ If the business flow has finished candidate selection and needs a formal accepta
 | `lr_search_params` | `{}` | Overrides `objective`, `primary_set`, `gap_ref_sets`, `metric`, `refit`, and `verbose` of the LR search. This is a holdout search and does not accept `cv`; an illegal key raises a `ValueError` listing the allowed parameters before the search. |
 | `use_lr_search_params` | `True` | Whether to merge the LR best params into the final LR training parameters. |
 | `lr_elimination_mode` | `None` | Backward elimination of the final LR model: `None` keeps every feature, `"pvalue"` refits the LR without its feature of highest coefficient p-value until every p-value is at most `pvalue_threshold` (see `lr_elimination_params`). Any other value raises `ValueError`. The dropped features are recorded in `feature_selection_summary["lr_elimination"]`; the model's final features are `result.models["lr"][2]`, while `result.selected_features`, `selected_woe_features` and `model_feature_sets` still show the list from before the elimination. |
-| `lr_elimination_params` | `{}` | Settings of the p-value elimination: `pvalue_threshold` (default 0.05), `min_features` (default 1; the elimination stops when this many features remain) and `max_iterations` (default 20). `tie_breaker` is accepted but has no effect; any other key raises `ValueError`. |
+| `lr_elimination_params` | `{}` | Settings of the p-value elimination: `pvalue_threshold` (default 0.05), `min_features` (default 1; the elimination stops when this many features remain) and `max_iterations` (default 20). `tie_breaker` may only be `"pvalue"` (or `None`), which describes what happens anyway: equal p-values are resolved by column order. Any other `tie_breaker` value and any other key raise `ValueError`. |
 | `warm_start_enabled` | `False` | Whether to enable the GBM prior-score warm-start. |
 | `warm_start_score_col` | `None` | The prior-score column in the input data. This column is copied by position to each split after the WOE transform (since v0.3.18, the length is validated through `copy_column_length_checked`); if the upstream WOE / `dropna` / fit-query changes the row count, a `ValueError` is raised right at the copy step, rather than silently stitching on misaligned scores. |
 | `warm_start_score_type` | `"probability"` | `"probability"` is clipped and converted to log-odds; `"log_odds"` is used directly as the init score. |
@@ -560,7 +560,7 @@ feature_selection={
 | `iv_enabled` | `True` | Whether to run IV screening. |
 | `iv_threshold` | `0.02` | Variables with IV greater than or equal to this threshold are kept. |
 | `iv_nbins` | `10` | Number of bins for the IV analysis. |
-| `iv_equal_freq` | `True` | Whether the IV analysis uses equal-frequency binning. |
+| `iv_equal_freq` | `True` | Must stay `True`: the IV binning cannot switch equal-frequency bins off, so `False` raises `ValueError`. Tune the bins with `iv_nbins` and `iv_min_bin_prop`, or set `iv_use_woe_bins` to take them from the WOE engine. It no longer follows `psi_params["equal_freq"]`. |
 | `iv_min_bin_prop` | `0.05` | Minimum bin share for the IV analysis. |
 | `corr_enabled` | `True` | Whether to run high-correlation removal. |
 | `corr_threshold` | `0.75` | Correlation threshold. |
