@@ -500,7 +500,7 @@ If the business flow has finished candidate selection and needs a formal accepta
 | `warm_start_on_unsupported` | `"skip"` | Skip the warm-start or raise an error when init score is unsupported (e.g. CatBoost). |
 | `warm_start_apply_to_optuna` | `False` | Whether to pass `fit_kwargs={"init_score": ...}` in the GBM parameter search. |
 | `backward_enabled` | `True` | Whether to run backward variable elimination. |
-| `backward_model` | `"lgb"` | The proxy model used by backward. |
+| `backward_model` | `"lgb"` | Proxy model of the backward elimination: `"lgb"` (LightGBM) or `"xgb"` (XGBoost); case and surrounding spaces are ignored. Any other value raises `ValueError` when `run()` starts, while `backward_enabled` is on. |
 | `backward_params` | `{}` | Backward initialization and run parameters. |
 | `use_backward_features` | `True` | Whether to retrain the models with the features selected by backward. |
 | `candidate_mode` | `False` | `True` forbids any consumption of OOT in the candidate stage: `"oot"` is added to `forbidden_splits` and the OOT frame is removed from the working splits. Explicit settings that request OOT (`synthesize_missing_oot=True`, `"oot"` in `evaluation_splits`, `search_eval_splits` or `backward_report_splits`, or `backward_validation_split="oot"`) raise `ValueError` when the pipeline is created. |

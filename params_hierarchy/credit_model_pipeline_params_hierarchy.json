@@ -239,7 +239,7 @@
             "name": "Backward",
             "params": {
               "backward_enabled": "Whether to run backward feature selection",
-              "backward_model": "Model used for stepwise regression, default lgb",
+              "backward_model": "Proxy model of the backward elimination, lgb or xgb, default lgb",
               "backward_params": "Stepwise regression parameter overrides",
               "use_backward_features": "Whether the final model uses the features selected by backward"
             },

@@ -42,7 +42,7 @@ Every public class, function, and method of `Modeling_Tool`, `ExcelMaster`, and 
 
 ## 4. Further Fixes
 
-Six more defects came out of documenting the functions that the first pass had described as they behaved. Each has regression tests in `test_doc_audit_regressions.py` that fail without the fix.
+Seven more defects came out of documenting the functions that the first pass had described as they behaved. Each has regression tests in `test_doc_audit_regressions.py` that fail without the fix.
 
 | Defect | Fix |
 |---|---|
@@ -52,10 +52,11 @@ Six more defects came out of documenting the functions that the first pass had d
 | `plot_boxplot` and `write_boxplot` multiplied the values by 100 whatever `y_percentage` said, so `y_percentage=False` only dropped the percent labels | `y_percentage=True` multiplies by 100 and formats the axis as percent; `False` draws the values as they are |
 | `cross_risk_weighted_mean` kept the weight of a NaN row in the denominator while adding nothing to the numerator, so NaN values pulled the mean towards 0 | A NaN row is skipped. A cell whose values are all NaN is NaN |
 | The weighted `get_gains_table` divided the regular bins by the weight of the non-special rows and the special rows by the weight of all rows, so `PROP` added up to more than 1 with `spec_values` | `PROP` is the share of the weight of all rows in every row, so it adds up to 1 |
+| `CreditModelPipelineConfig.backward_model` ran the XGBoost elimination for every value except the exact lower-case `"lgb"`, so `"LGB"`, `"lr"`, and `"cat"` silently ran XGBoost, and the GUI schema offered `"lr"` and `"cat"` | `run()` accepts `"lgb"` and `"xgb"` in any case and raises `ValueError` for anything else while `backward_enabled` is on. The GUI schema offers only `"lgb"` and `"xgb"`, and `validate_pipeline_config` reports other values |
 
 !!! warning "Results that change"
-    A direct call of `plot_boxplot` or `write_boxplot` with the default `y_percentage=False` used to draw the values times 100 and now draws them as they are; the hyperparameter box plots of the reports pass `y_percentage=True` and do not change. `cross_risk_weighted_mean` returns a higher mean for every cell that has NaN values. `PROP` of the weighted `get_gains_table` is smaller in the regular bins when `spec_values` matches rows.
+    A direct call of `plot_boxplot` or `write_boxplot` with the default `y_percentage=False` used to draw the values times 100 and now draws them as they are; the hyperparameter box plots of the reports pass `y_percentage=True` and do not change. `cross_risk_weighted_mean` returns a higher mean for every cell that has NaN values. `PROP` of the weighted `get_gains_table` is smaller in the regular bins when `spec_values` matches rows. A `backward_model` other than `"lgb"` or `"xgb"` now raises `ValueError` when `run()` starts, where it used to run XGBoost; `"LGB"` now runs LightGBM.
 
 ## 5. Known Issues
 
-Five issues found during the audit are not fixed yet: `random_state` does not reach the LightGBM and XGBoost models of the credit-model pipeline, `backward_model` runs XGBoost for any value except `"lgb"`, `iv_equal_freq` and `tie_breaker` have no effect, `CorrelationFilter(spec_values=...)` is ignored by the default IV and KS, and `explain_owen` keeps a stale partition tree. The guides and the API reference describe each one as it behaves today. The [FAQ](../faq.md#known-issues) lists them with their workarounds.
+Four issues found during the audit are not fixed yet: `random_state` does not reach the LightGBM and XGBoost models of the credit-model pipeline, `iv_equal_freq` and `tie_breaker` have no effect, `CorrelationFilter(spec_values=...)` is ignored by the default IV and KS, and `explain_owen` keeps a stale partition tree. The guides and the API reference describe each one as it behaves today. The [FAQ](../faq.md#known-issues) lists them with their workarounds.
