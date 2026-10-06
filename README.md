@@ -54,7 +54,9 @@ SuperModelingFactory_doc/
 │   └── changelog/             # Release notes, one file per version
 ├── params_hierarchy/          # Pipeline parameter hierarchy metadata (JSON), see its README
 ├── tools/check_examples.py    # Checks (and optionally runs) the Python examples in the Markdown files
-└── .github/workflows/pages.yml  # Builds with `mkdocs build` and deploys to GitHub Pages on push to `main`
+└── .github/workflows/
+    ├── pages.yml              # Builds with `mkdocs build` and deploys to GitHub Pages on push to `main`; a running deploy is never cancelled
+    └── retry-cancelled.yml    # Re-runs a Pages job that GitHub cancelled because no runner picked it up (at most twice)
 ```
 
 ## Contributing documentation

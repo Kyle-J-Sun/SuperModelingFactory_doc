@@ -11,9 +11,13 @@ permissions:
   pages: write
   id-token: write
 
+# Never cancel a deployment that is already running: a newer run waits for it,
+# and only a run still waiting is replaced by an even newer one. A push
+# immediately followed by a manual dispatch used to leave the push run
+# cancelled halfway through its deploy.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
