@@ -302,7 +302,7 @@ The governance parameters (`min_bad_count` and the rest) are listed in [Binning 
 | `target_col` | required | Binary target column (1 = bad) |
 | `n_init_bins` | `20` | Number of equal-frequency bins to start from |
 | `min_bin_size` | `0.03` | Minimum share of the rows per ordinary bin. It takes effect **only when `small_bin_policy` is set**. Without a policy, `fit` ignores it |
-| `min_n_bins` | `2` | Merging stops at this many ordinary bins (special-value bins not counted). The greedy monotone step can end one bin below it, and chi-square merging never goes below it |
+| `min_n_bins` | `2` | Merging stops at this many ordinary bins (special-value bins not counted); neither the greedy monotone step nor the chi-square merging goes below it (the greedy step used to end one bin below it). When the limit stops the merging, the WOE of the bins may not be monotone |
 | `eps` | `1e-6` | Added to the shares so that `log` never sees zero |
 | `missing_woe` | `0.0` | WOE for missing values that are **not** in `special_values`, for unseen categories, and for the placeholder bins of `unseen_special_policy="neutral"` |
 | `special_values` | `None` | Values that get their own `[sv=<value>]` bin. `np.nan` adds a `[Missing]` bin. Applies to numeric features only |
@@ -333,6 +333,11 @@ The governance parameters (`min_bad_count` and the rest) are listed in [Binning 
 - A numeric value listed in `special_values` gets a bin labeled `[sv=<value>]`, and `np.nan` gets `[Missing]`. Each bin has its
   own WOE.
 - A missing value that is not listed scores `missing_woe`.
+- The WOE of a special-value or `[Missing]` bin is computed against the bad and good totals of **all** fit rows, and the WOE
+  of an ordinary bin against the totals of the **ordinary** rows only (the monotone check runs on those rows). A special
+  bin and an ordinary bin with the same bad rate therefore get different WOE values, and the shares of the bins do not add
+  up to 1. This is the design of the binner, not a rounding effect: compare special bins with each other, not with
+  ordinary bins.
 - `refine_cate` labels a merged bin with its member names joined by a vertical bar, such as `B | C`.
 - Categories that were not seen at fit time score `missing_woe`. `apply_woe` emits a `RuntimeWarning` by default
   (`unseen_category_policy="warn"`). Use `"raise"` to fail instead, or `"silent"` to stay quiet.
@@ -849,6 +854,10 @@ cfg = CreditModelPipelineConfig(
 ```
 
 - A dictionary you pass replaces the default one. `MonotoneWOEBinner` fills the keys you leave out with its own defaults.
+- When `special_values` is not in the dictionary, `CreditModelPipeline`, `FeatureValidationPipeline` and the screening engine
+  of `feature_screen` all declare `-999999` as a special value if one of the fitted numeric features holds it (and nothing
+  otherwise). Before, only `CreditModelPipeline` did, so a screening artifact handed to it binned the sentinel with the
+  lowest real values while a self-fit gave it a bin of its own. Pass `special_values` (also `[]`) to decide yourself.
 - In `woe_params`, the keys `woe_suffix` and `missing_ref_value` go to the `WOE_Master` constructor (the pipelines default
   `missing_ref_value` to `-999999`), and every other key goes to `fit()`.
 - The `FeatureValidationPipeline` `config_snapshot` records both dictionaries as given, so the governance basis of a run can be

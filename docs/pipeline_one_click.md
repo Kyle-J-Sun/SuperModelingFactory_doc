@@ -478,7 +478,7 @@ If the business flow has finished candidate selection and needs a formal accepta
 | `screening_artifact` | `None` | The `FeatureScreeningArtifact` produced by FVP; once passed, CM's internal screening is skipped. |
 | `feature_validation_result` | `None` | Convenience field: pass the FVP result directly, and it is converted internally to `screening_artifact`. |
 | `feature_selection_mode` | `"run"` | `run` / `from_artifact` / `skip`; when there is an artifact, it automatically becomes `from_artifact`. |
-| `reuse_screening_woe` | `True` | Whether to reuse the already-fitted WOE engine inside the artifact on handoff. |
+| `reuse_screening_woe` | `True` | Whether to reuse the already-fitted WOE engine inside the artifact on handoff. A reused engine keeps its own kind, bins and parameters, so `woe_engine`, `woe_params`, `monotone_woe_params`, and `woe_fit_query` do not apply to it; a `RuntimeWarning` says when none can be reused. |
 | `woe_engine` | `"equal_freq"` | WOE engine. Supports `"equal_freq"` and `"monotone"`. |
 | `woe_params` | `{"nbins": 10, "equal_freq": True, "min_bin_prop": 0.05, "sv_min_bin_size": 0.0, "sv_small_policy": "keep", "sv_woe_smoothing": "none", "sv_smoothing_alpha": 0.0}` | `WOE_Master.fit()` parameters and the general WOE configuration. Since 0.8.0 it explicitly carries the four `sv_*` SV bin governance keys, with defaults = the old behavior. |
 | `monotone_woe_params` | `{"n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2, "sv_min_bin_size": 0.0, "sv_small_policy": "keep", "sv_woe_smoothing": "none", "sv_smoothing_alpha": 0.0, "unseen_special_policy": "normal_bin"}` | `MonotoneWOEBinner` parameters. Since 0.8.0 it explicitly carries the four `sv_*` SV bin governance keys, and since 0.8.2 `unseen_special_policy`, with defaults = the old behavior. When `special_values` is not given explicitly, since 0.8.2 `-999999` is declared by default only if it actually appears in the WOE fit sample (binning and scoring are unchanged). |
@@ -498,7 +498,7 @@ If the business flow has finished candidate selection and needs a formal accepta
 | `warm_start_score_type` | `"probability"` | `"probability"` is clipped and converted to log-odds; `"log_odds"` is used directly as the init score. |
 | `warm_start_models` | `["lgb", "xgb"]` | GBM models with warm-start enabled. The underlying layer currently supports `lgb/xgb`. |
 | `warm_start_on_unsupported` | `"skip"` | Skip the warm-start or raise an error when init score is unsupported (e.g. CatBoost). |
-| `warm_start_apply_to_optuna` | `False` | Whether to pass `fit_kwargs={"init_score": ...}` in the GBM parameter search. |
+| `warm_start_apply_to_optuna` | `False` | Whether to pass `fit_kwargs={"init_score": ...}` in the GBM parameter search. The prior score is added to the training only: the `AUC_*` of the search table, the early stopping and the SHAP/Owen explanations see the increment alone, while the final evaluation of the model includes the prior. |
 | `backward_enabled` | `True` | Whether to run backward variable elimination. |
 | `backward_model` | `"lgb"` | Proxy model of the backward elimination: `"lgb"` (LightGBM) or `"xgb"` (XGBoost); case and surrounding spaces are ignored. Any other value raises `ValueError` when `run()` starts, while `backward_enabled` is on. |
 | `backward_params` | `{}` | Backward initialization and run parameters. |
@@ -512,10 +512,10 @@ If the business flow has finished candidate selection and needs a formal accepta
 | `owen_enabled` | `True` | Whether to compute Owen values (Shapley values over groups of related features) for every trained model except `xgb`. While it is `True`, the explanations also run for trained models that are not in `explain_models` (Owen values only). |
 | `business_prior_groups` | `None` | Business prior groups for the Owen value. |
 | `perf_pct_bins` | `10` | Number of bins for performance evaluation. |
-| `perf_min_bin_prop` | `0.03` | Minimum bin share for performance evaluation. |
+| `perf_min_bin_prop` | `0.03` | Target minimum share of a performance evaluation bin. It lowers the number of bins when `perf_pct_bins` bins would be smaller, but it is a target: with a large value (0.25 and above in a test) the bins can still be smaller than asked, and the weighted evaluation ignores it. |
 | `eval_target_cols` | `None` | Extra label columns evaluated against the same model scores in addition to `target_col` (duplicates removed; the results are stacked with a `tgt_name` column). They must exist in the input data and in every `extra_eval_datasets` frame, are not used for training, and are not excluded from inferred `feature_cols`. |
-| `all_missing_score_value` | `None` | Score given in the evaluation to rows whose raw model features are all missing (for example -1), the rule of the scoring API; `None` applies no override. It is stored in the saved model metadata. The raw features must be present in every evaluated frame (`KeyError` otherwise). |
-| `special_score_values` | `None` | Sentinel scores (for example `[-1]`) that get their own evaluation bin and are left out of the quantile edges and the ranking metrics. |
+| `all_missing_score_value` | `None` | Score given in the evaluation to rows whose raw model features are all missing (for example -1), the rule of the scoring API; `None` applies no override. It is stored in the saved model metadata. The raw features must be present in every evaluated frame (`KeyError` otherwise). The rule is applied to the raw frames, so it also works with `woe_params={'woe_suffix': ''}`, where the WOE columns replace the raw ones. |
+| `special_score_values` | `None` | Sentinel scores (for example `[-1]`) that get their own evaluation bin and are left out of the quantile edges and the ranking metrics. In the unweighted evaluation the `N` and `avgTrue` of the summary leave the sentinel rows out; in the weighted evaluation they count every row and `N_SPECIAL` reports the sentinel part, so the two are not comparable on those columns. |
 | `gains_ascending` | `True` | Since 0.7.1, scores ascend by default and bin 1 is low-score, low-risk; the Gains table, the weighted path, and the evaluation plots use the same direction. |
 | `eval_weight_col` | `"inherit"` | `"inherit"` reuses the training `weight_col`; `None` forces unweighted evaluation; a string can specify a separate evaluation weight column. |
 
@@ -810,7 +810,7 @@ business_prior_groups={
 | Field | Description |
 |---|---|
 | `splits` | `{"ins": df, "oos": df}`, with `"oot"` attached when the input has a real OOT or one was synthesized explicitly. |
-| `feature_selection_summary` | The PSI, IV, and correlation screening results and the final variable list. |
+| `feature_selection_summary` | The PSI, IV, and correlation screening results and the final variable list. In the Excel report each table is its own sheet (`FS_psi`, `FS_iv`, ...); a text longer than an Excel cell holds (32,767 characters) continues on extra rows. |
 | `woe_artifacts` | WOE engine, post-WOE data, WOE feature names, WOE table. |
 | `models` | `{model_name: (wrapper, raw_model, feature_cols)}`. |
 | `selected_features` | The WOE main-line features, kept for compatibility with old code; equivalent to `selected_woe_features`. |
@@ -847,7 +847,7 @@ result.model_paths["lgb"]
 result.artifact_paths["woe_engine"]
 ```
 
-The saved models use the SMF `save_model()` artifact envelope, and the metadata records the model name, target column, the features actually used by the model, whether the GBM used raw/WOE, the warm-start configuration, and the random seed. WOE-input models also save `woe_table.csv` and `woe_engine.pkl`, so the same binning basis can be restored for deployment or offline reproduction.
+The saved models use the SMF `save_model()` artifact envelope, and the metadata records the model name, target column, the features actually used by the model, whether the GBM used raw/WOE, the warm-start configuration, and the random seed. WOE-input models also save `woe_table.csv` and `woe_engine.pkl`, so the same binning basis can be restored for deployment or offline reproduction. The metadata of a model records the parameters the model was built with (the defaults, your `model_params`, the best row of the LR search and the seed that the model used), `warm_start_enabled` only for models that were warm-started (`lgb`, `xgb`), `warm_start_score_type`, and `woe_suffix`. `woe_artifacts['woe_table']` and `woe_table.csv` are the mapping the transform applies (one row per bin, counts of the rows the engine was fitted on), so their WOE is the WOE the models received. A run overwrites the files it writes and leaves the others alone: a second run into the same `output_dir` with fewer stages keeps the files of the stages that no longer run, so use a fresh directory per run.
 
 ### Chart Output
 
@@ -930,7 +930,7 @@ result.high_corr_pairs
 | PSI | `psi_summary`, `psi_details` | `psi_reference_dataset`, `psi_reference_data`, `psi_group_dims`, `psi_use_woe_bins`, `psi_params` |
 | IV / KS | `ivks_summary` | `ivks_group_dims`, `ivks_use_woe_bins`, `ivks_params`, `min_group_size` |
 | Correlation | `corr_matrix`, `high_corr_pairs`, `correlated_detail` | `corr_include_incumbent`, `corr_use_woe_bins`, `corr_params` |
-| Variable selection (optional) | `selected_features`, `screening_artifact`, `selection_summary` | `selection_enabled`, `selection_params`, `weight_col` |
+| Variable selection (optional) | `selected_features`, `screening_artifact`, `selection_summary` (its `config_snapshot` holds the thresholds that were used; `missing_gate_dropped` lists the features removed by the missing-rate gate before the WOE fit) | `selection_enabled`, `selection_params`, `weight_col` |
 | Report output | `output_paths`, `report_path` | `output_dir`, `write_outputs`, `write_excel`, `plot_outputs` |
 
 ### `FeatureValidationPipelineConfig` Parameters
@@ -939,13 +939,13 @@ result.high_corr_pairs
 |---|---|---|
 | `output_dir` | `"output/feature_validation"` | Output directory. |
 | `id_col` | `"flow_id"` | Primary key column. |
-| `apply_time_col` | `"apply_time"` | Application time column, used to derive `apply_week/month/quarter`. |
+| `apply_time_col` | `"apply_time"` | Application time column, used to derive `apply_week/month/quarter`. Datetime columns, date strings (a mix of dates and date-times is fine), `YYYYMMDD` integers, and Unix epochs in seconds or milliseconds are read; a `UserWarning` reports the values that still cannot be parsed (their rows get no week, month or quarter). |
 | `target_cols` | `None` | Label columns; when empty, WOE, IV, KS, and the IV/KS comparison in correlation are skipped. |
-| `new_feature_cols` | `None` | List of newly onboarded features; passing it explicitly is recommended. |
+| `new_feature_cols` | `None` | List of newly onboarded features; passing it explicitly is recommended. `None` takes every numeric column except the id, application time, `sample_col`, `split_col`, `oot_col`, `target_cols`, incumbent, `weight_col` and grouping columns (`time_dims`, `population_dims`, `woe_plot_groups`, `selection_group_dims`, the columns of `psi_group_dims`, `ivks_group_dims` and `group_specs`), in the DataFrame and in the CSV (batch) mode alike. Any other helper column, such as a score, is a feature unless you list it as an incumbent or pass `new_feature_cols`. |
 | `incumbent_feature_cols` | `None` | List of existing features, mainly used for the new vs incumbent correlation comparison. |
 | `input_type` | `"auto"` | Input type, one of `auto/dataframe/csv`. `auto` recognizes a DataFrame or a CSV path automatically from the object passed to `run()`. |
 | `csv_read_kwargs` | `{}` | Parameters passed through to `pd.read_csv()`; the Pipeline controls `usecols/chunksize` itself, so these two keys cannot be put here. |
-| `enable_batch` | `False` | Whether to explicitly enable CSV feature batch mode; off by default. When off, even if `feature_batch_size` / `feature_batches` are configured, the CSV is read in full, with a warning. |
+| `enable_batch` | `False` | Whether to explicitly enable CSV feature batch mode; off by default. When off, even if `feature_batch_size` / `feature_batches` are configured, the CSV is read in full, with a warning. With `selection_enabled=True` the selection runs inside each batch and the result is the union of the batches' choices (a `UserWarning` says so): features of different batches are not compared for correlation, and `max_selected_features` / `min_selected_features` apply to every batch separately. A batch that fails is recorded in `batch_metadata`, warned about, and its features are left out of every output (`n_failed_features` in the summary); the keys of `batch_results` keep the batch ids. |
 | `feature_batch_size` | `None` | When `enable_batch=True`, how many `new_feature_cols` to read per batch. |
 | `feature_batches` | `None` | Explicitly specifies the feature batching, taking precedence over `feature_batch_size`; features not covered are automatically appended to the last batch. |
 | `batch_base_cols` | `None` | Base columns read in every batch; when omitted, the id, time, split, target, time/population dimensions, categorical columns, existing features, and other necessary columns are included automatically. |
@@ -972,7 +972,7 @@ result.high_corr_pairs
 | `woe_fit_scope` | `"post_missing_gate"` | Since 0.7.1, the selection-grade missing gate is run first by `missing_rate_threshold`, and the top-level WOE is then fitted on the surviving variables; an explicit `"all"` reproduces the old basis. |
 | `woe_params` | `{"nbins": 10, "equal_freq": True, "min_bin_prop": 0.05, "sv_min_bin_size": 0.0, "sv_small_policy": "keep", "sv_woe_smoothing": "none", "sv_smoothing_alpha": 0.0}` | Passed through to `WOE_Master.fit()` when `woe_engine="equal_freq"`. Since 0.8.0 it explicitly carries the four `sv_*` SV bin governance keys, with defaults = the old behavior. |
 | `monotone_woe_params` | `{"n_init_bins": 20, "min_bin_size": 0.03, "min_n_bins": 2, "sv_min_bin_size": 0.0, "sv_small_policy": "keep", "sv_woe_smoothing": "none", "sv_smoothing_alpha": 0.0, "unseen_special_policy": "normal_bin"}` | Passed through to `MonotoneWOEBinner`. **Filtered by the `_MONOTONE_INIT_KEYS` allowlist; keys not on the list are silently dropped**; the four `sv_*` keys and the 0.8.2 `unseen_special_policy` are already on the list. |
-| `categorical_features` | `None` | List of categorical features, passed to `MonotoneWOEBinner(cate_feats=...)`. |
+| `categorical_features` | `None` | List of categorical features, passed to `MonotoneWOEBinner(cate_feats=...)`. With the monotone engine every non-numeric feature must be listed here (`ValueError` otherwise, before any work is done). |
 | `monotone_refine_cate_enabled` | `False` | Whether to call `refine_cate()` on categorical variables. |
 | `monotone_refine_cate_params` | `{}` | Passed through to `refine_cate(features, max_bins, min_bin_size, badrate_tol)`. |
 | `monotone_refine_dtree_enabled` | `False` | Whether to call `refine_dtree()`. |
@@ -982,9 +982,9 @@ result.high_corr_pairs
 | `woe_plot_groups` | `[]` | Group columns for extra WOE plots by group (`figs/woe/<target>/by_<group>`). Plots are written only while `write_outputs` and `plot_outputs` are both True. |
 | `psi_enabled` | `True` | Whether to compute `psi_summary` and `psi_details`. |
 | `psi_reference_dataset` | `"ins"` | PSI benchmark; one of `ins/oos/oot/external`. |
-| `psi_reference_data` | `None` | External PSI benchmark; required when `psi_reference_dataset="external"`. |
+| `psi_reference_data` | `None` | External PSI benchmark; required when `psi_reference_dataset="external"`, and it must hold every analysed feature (`ValueError` names the missing ones). A reference with no rows (for example `psi_reference_dataset="oot"` without OOT rows) gives a `UserWarning` and no PSI. |
 | `psi_group_dims` | `["sample", "time", "population"]` | Grouping of the PSI: `'sample'` is the split, `'time'` and `'population'` expand to `time_dims` and `population_dims`, other names are column names. An overall PSI is computed only when no group column remains (`'global'` adds nothing by itself). |
-| `psi_use_woe_bins` | `True` | Whether to reuse the step-3 WOE bin boundaries. |
+| `psi_use_woe_bins` | `True` | Whether to reuse the step-3 WOE bin boundaries. Without them the numeric PSI skips non-numeric features with a `UserWarning`. |
 | `psi_params` | `{"buckets": 10, "equal_freq": True, "min_bin_prop": 0.05}` | Keyword arguments of `PSICalculator`. |
 | `ivks_enabled` | `True` | Whether to compute `ivks_summary`. It needs a target. |
 | `ivks_group_dims` | `["global", "time", "population"]` | Groupings of the IV/KS report: `'global'` for all rows, `'time'` and `'population'` for each column of `time_dims` and `population_dims`, other names as single group columns. |
@@ -1048,6 +1048,13 @@ cm_result = CreditModelPipeline(
 ```
 
 You can also pass `feature_validation_result=fvp_result` directly. With `reuse_screening_woe=False`, only the screening list is reused, and the WOE is refitted per the CM configuration.
+
+What the hand-off checks and reports:
+
+- **Same split.** The artifact records the INS/OOS split settings of the validation run (`config_snapshot["split"]`). If the credit-model run splits differently (another `random_state`, `split_config`, `oot_col`, or another `split_col` / `sample_col`), it emits a `RuntimeWarning`: the validation fitted the WOE bins and chose the features on its INS rows, and the other split would score some of those rows as OOS. In a test with a pure-noise target, the OOS AUC was 0.58 instead of 0.51 for that reason. When both runs read the same label column, the split is the same and nothing is reported.
+- **Reused engine.** A reused engine keeps its own kind, bins and parameters, so `woe_engine`, `woe_params`, `monotone_woe_params` and `woe_fit_query` of the CM config do not apply to it. Selected features that the engine did not bin (for example the missing-rate gate left them out of the fit) are left out of every model with a `RuntimeWarning`, and `feature_selection_summary['final_features']` lists what the models use (`dropped_without_woe` lists the rest). If the artifact holds no usable engine (a CSV batch run, which does not keep engines, or a validation run without WOE and selection), the CM run fits its own and warns.
+- **Missing columns.** A selected feature that is not a column of the modeling data raises `KeyError` that names it.
+- **Orchestrator.** `run_modeling_from_validation` replaces the `target_col` and `weight_col` of `cm_config` with those of the validation run and emits a `UserWarning` when it changes a value that you set.
 
 A pure WOE scenario with `selection_enabled=False` can also be handed to CM directly. The FVP Result always carries `config_snapshot`, which includes `weight_col`, the target, the WOE engine, and the feature list; `FeatureScreeningArtifact.from_fvp_result()` passes the unscreened new features through as the original list. The `weight_col` here is the sample-weight contract between FVP/CM; the WOE binning itself is still fitted on unweighted samples.
 
