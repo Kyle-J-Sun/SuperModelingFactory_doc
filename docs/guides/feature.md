@@ -475,7 +475,7 @@ when one frame holds a split column with the values `ins`, `oos`, and `oot`. It 
 |---|---|---|
 | `psi_enabled` | `True` | Run the PSI stage |
 | `psi_threshold` | `0.2` | Drop a variable when its largest PSI is not below this value |
-| `psi_compare_splits` | `['oos']` | Splits compared with `ins`: `'oos'`, `'oot'`, or both |
+| `psi_compare_splits` | `['oos']` | Splits compared with `ins`: `'oos'`, `'oot'`, or both. Case and spaces are ignored and a bare string is one split; any other name raises `ValueError`. A listed split without rows gives a `UserWarning` and is skipped |
 | `psi_buckets` | `10` | Bins of the default PSI binning |
 | `psi_use_woe_bins` | `False` | Compute PSI on the screening binner's bins |
 | `iv_enabled` | `True` | Run the IV stage |
@@ -487,13 +487,15 @@ when one frame holds a split column with the values `ins`, `oos`, and `oot`. It 
 | `corr_threshold` | `0.75` | Absolute correlation above which two variables are redundant |
 | `corr_max_iterations` | `10` | Maximum filtering rounds |
 | `corr_use_woe_bins` | `False` | Let the screening binner supply the IV and the encoding of non-numeric variables |
+| `corr_method` | `'pearson'` | `'pearson'`, `'spearman'`, or `'kendall'`. Weighted runs with non-constant weights support Pearson only (`ValueError` otherwise) |
+| `corr_base_metric` | `'iv'` | `'iv'` or `'ks'`: the higher value wins between two correlated variables |
 | `corr_nan_policy` | `'pairwise'` | Weighted runs only: `'pairwise'`, `'median_fill'`, or `'raise'` on NaN |
 | `corr_block_size` | `256` | Weighted runs only: columns per block of the correlation matrix. Limits memory only |
 | `on_empty_stage` | `'keep_all_warn'` | When a stage would drop every variable: keep all of them, add a `<stage>_fallback` row to `summary`, and warn; or `'raise'` a `ValueError` |
 | `missing_rate_threshold` | `None` | Maximum missing rate. `None` skips the stage |
 | `missing_rate_ref` | `-999999` | Value treated as missing, in addition to `NaN` |
 | `woe_engine` | `'equal_freq'` | Engine fitted when a `*_use_woe_bins` flag is set and no `prefit_woe_engine` is given: `'equal_freq'` (a `WOE_Master`) or `'monotone'` |
-| `woe_fit_query` | `None` | `DataFrame.query` string that selects the INS rows used to fit the screening binner. An invalid query is ignored |
+| `woe_fit_query` | `None` | `DataFrame.query` string that selects the INS rows used to fit the screening binner. A query that fails or selects no row raises `ValueError` (it used to be ignored, and the binner was fitted on every INS row) |
 | `woe_params`, `monotone_woe_params` | see below | Arguments of the screening `WOE_Master.fit` and `MonotoneWOEBinner` |
 | `categorical_features` | `None` | Variables to treat as categorical in a self-fitted monotone binner |
 | `plot_path`, `plot_outputs` | `None`, `False` | With both set, unweighted runs write the IV-stage charts to `<plot_path>/overall/` |

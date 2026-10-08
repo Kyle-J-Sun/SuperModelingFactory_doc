@@ -430,7 +430,7 @@ result.perf_results["lgb"]  # by default includes ins/oos + full_apply + competi
 result.woe_artifacts["extra_eval"]  # the extra evaluation sets after the WOE transform
 ```
 
-The columns referenced by `woe_fit_query` must exist in the main input `DataFrame`; the syntax is pre-checked at the `run()` entry. A column-name validation failure raises `KeyError`, and a syntax error raises `ValueError`.
+The columns referenced by `woe_fit_query` must exist in the main input `DataFrame`; the expression is pre-checked at the `run()` entry. A column-name validation failure raises `KeyError`. A syntax error, an expression that fails on the INS rows, and an expression that selects no INS row (for example a typo in a value) raise `ValueError` before any stage runs. Method calls such as `x.notna()` or `channel.isin([...])` are accepted.
 
 ### OOT Governance and Evaluation Direction (0.7.1)
 
@@ -555,7 +555,7 @@ feature_selection={
 |---|---|---|
 | `psi_enabled` | `True` | Whether to run PSI stability screening. |
 | `psi_threshold` | `0.2` | Variables with PSI below this threshold are kept. |
-| `psi_compare_splits` | `["oos"]` | Splits PSI compares against; pass `["oos", "oot"]` to output both `psi_ins_oos` and `psi_ins_oot`. |
+| `psi_compare_splits` | `["oos"]` | Splits PSI compares against; pass `["oos", "oot"]` to output both `psi_ins_oos` and `psi_ins_oot`. Case and spaces are ignored, a bare string is one split, and any other name raises `ValueError`. |
 | `psi_buckets` | `10` | Number of PSI bins. |
 | `iv_enabled` | `True` | Whether to run IV screening. |
 | `iv_threshold` | `0.02` | Variables with IV greater than or equal to this threshold are kept. |

@@ -98,7 +98,7 @@ print(woe.get_mapping_table().query("VAR == 'income'")[["BIN_NUM", "BIN_RANGE", 
 | `dep` | `None` | Binary target column (1 = bad). `fit` needs it |
 | `graph_save_dir` | `""` | Base folder of `plot_bivar_graph` |
 | `woe_suffix` | `"_woe"` | Suffix of the output columns |
-| `missing_ref_value` | `SMF_MISSING_BIN` | Value that replaces missing data when `transform` bins it. Keep the default (see [Missing values and special values](#missing-values-and-special-values)). A small finite value triggers a `UserWarning`, and a value that occurs in the data raises `ValueError` |
+| `missing_ref_value` | `SMF_MISSING_BIN` | Value that replaces missing data when `fit` and `transform` bin it. Keep the default (see [Missing values and special values](#missing-values-and-special-values)). A small finite value triggers a `UserWarning`, and a value that occurs in the data raises `ValueError` |
 | `remove_exist_dir` | `False` | `True` **deletes** `graph_save_dir` recursively when the object is created |
 
 `fit(nbins=10, equal_freq=True, tree_binning_seed=None, chi2_config=None, precision=5, min_bin_prop=0.05, include_missing=True, fillna=None, spec_values=[], sv_min_bin_size=0.0, sv_small_policy="keep", sv_woe_smoothing="none", sv_smoothing_alpha=0.0)`
@@ -124,9 +124,10 @@ print(woe.get_mapping_table().query("VAR == 'income'")[["BIN_NUM", "BIN_RANGE", 
 
 ### Missing values and special values
 
-By default (`include_missing=True`), `fit` replaces missing values with `-999999` before it bins, and `transform` replaces
-them with `missing_ref_value`. Both land in the lowest bin, so missing values and sentinels such as `-1` silently share the
-bin of the smallest values. To score them on their own, list them in `spec_values`. Each listed value becomes a bin edge, so
+By default (`include_missing=True`), `fit` and `transform` both replace missing values with `missing_ref_value` (or with
+`fit(fillna=...)` while fitting) before they bin, so a missing value is scored by the bin it was fitted in. With the
+default, missing values land in the lowest bin, so missing values and sentinels such as `-1` silently share the bin of the
+smallest values. To score them on their own, list them in `spec_values`. Each listed value becomes a bin edge, so
 it gets a bin of its own.
 
 | `spec_values` | Result |
@@ -137,8 +138,13 @@ it gets a bin of its own.
 
 - The missing bin has `NaN` in `MIN` and `MAX`. Bins that stay empty are dropped, so `BIN_NUM` can skip numbers, and a
   variable without missing values has no missing bin.
-- Keep `missing_ref_value` at its default. The `-999999` used at fit time does not follow `missing_ref_value` or
-  `fit(fillna=...)`, so a custom value can send missing data to the wrong bin when you score.
+- Keep `missing_ref_value` at its default unless you need another one. Before this was fixed, the fit always filled with
+  `-999999` whatever `missing_ref_value` or `fit(fillna=...)` said, so a custom value such as `-99999` sent the missing
+  rows to an unrelated bin when you scored. A value inside the range of the data (for example `0`) treats missing values
+  as that value in the fit and in the transform.
+- A value outside the fitted range takes the WOE of the nearest bin. A feature with few distinct values is binned at its
+  own values, so its last bin ends at the largest training value; a larger value in new data used to get a `NaN` WOE (an
+  LR model then failed, a tree model read it as missing). The log reports how many records were moved to the nearest bin.
 - If `-999999` is in `spec_values` but a variable has no missing values in the fit sample, then missing values that show up
   later get a `NaN` WOE (the log says `Failed to Map WOE values for N Records`). Fit on data that contains missing values,
   or impute before scoring.

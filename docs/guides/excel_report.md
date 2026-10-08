@@ -197,12 +197,15 @@ em.close_workbook()
     `write_duo_chart` fixes the primary axis to 0 to 1 unless you pass `y1_axis_range`, which suits rates but clips counts.
     Pass `None` for an automatic scale or explicit `(min, max)` limits. `y2_axis_range` defaults to the primary range.
 
-!!! tip "Faster, smaller workbooks: `cell_scale`"
+!!! tip "`cell_scale`"
 
-    By default `add_worksheet` writes an explicit size for all 1,048,576 rows (`cell_scale=True`). That takes a few
-    seconds and adds about 2.5 MB per sheet, and it changes nothing at the default scale, because the explicit size
-    (20 px by 64 px) equals Excel's default. Pass `cell_scale=False` to skip it. Pass a tuple such as `(1, 2)` to scale
-    the row heights and column widths instead (here: columns twice as wide).
+    By default `add_worksheet` sets the row height and column width of the sheet (`cell_scale=True`). The size is 20 px by
+    64 px, which equals Excel's default, so it changes nothing at the default scale. Pass `cell_scale=False` to skip it. Pass
+    a tuple such as `(1, 2)` to scale the row heights and column widths instead (here: columns twice as wide).
+
+    Before this was fixed, the default wrote an explicit size for each of the 1,048,576 rows, which cost about 8 seconds,
+    0.5 GB of memory and 2.5 MB of file per sheet; a workbook of twenty sheets, such as the `CreditModelPipeline` report,
+    could exhaust the memory of the machine. The row height is now the default row height of the sheet.
 
 The methods used above:
 
@@ -643,8 +646,8 @@ logs a message, and keeps the existing format, so presets cannot be overridden.
 
 ??? question "`add_worksheet` is slow and the file is large"
 
-    The default `cell_scale=True` writes an explicit size for every row. Pass `cell_scale=False`; see
-    [Basic Usage](#2-basic-usage).
+    This was the cost of the default `cell_scale=True` before the row height became the default row height of the sheet
+    (see [Basic Usage](#2-basic-usage)). If you run an older version, pass `cell_scale=False`.
 
 ??? question "Non-Latin text in the figures appears as empty boxes"
 
