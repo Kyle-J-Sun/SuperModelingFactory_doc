@@ -358,8 +358,10 @@ fused = increment.predict_with_base_margin(oot[features], base_margin_oot, retur
 | Offset at prediction time | Native | **Not supported** |
 
 `GradientBoostingModel` hides these differences: you always pass `init_score`, and fused prediction always goes through
-`predict_with_base_margin`, the one approach that behaves identically on both backends. The offset is applied to the training set
-only; the validation set gets none, so early stopping measures the metric without the offset.
+`predict_with_base_margin`, the one approach that behaves identically on both backends. By default the offset is applied to the
+training set only; the validation set gets none, so early stopping measures the metric without the offset. Pass
+`eval_init_score=` (the offsets of the validation rows; LightGBM `eval_init_score`, XGBoost `base_margin_eval_set`) to stop on the
+combined model instead. CatBoost raises `NotImplementedError` for both.
 
 A model that was pickled as a bare `LGBMClassifier` or `XGBClassifier` can be adapted without retraining:
 `GradientBoostingModel.from_fitted(estimator)`; the backend is detected from the estimator, or pass `model_type=`.

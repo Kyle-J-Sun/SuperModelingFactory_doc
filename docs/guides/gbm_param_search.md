@@ -82,6 +82,7 @@ base_params = {
 | `verbose` | `True` | Print `param_search(grid): N combinations` before a grid search |
 | `fit_kwargs` | `None` | Extra keyword arguments for `GradientBoostingModel.fit`, for example `init_score` |
 | `random_state` | `None` | Seeds Optuna's TPE sampler so the same trials are proposed; ignored by the grid engine |
+| `eval_init_scores` | `None` | `{eval set name: log-odds offsets}` aligned by position with the rows of each eval set. With it the AUC of every candidate is that of the combined model (offset plus trees), and the offsets of the `validation_set` also go to the early stopping (`eval_init_score` of `fit`). Use it with a warm start: `fit_kwargs={"init_score": ...}` alone trains on the offset but scores the trees alone. An unknown set name or a wrong length raises `ValueError`. CatBoost raises `NotImplementedError` |
 | `weight_col` | `None` | Training weight column in `data` (see [Sample Weights](#5-sample-weights)) |
 | `eval_weight_col` | `None` | Weight column in every eval set, used for early stopping and for the weighted AUC |
 
