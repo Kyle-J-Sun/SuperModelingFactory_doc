@@ -1011,7 +1011,7 @@ Categorical variables declared in `categorical_features` can take part in weight
 
 When `selection_params={"vif_enabled": True, "vif_use_woe_bins": True}`, FVP builds the VIF on the INS WOE-encoded matrix; categorical variables must be paired with `woe_engine="monotone"`. With the default `False` kept, raw VIF computes only numeric columns, and non-numeric columns are kept and recorded in the selection audit, instead of crashing statsmodels.
 
-When `split_col` contains custom evaluation sets such as `ft_oot`, FVP fits the WOE using only `ins`, and runs feature screening using only the standard `ins/oos/oot`; custom evaluation sets take part in the WOE transform, the distributions, and validation outputs such as PSI by `_smf_split`. The DataFrame and CSV batch modes use the same semantics.
+When `split_col` contains custom evaluation sets such as `ft_oot`, FVP fits the WOE using only `ins`, and runs feature screening using only the standard `ins/oos/oot`; custom evaluation sets take part in the WOE transform, the distributions, and validation outputs such as PSI by `sample`. The DataFrame and CSV batch modes use the same semantics.
 
 ### FVP → CM Handoff
 

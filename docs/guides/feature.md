@@ -626,7 +626,7 @@ print(summary.head())
 |---|---|
 | `groupby` | Group column or list of columns. `None` summarizes the whole frame |
 | `spec_missing_value` | Value (or list of values) to treat as missing, such as `-999` |
-| `q` | Quantiles to report. Default `[0.05, 0.15, 0.25, 0.5, 0.75, 0.95, 0.99]`. Columns are named `Q5`, `Q15`, and so on. pandas always adds the median, so a `q` without `0.5` yields an extra column named `50%`, and fractional quantiles such as `0.995` keep their pandas name (`99.5%`) |
+| `q` | Quantiles to report. Default `[0.05, 0.15, 0.25, 0.5, 0.75, 0.95, 0.99]`. Columns are named `Q<percent>`: `Q5`, `Q15`, and `Q99.5` for `0.995`. pandas always adds the median, so a `q` without `0.5` yields an extra column named `Q50` (before, the median and the fractional quantiles kept their pandas names `50%` and `99.5%`, and `0.29` produced `29%` instead of `Q29`) |
 | `feature_block_size` | Variables summarized per block. Limits peak memory on wide tables and does not change the result |
 
 For numeric variables the result has the group columns, then `attribute`, `N_ALL`, `N`, `MEAN`, `STD`, `MIN`, one column
