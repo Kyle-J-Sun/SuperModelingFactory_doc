@@ -124,6 +124,7 @@ The audit found these behaviors and decided to document them instead of changing
 - **`ivks_summary` `n` and `missing_rate` treat `-999999` as missing on the non-WOE path only.**
 - **`correlated_detail` covers the pairs of the anchor group** of each correlated feature, not every pair of `high_corr_pairs`. With `batch_corr_mode='block_pairwise'` the cross-batch rows use the raw values for their IV (the engines are not kept), so their IV can differ from the one in `ivks_summary`, and the merged `corr_matrix` is block diagonal.
 - **Batch mode selects per batch** (a `UserWarning` says so); see `enable_batch`.
-- **Cosmetic:** empty `figs/woe`, `figs/mono_woe` and `figs/perf` directories are created when plots are off, WOE charts are written twice (`f_x.png` and `f_x__smf_plot_group.png`), and a relative `output_dir` gives relative paths in `model_paths` and in the model metadata.
+- **A stricter threshold can return a looser selection.** With the default `on_empty_stage='keep_all_warn'`, a threshold that would eliminate every feature keeps them all and warns; set `on_empty_stage='raise'` (in `selection_params`, `feature_selection` or the screening config) to stop instead.
+- **Cosmetic:** the quantile columns of `distribution_summary` are not all named `Q<percent>`, `group_col` shows the internal `_smf_split` for the sample dimension, empty `figs/woe`, `figs/mono_woe` and `figs/perf` directories are created when plots are off, WOE charts are written twice (`f_x.png` and `f_x__smf_plot_group.png`), and a relative `output_dir` gives relative paths in `model_paths` and in the model metadata.
 
 Should a new issue be confirmed, the [FAQ](../faq.md#known-issues) will list it with its workaround.
