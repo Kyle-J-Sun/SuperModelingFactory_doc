@@ -427,7 +427,7 @@ For the argument each API takes and the weighted metric semantics (`N` vs `N_RAW
 
 There are no open defects at the moment. The issues that the documentation audit and the end-to-end audit of the two pipelines found have been fixed; the [Unreleased notes](changelog/unreleased.md) list them one by one, with the results that change.
 
-A few behaviors are documented instead of changed, because changing them would move numbers that existing models rely on. They are listed in [Known Issues](changelog/unreleased.md#6-known-issues) with the parameter each one concerns: the totals used by special-value bins (switchable with `sv_total_basis`), where the warm-start prior is seen (`warm_start_score_scope`), `perf_min_bin_prop` as a target, files that stay in a reused `output_dir`, and the different bins of the weighted and the unweighted screening when no WOE bins are used.
+A few behaviors are documented instead of changed, because changing them would move numbers that existing models rely on. They are listed in [Known Issues](changelog/unreleased.md#6-known-issues) with the parameter each one concerns: `perf_min_bin_prop` as a target, files that stay in a reused `output_dir`, and the different bins of the weighted and the unweighted screening when no WOE bins are used.
 
 ---
 

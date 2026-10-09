@@ -306,7 +306,7 @@ The governance parameters (`min_bad_count` and the rest) are listed in [Binning 
 | `eps` | `1e-6` | Added to the shares so that `log` never sees zero |
 | `missing_woe` | `0.0` | WOE for missing values that are **not** in `special_values`, for unseen categories, and for the placeholder bins of `unseen_special_policy="neutral"` |
 | `special_values` | `None` | Values that get their own `[sv=<value>]` bin. `np.nan` adds a `[Missing]` bin. Applies to numeric features only |
-| `sv_total_basis` | `"ordinary"` | The bad and good totals that every bin's WOE is measured against: `"ordinary"` (legacy) or `"all"`. See [Which totals the WOE is measured against](#which-totals-the-woe-is-measured-against-sv_total_basis) |
+| `sv_total_basis` | `"all"` | The bad and good totals that every bin's WOE is measured against: `"all"` (one base) or `"ordinary"` (legacy, the default up to 0.8.2). See [Which totals the WOE is measured against](#which-totals-the-woe-is-measured-against-sv_total_basis) |
 | `cate_feats` | `None` | Categorical (discrete) features. Each value is a bin, with a `[Missing]` bin if the fit data has missing values. They are not cut into intervals |
 | `bin_label_decimals` | `None` | Decimals of the numbers in bin labels. `None` keeps 8 significant digits |
 
@@ -334,9 +334,8 @@ The governance parameters (`min_bad_count` and the rest) are listed in [Binning 
 - A numeric value listed in `special_values` gets a bin labeled `[sv=<value>]`, and `np.nan` gets `[Missing]`. Each bin has its
   own WOE.
 - A missing value that is not listed scores `missing_woe`.
-- By default the WOE of a special-value or `[Missing]` bin is computed against the bad and good totals of **all** fit rows,
-  and the WOE of an ordinary bin against the totals of the **ordinary** rows only, so the two kinds of bin are on different
-  bases. Set `sv_total_basis="all"` to put every bin on one base (see
+- By default every bin, ordinary, special-value or `[Missing]`, is measured against the bad and good totals of **all** fit
+  rows, so all bins are on one base. `sv_total_basis="ordinary"` restores the legacy two bases (see
   [Which totals the WOE is measured against](#which-totals-the-woe-is-measured-against-sv_total_basis)).
 - `refine_cate` labels a merged bin with its member names joined by a vertical bar, such as `B | C`.
 - Categories that were not seen at fit time score `missing_woe`. `apply_woe` emits a `RuntimeWarning` by default
@@ -649,8 +648,8 @@ feature has special values or missing values:
 
 | `sv_total_basis` | Ordinary bins (and categories) | Special-value and `[Missing]` bins | Consequence |
 |---|---|---|---|
-| `"ordinary"` (default, legacy) | totals of the ordinary rows | totals of all rows | Two bases. A special bin and an ordinary bin with the same bad rate get different WOE, the shares of the bins add up to more than 1, and the IV mixes the two bases |
-| `"all"` | totals of all rows | totals of all rows | One base, the textbook scorecard definition: the WOE of all bins is comparable, the shares add up to 1, and IV is a sum over one base |
+| `"all"` (default) | totals of all rows | totals of all rows | One base, the textbook scorecard definition: the WOE of all bins is comparable, the shares add up to 1, and IV is a sum over one base |
+| `"ordinary"` (legacy, the default up to 0.8.2) | totals of the ordinary rows | totals of all rows | Two bases. A special bin and an ordinary bin with the same bad rate get different WOE, the shares of the bins add up to more than 1, and the IV mixes the two bases |
 
 The bin edges and the monotone merging are the same in both modes (they run on the ordinary rows). Only the WOE of the ordinary
 bins moves, and by one constant, so their order and their gaps do not change. When the feature has no special or missing
@@ -665,15 +664,17 @@ treats such features more leniently than it should.
 binner = MonotoneWOEBinner(
     feature_cols=["income"], target_col="bad_flag",
     special_values=[-1, np.nan],
-    sv_total_basis="all",
+    sv_total_basis="ordinary",  # only to reproduce a scorecard fitted before the default changed
 )
 ```
 
 `CreditModelPipeline`, `FeatureValidationPipeline` and `feature_screen` accept the key in `monotone_woe_params`. The setting is
-applied at `fit` and again after `refine_chi2`, `refine_dtree` and `refine_cate`; bins loaded with `load_woe_bins` keep the WOE they
-were saved with. For an LR model use `"all"`: the model then sees special rows at the right place relative to the ordinary
-bins. `"ordinary"` stays the default so that existing scorecards and saved artifacts do not change; switching an existing model
-to `"all"` changes its inputs, so refit it.
+applied at `fit` and again after `refine_chi2`, `refine_dtree` and `refine_cate`, and the by-group charts of `plot_woe_graph`
+measure their in-group IV and per-group WOE lines on the same basis; bins loaded with `load_woe_bins` keep the WOE they
+were saved with, and a binner pickled before the setting existed keeps `"ordinary"` when it is refitted. `"all"` is the default
+because an LR model then sees special rows at the right place relative to the ordinary bins. Saved scorecards and artifacts keep
+the WOE they were built with; refitting one with the new default moves the WOE of its ordinary bins (and its IV) when the
+feature has special or missing values, so pass `sv_total_basis="ordinary"` to reproduce it exactly.
 
 ## Low-Share Special-Value Governance (SV Bin Governance, 0.8.0)
 
