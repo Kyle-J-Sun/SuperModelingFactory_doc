@@ -156,10 +156,10 @@ print(perf[["index", "N", "KS", "AUC", "Top10%_TargetRate", "Top10%_Lift"]])
 | Column | Meaning |
 |---|---|
 | `index` | The dataset name given to `add_dataset` |
-| `N`, `avgTrue`, `avgScore` | Row count, overall bad rate, mean score |
+| `N`, `avgTrue`, `avgScore` | Row count and overall bad rate of all rows, mean score of the ranked rows. With `spec_values`, `N_SPECIAL` and `N_SPECIAL_RAW` count the sentinel rows (as on the weighted path) |
 | `KS`, `AUC` | Maximum TPR − FPR, and the area under the ROC curve |
 | `Btm10%_TargetRate`, `Top10%_TargetRate` | Bad rate in the lowest- and highest-scored band. The percentage is `100 / pct_bins`: `pct_bins=5` gives `Btm20%_*` and `Top20%_*` |
-| `Btm10%_Lift`, `Top10%_Lift` | Band bad rate divided by `avgTrue` |
+| `Btm10%_Lift`, `Top10%_Lift` | Band bad rate divided by the bad rate of the ranked rows (`avgTrue` when there is no `spec_values`) |
 | `AUC_Shift`, `KS_Shift` | Previous row's metric divided by this row's, minus 1: a positive value means this dataset is weaker than the one above it |
 | `N_BUMP`, `MIN_RISK_DEP`, `MAX_RISK_DEP`, `KS_IN_GAINS`, `LIFT_IN_GAINS`, `IV`, `N_BINS` | Summary of the dataset's Gains table: rank-order breaks, smallest and largest bin-to-bin bad-rate change, KS, largest lift, total IV, and number of bins |
 
@@ -173,7 +173,7 @@ print(perf[["index", "N", "KS", "AUC", "Top10%_TargetRate", "Top10%_Lift"]])
 | `dist_bins` | `20` | Equal-width score bins in the distribution panels |
 | `pct_bins` | `10` | Equal-frequency bins for the percentile/gain panels, Gains tables, and Top/Btm bands |
 | `weight_col` | `None` | Default weight column; `add_dataset` can override it per dataset |
-| `spec_values` | `None` | Sentinel scores (for example `-1`) excluded from the ranking metrics (`N`, `KS`, `AUC`, Top/Btm bands) |
+| `spec_values` | `None` | Sentinel scores (for example `-1`) excluded from the ranking metrics (`KS`, `AUC`, the Top/Btm bands and lifts, `avgScore`). `N` and `avgTrue` still count every row and `N_SPECIAL` / `N_SPECIAL_RAW` report the sentinel part, weighted or not |
 | `ascending` | `None` | `None` keeps each panel's historical direction; a bool applies one direction to the Gains tables and figures |
 | `precision`, `min_bin_prop`, `include_missing`, `equal_freq`, `chi2_method`, `chi2_p`, `init_equi_bins`, `tree_binning`, `random_state` | `5`, `0.05`, `False`, `True`, `False`, `0.9`, `1000`, `False`, `42` | Binning controls forwarded to the Gains table |
 
