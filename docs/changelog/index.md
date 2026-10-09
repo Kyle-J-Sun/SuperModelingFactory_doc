@@ -11,6 +11,8 @@ An overview of every SuperModelingFactory release. All `0.3.x` releases predate 
 ## Version Index
 
 <div class="grid cards" markdown>
+- :material-tag-outline: **[Unreleased](unreleased.md)** - `RejectInferencePipeline` no longer trains approved rows without a target, or `hard_cutoff` rejects without a score, as goods
+
 - :material-tag: **[v0.9.0](v0.9.0.md)** - Three defaults flip (`unseen_special_policy='neutral'`, `sv_total_basis='all'`, `warm_start_score_scope='full'`); every text is English and every public docstring documents its parameters; the defects of the documentation verification and of the end-to-end audit of both pipelines are fixed (batch-mode selection over all batches, pooled tables without the stand-in OOT, consistent weighted and unweighted IV, evaluation and output-directory fixes)
 
 - :material-tag: **[v0.8.2](v0.8.2.md)** - Seven defect batches: `unseen_special_policy` for declared-but-unseen special values, warnings visible at import again, SMF's own warning noise and the bugs behind it, single-class evaluation, bool features in binning/WOE/FVP, and no more process-wide pandas option changes or writes into the caller's DataFrame

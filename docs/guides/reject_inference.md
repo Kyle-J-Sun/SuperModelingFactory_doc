@@ -260,6 +260,23 @@ supply a pre-computed score_col and set train_prescore=False.
 The error message gives the `approved` count, the `target-observed` count, and the total row count, so you can quickly tell whether the approval flag
 is wrong, labels are missing, or the whole batch was rejected.
 
+## 7. Pipeline Layer: Rows Without a Label
+
+A model can only learn from rows that have a label. Two kinds of rows in the RI datasets have none:
+
+- approved rows whose `target_col` is missing, for example applications that have not performed yet;
+- `hard_cutoff` rejects whose score is missing, which `HardCutoffInferrer` deliberately leaves unlabelled.
+
+Both stay in `result.ri_datasets` as they are, but the pre-score, every RI model, the `no_ri_benchmark` model, the validation sample and the random OOT use only rows with a label. The counts are reported, and a `UserWarning` names them:
+
+| Output | Column | Meaning |
+|---|---|---|
+| `ri_summary` | `N_approved_unlabelled` | Approved rows of the dataset without a target |
+| `ri_summary` | `N_rejected_unlabelled` | Rejected rows without an inferred label (`hard_cutoff` with a missing score) |
+| `ri_model_perf` | `train_unlabelled_n` | Rows of the model's training pool left out because their target is missing |
+
+`ri_summary['prescore_AUC']` is computed on the approved rows with a target. Before the next release after 0.9.0, the fit turned a missing target into 0, so these rows were trained as goods (see the [changelog](../changelog/unreleased.md)).
+
 ## FAQ
 
 ??? question "Which reject inference method is the most accurate?"

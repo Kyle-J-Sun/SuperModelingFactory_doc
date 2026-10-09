@@ -163,6 +163,7 @@ nav:
   - FAQ: faq.md
   - ChangeLog:
       - changelog/index.md
+      - Unreleased: changelog/unreleased.md
       - v0.9.0: changelog/v0.9.0.md
       - v0.8.2: changelog/v0.8.2.md
       - v0.8.1: changelog/v0.8.1.md
