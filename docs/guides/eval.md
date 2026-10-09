@@ -175,7 +175,7 @@ print(perf[["index", "N", "KS", "AUC", "Top10%_TargetRate", "Top10%_Lift"]])
 | `weight_col` | `None` | Default weight column; `add_dataset` can override it per dataset |
 | `spec_values` | `None` | Sentinel scores (for example `-1`) excluded from the ranking metrics (`KS`, `AUC`, the Top/Btm bands and lifts, `avgScore`). `N` and `avgTrue` still count every row and `N_SPECIAL` / `N_SPECIAL_RAW` report the sentinel part, weighted or not |
 | `ascending` | `None` | `None` keeps each panel's historical direction; a bool applies one direction to the Gains tables and figures |
-| `precision`, `min_bin_prop`, `include_missing`, `equal_freq`, `chi2_method`, `chi2_p`, `init_equi_bins`, `tree_binning`, `random_state` | `5`, `0.05`, `False`, `True`, `False`, `0.9`, `1000`, `False`, `42` | Binning controls forwarded to the Gains table |
+| `precision`, `min_bin_prop`, `include_missing`, `equal_freq`, `chi2_method`, `chi2_p`, `init_equi_bins`, `tree_binning`, `random_state` | `5`, `0.05`, `False`, `True`, `False`, `0.9`, `1000`, `False`, `42` | Binning controls forwarded to the Gains table. `min_bin_prop` is the minimum share of a Gains bin on both paths: the table uses `pct_bins` bins capped at `1 / min_bin_prop` |
 
 `add_dataset(name, data, weight_col=None, overwrite=False)` returns the evaluator, so calls chain. Registering an existing
 name raises `KeyError` unless `overwrite=True`, so build a new evaluator when re-running a notebook cell.

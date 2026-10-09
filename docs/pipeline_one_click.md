@@ -451,7 +451,8 @@ If the business flow has finished candidate selection and needs a formal accepta
 
 | Parameter | Default | Description |
 |---|---|---|
-| `output_dir` | `"output"` | Output root directory. |
+| `output_dir` | `"output"` | Output root directory. A run overwrites the files it writes and lists them in the hidden `.smf_manifest_credit_model.json`. |
+| `clean_output_dir` | `False` | After a successful run, remove the files that the previous manifest lists and this run did not write again (for example `models/model_xgb.pkl` after a run without XGBoost), and the folders they leave empty. Files that the pipeline did not write, and files of versions without the manifest, are never removed. |
 | `target_col` | `"badflag"` | Target label column. |
 | `feature_cols` | `None` | Raw model input feature columns. Passing it explicitly is recommended; when omitted, it is inferred from the numeric columns. |
 | `split_col` | `None` | The recommended new field name for the sample split. If passed, it takes precedence over `sample_col`; values support `ins/oos/oot`. |
@@ -513,7 +514,7 @@ If the business flow has finished candidate selection and needs a formal accepta
 | `owen_enabled` | `True` | Whether to compute Owen values (Shapley values over groups of related features) for every trained model except `xgb`. While it is `True`, the explanations also run for trained models that are not in `explain_models` (Owen values only). |
 | `business_prior_groups` | `None` | Business prior groups for the Owen value. |
 | `perf_pct_bins` | `10` | Number of bins for performance evaluation. |
-| `perf_min_bin_prop` | `0.03` | Target minimum share of a performance evaluation bin. It lowers the number of bins when `perf_pct_bins` bins would be smaller, but it is a target: with a large value (0.25 and above in a test) the bins can still be smaller than asked, and the weighted evaluation ignores it. |
+| `perf_min_bin_prop` | `0.03` | Minimum share of a bin in the Gains tables of the performance evaluation (`IV`, `LIFT`, `KS_IN_GAINS`, `N_BINS`, ... of `perf_results`), weighted or not: they use `perf_pct_bins` bins capped at `1 / perf_min_bin_prop`, so each bin holds about that share or more (ties in the scores can move a few rows). The Top/Btm percentile bands keep `perf_pct_bins`. |
 | `eval_target_cols` | `None` | Extra label columns evaluated against the same model scores in addition to `target_col` (duplicates removed; the results are stacked with a `tgt_name` column). They must exist in the input data and in every `extra_eval_datasets` frame, are not used for training, and are not excluded from inferred `feature_cols`. |
 | `all_missing_score_value` | `None` | Score given in the evaluation to rows whose raw model features are all missing (for example -1), the rule of the scoring API; `None` applies no override. It is stored in the saved model metadata. The raw features must be present in every evaluated frame (`KeyError` otherwise). The rule is applied to the raw frames, so it also works with `woe_params={'woe_suffix': ''}`, where the WOE columns replace the raw ones. |
 | `special_score_values` | `None` | Sentinel scores (for example `[-1]`) that get their own evaluation bin and are left out of the quantile edges and the ranking metrics. `N` and `avgTrue` of the summary count every row, weighted or not, and `N_SPECIAL` / `N_SPECIAL_RAW` report the sentinel part. |
@@ -938,7 +939,8 @@ result.high_corr_pairs
 
 | Parameter | Default | Description |
 |---|---|---|
-| `output_dir` | `"output/feature_validation"` | Output directory. |
+| `output_dir` | `"output/feature_validation"` | Output directory. A run overwrites the files it writes and lists them in the hidden `.smf_manifest_feature_validation.json`. |
+| `clean_output_dir` | `False` | After a successful run, remove the files that the previous manifest lists and this run did not write again (for example the `feature_batches` folders of a former batch run), and the folders they leave empty. Files that the pipeline did not write are never removed. |
 | `id_col` | `"flow_id"` | Primary key column. |
 | `apply_time_col` | `"apply_time"` | Application time column, used to derive `apply_week/month/quarter`. Datetime columns, date strings (a mix of dates and date-times is fine), `YYYYMMDD` integers, and Unix epochs in seconds or milliseconds are read; a `UserWarning` reports the values that still cannot be parsed (their rows get no week, month or quarter). |
 | `target_cols` | `None` | Label columns; when empty, WOE, IV, KS, and the IV/KS comparison in correlation are skipped. |
