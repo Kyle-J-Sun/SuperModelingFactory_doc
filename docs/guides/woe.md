@@ -150,7 +150,7 @@ it gets a bin of its own.
   or impute before scoring.
 - A bin without bads (or without goods) gets a finite WOE in `WOE_Master`: `eps` (`1e-06`) is added to its two shares,
   `ln((bad_pct + eps) / (good_pct + eps))`, as `MonotoneWOEBinner` does. The WOE of every other bin is not smoothed. Such
-  bins are common with a strong predictor or a rare target, also with equal-frequency bins. Before the next release
+  bins are common with a strong predictor or a rare target, also with equal-frequency bins. Up to 0.8.2
   `WOE_Master` returned `-inf` (`+inf`) for them, which made LR and XGBoost training fail. The helpers `calc_woe` and
   `calc_iv` and the Gains tables still return `-inf` (`+inf`) for a zero share.
 
@@ -306,7 +306,7 @@ The governance parameters (`min_bad_count` and the rest) are listed in [Binning 
 | `eps` | `1e-6` | Added to the shares so that `log` never sees zero |
 | `missing_woe` | `0.0` | WOE for missing values that are **not** in `special_values`, for unseen categories, and for the placeholder bins of `unseen_special_policy="neutral"` |
 | `special_values` | `None` | Values that get their own `[sv=<value>]` bin. `np.nan` adds a `[Missing]` bin. Applies to numeric features only |
-| `sv_total_basis` | `"all"` | The bad and good totals that every bin's WOE is measured against: `"all"` (one base) or `"ordinary"` (legacy, the default up to 0.8.2). See [Which totals the WOE is measured against](#which-totals-the-woe-is-measured-against-sv_total_basis) |
+| `sv_total_basis` | `"all"` | The bad and good totals that every bin's WOE is measured against: `"all"` (one base) or `"ordinary"` (legacy, the behavior of 0.8.2 and earlier). See [Which totals the WOE is measured against](#which-totals-the-woe-is-measured-against-sv_total_basis) |
 | `cate_feats` | `None` | Categorical (discrete) features. Each value is a bin, with a `[Missing]` bin if the fit data has missing values. They are not cut into intervals |
 | `bin_label_decimals` | `None` | Decimals of the numbers in bin labels. `None` keeps 8 significant digits |
 
@@ -585,9 +585,9 @@ monotone in the training sample).
 
 ??? question "I see a warning that special values never occur in the fit sample"
 
-    You declared a numeric special value, such as `-1`, that no fit row has for some feature. With the default
-    `unseen_special_policy="normal_bin"`, that value is scored as an ordinary number at scoring time. Remove the declaration
-    for that feature, or set `unseen_special_policy="neutral"` (see
+    You declared a numeric special value, such as `-1`, that no fit row has for some feature, and you set
+    `unseen_special_policy="normal_bin"` (the default up to 0.8.2): that value is then scored as an ordinary number at
+    scoring time. Remove the declaration for that feature, or use the default `unseen_special_policy="neutral"` (see
     [Declared but Unseen in the Fit Sample](#declared-but-unseen-in-the-fit-sample-unseen_special_policy-082)).
 
 ??? question "Why do I see more warnings since 0.8.2?"
@@ -649,7 +649,7 @@ feature has special values or missing values:
 | `sv_total_basis` | Ordinary bins (and categories) | Special-value and `[Missing]` bins | Consequence |
 |---|---|---|---|
 | `"all"` (default) | totals of all rows | totals of all rows | One base, the textbook scorecard definition: the WOE of all bins is comparable, the shares add up to 1, and IV is a sum over one base |
-| `"ordinary"` (legacy, the default up to 0.8.2) | totals of the ordinary rows | totals of all rows | Two bases. A special bin and an ordinary bin with the same bad rate get different WOE, the shares of the bins add up to more than 1, and the IV mixes the two bases |
+| `"ordinary"` (legacy, the behavior of 0.8.2 and earlier) | totals of the ordinary rows | totals of all rows | Two bases. A special bin and an ordinary bin with the same bad rate get different WOE, the shares of the bins add up to more than 1, and the IV mixes the two bases |
 
 The bin edges and the monotone merging are the same in both modes (they run on the ordinary rows). Only the WOE of the ordinary
 bins moves, and by one constant, so their order and their gaps do not change. When the feature has no special or missing
@@ -816,8 +816,8 @@ bin. `MonotoneWOEBinner(unseen_special_policy=...)` decides how that value is ha
 
 | Value | Bins table | Scoring (`apply_woe`, screening PSI and IV) | By-group charts and within-group IV |
 |---|---|---|---|
-| `"normal_bin"` (default) | No bin | The value is binned as an ordinary number: `-1` falls in the lowest bin | Same as scoring: an ordinary number |
-| `"neutral"` | A placeholder bin `[sv=-1]` is added: `n=0`, WOE `=missing_woe`, `iv=0`, decision `unseen_at_fit` | Scores `missing_woe` (0 by default, neutral) | The value's share inside the group is drawn separately and does not count toward the group IV |
+| `"normal_bin"` (the default up to 0.8.2) | No bin | The value is binned as an ordinary number: `-1` falls in the lowest bin | Same as scoring: an ordinary number |
+| `"neutral"` (default since 0.9.0) | A placeholder bin `[sv=-1]` is added: `n=0`, WOE `=missing_woe`, `iv=0`, decision `unseen_at_fit` | Scores `missing_woe` (0 by default, neutral) | The value's share inside the group is drawn separately and does not count toward the group IV |
 
 ```python
 unseen = MonotoneWOEBinner(
@@ -860,11 +860,14 @@ Both policies leave a trail, and the scored values do not depend on these record
 - Before 0.8.2, `import Modeling_Tool` switched warnings off for the whole process, so these warnings were invisible. See the
   [FAQ](../faq.md).
 
-!!! warning "The default is planned to change to `neutral` in 0.9.0"
+!!! warning "The default changed to `neutral` in 0.9.0"
 
-    `"normal_bin"` lets a sentinel (such as `-1` for "no record") take the WOE of a real value's bin. The next minor version
-    is planned to change the default to `"neutral"`. To keep the current scoring, pass `unseen_special_policy="normal_bin"`
-    explicitly.
+    `"normal_bin"` let a sentinel (such as `-1` for "no record") take the WOE of a real value's bin, so 0.9.0 made `"neutral"`
+    the default, as 0.8.2 announced. To reproduce the scoring of a binner fitted with 0.8.2 or earlier, pass
+    `unseen_special_policy="normal_bin"` explicitly; a pickled binner keeps the setting it was created with (`"normal_bin"`
+    for every binner from 0.8.2 or earlier). In the pipelines,
+    when one feature holds the `-999999` sentinel it is declared for every monotone feature, so the features that never
+    hold it get an empty `[sv=-999999]` row and score the sentinel as `missing_woe`.
 
 ### Pipeline-layer exposure
 

@@ -2,7 +2,7 @@
 
 The reference pages list the public classes and functions of each subpackage with their signatures, defaults, and
 docstrings. They are generated from the SMF source by [mkdocstrings](https://mkdocstrings.github.io/python/), so they
-describe the source the site was built from (0.8.2 plus the [unreleased changes](../changelog/unreleased.md)).
+describe the source the site was built from (0.9.0, see the [release notes](../changelog/v0.9.0.md)).
 
 !!! note "Docstrings"
 

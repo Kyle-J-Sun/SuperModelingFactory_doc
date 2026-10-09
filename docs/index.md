@@ -146,7 +146,7 @@ the [Quickstart](quickstart.md) walks through the same flow with explanations.
 
 ## Version and License
 
-- **Version**: 0.8.2
+- **Version**: 0.9.0
 - **Author**: Jingkai Sun
 - **License**: [Business Source License 1.1](https://github.com/Kyle-J-Sun/SuperModelingFactory/blob/main/LICENSE).
   Personal study, academic research, internal evaluation, prototyping, and teaching are allowed. **Production use**, such
