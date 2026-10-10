@@ -108,7 +108,7 @@ print(woe.get_mapping_table().query("VAR == 'income'")[["BIN_NUM", "BIN_RANGE", 
 | `nbins` | `10` | Maximum number of bins, capped at `max(5, 1 / min_bin_prop)`. In 0.8.2 the cap never exceeds 20, so a larger value has no effect even if you lower `min_bin_prop` |
 | `equal_freq` | `True` | `True` for equal-frequency bins, `False` for equal-width bins |
 | `spec_values` | `[]` | Values that get a bin of their own. See the next section |
-| `include_missing` | `True` | `False` drops missing rows from the fit. Scoring still sends missing values to the lowest bin |
+| `include_missing` | `True` | `True` gives missing values a bin of their own on every binning path. `False` drops missing rows from the fit, and scoring then sends missing values to the lowest bin |
 | `min_bin_prop` | `0.05` | Lowers the cap on the bin count (see `nbins`). It does not enforce a minimum size per bin: equal-width bins can be much smaller |
 | `precision` | `5` | Decimals of the bin edges |
 | `tree_binning_seed` | `None` | Any non-zero value switches to decision-tree bins and is used as the random seed. `None` or `0` keeps quantile bins |
@@ -116,25 +116,32 @@ print(woe.get_mapping_table().query("VAR == 'income'")[["BIN_NUM", "BIN_RANGE", 
 | `fillna` | `None` | Has no effect on the default binning path: missing values are filled with `-999999` while binning. Leave it unset |
 | `sv_min_bin_size`, `sv_small_policy`, `sv_woe_smoothing`, `sv_smoothing_alpha` | `0.0`, `"keep"`, `"none"`, `0.0` | Governance of special-value bins. See [Low-Share Special-Value Governance](#low-share-special-value-governance-sv-bin-governance-080) |
 
-!!! warning "`chi2_config` needs a workaround in 0.8.2"
+!!! note "`chi2_config` with the default `missing_ref_value`"
 
-    With the default `missing_ref_value` and `include_missing=True`, `fit(chi2_config=...)` raises
-    `ValueError: Bin edges must be unique`. Either pass `include_missing=False`, or create the object with
-    `missing_ref_value=-999999`. Chi-square bins are labeled `[a, b)`, while all other bins are labeled `(a, b]`.
+    Up to 0.9.0, `fit(chi2_config=...)` raised `ValueError: Bin edges must be unique` with the default `missing_ref_value`
+    and `include_missing=True`; it works now. Chi-square bins are labeled `[a, b)`, while all other bins are labeled
+    `(a, b]`.
 
 ### Missing values and special values
 
 By default (`include_missing=True`), `fit` and `transform` both replace missing values with `missing_ref_value` (or with
-`fit(fillna=...)` while fitting) before they bin, so a missing value is scored by the bin it was fitted in. With the
-default, missing values land in the lowest bin, so missing values and sentinels such as `-1` silently share the bin of the
-smallest values. To score them on their own, list them in `spec_values`. Each listed value becomes a bin edge, so
-it gets a bin of its own.
+`fit(fillna=...)` while fitting) before they bin, and the missing values get a bin of their own, `(-inf, missing_ref_value]`,
+on every binning path (equal-frequency, equal-width, decision tree and chi-square); the other bins are fitted on the real
+values. A sentinel that is stored as a number, such as `-1`, is a real value to the binner and shares the bin of the
+smallest values. To score it on its own, list it in `spec_values`: each listed value becomes a bin edge, so it gets a bin
+of its own.
 
 | `spec_values` | Result |
 |---|---|
-| `[]` (default) | Missing values and `-1` fall in the lowest bin |
-| `[-1]` | `-1` gets a bin. Missing values land in the same bin, because `-999999` is below `-1` |
-| `[-1, -999999]` | `-1` and missing values get one bin each: `(-999999.0, -1.0]` and `(-inf, -999999.0]` |
+| `[]` (default) | Missing values get their own bin; `-1` falls in the lowest bin of the real values |
+| `[-1]` | Missing values and `-1` get one bin each |
+
+!!! note "Up to 0.9.0"
+
+    The equal-frequency bins counted the filled missing values in their quantiles, so the missing rows shared the lowest
+    bin with real values (unless they made up more than one bin's share), and with the default `missing_ref_value`, which
+    the edge rounding turned into `-inf`, they shared it on every binning path. Refit to get the missing bin; an engine
+    fitted earlier keeps scoring with its stored bins.
 
 - The missing bin has `NaN` in `MIN` and `MAX`. Bins that stay empty are dropped, so `BIN_NUM` can skip numbers, and a
   variable without missing values has no missing bin.
@@ -575,8 +582,8 @@ monotone in the training sample).
 
 ??? question "`WOE_Master.fit(chi2_config=...)` raises `ValueError: Bin edges must be unique`"
 
-    See the warning under the `fit` parameters: pass `include_missing=False` or create the object with
-    `missing_ref_value=-999999`.
+    That happened up to 0.9.0 with the default `missing_ref_value` and `include_missing=True`. Upgrade, or pass
+    `include_missing=False` or create the object with `missing_ref_value=-999999`.
 
 ??? question "`fit` printed a traceback, and a feature is missing from the results"
 
