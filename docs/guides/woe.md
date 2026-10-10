@@ -677,16 +677,22 @@ for name, binner in [("0.9.1 default", merged), ("small_bin_policy=None", legacy
     print(name, round(float(table["iv"].sum()), 2), round(float(table["woe"].abs().max()), 1))
 ```
 
-- The same policy enforces `min_bin_size` (3% of the rows by default), so a bin below that share is merged too; pass
-  `min_bin_size=0` to merge only the class-pure bins. Categorical features merge with the bad-rate clustering of
-  `refine_cate`.
+- The same policy enforces `min_bin_size` (3% of the rows by default). In the default flow this effectively only adds the
+  merging of class-pure bins: the greedy fit starts from equal-frequency bins (about 5% each) and only merges them,
+  `refine_dtree` uses `min_samples_leaf=0.05`, and chi-square merging only makes bins larger. The exception is a bin that
+  tied values at the equal-frequency edges leave under 3%, which is merged too (the greedy fit does not enforce
+  `min_bin_size` itself). Pass `min_bin_size=0` to restrict the merging to class-pure bins. Merging joins adjacent bins
+  only, so a monotone feature stays monotone. Categorical features merge with the bad-rate clustering of `refine_cate`.
 - When `min_n_bins` stops the merging while a bin still has no bad or no good (for example a feature that separates the
   classes perfectly into two bins), the bin is kept and a `UserWarning` names it.
 - `small_bin_policy="warn"` keeps the bins and only warns, and `small_bin_policy=None` restores the behavior up to 0.9.0.
   Pass it in `monotone_woe_params` for the pipelines.
-- A binner pickled with 0.9.0 or earlier keeps `small_bin_policy=None` when it is loaded or refitted, and bins loaded with
-  `load_woe_bins` keep their WOE.
-- Special-value bins are not governed by this policy: see `sv_woe_smoothing` below, whose default stays `"none"`.
+- A binner pickled with 0.9.0 or earlier keeps `small_bin_policy=None` (and `min_bad_count=min_good_count=None`) when it
+  is loaded or refitted, and bins loaded with `load_woe_bins` keep their WOE.
+- Special-value bins are never merged by this policy. A special-value bin with fewer bads than `min_bad_count` or fewer
+  goods than `min_good_count` (a class-pure one with the defaults) is a violation of `sv_small_policy`: with the default
+  `"keep"` it keeps its WOE and `fit` warns (see
+  [Class-pure special-value bins](#class-pure-special-value-bins-091)), which changes no number.
 
 ## Which totals the WOE is measured against (`sv_total_basis`)
 
@@ -734,8 +740,8 @@ they are `MonotoneWOEBinner` constructor parameters and `WOE_Master.fit()` / `up
 | Parameter | Default | Values | Meaning |
 |---|---|---|---|
 | `sv_min_bin_size` | `0.0` | `[0.0, 1.0)` | Threshold on the SV bin's share of the **whole sample**. `0.0` turns the fallback off |
-| `sv_small_policy` | `"keep"` | `"keep"`, `"neutral"`, `"merge_missing"` | How an SV bin below the threshold is handled |
-| `sv_woe_smoothing` | `"none"` | `"none"`, `"laplace"` | Shrink the WOE of SV bins toward the overall bad rate |
+| `sv_small_policy` | `"keep"` | `"keep"`, `"neutral"`, `"merge_missing"` | How an SV bin below the share threshold, or (since 0.9.1) below `min_bad_count` / `min_good_count`, is handled; `"keep"` keeps it (and warns about the class-pure ones) |
+| `sv_woe_smoothing` | `"none"` | `"none"`, `"laplace"` | Shrink the bad rate of SV bins toward the overall bad rate, with `sv_smoothing_alpha` as a pseudo-count |
 | `sv_smoothing_alpha` | `0.0` | `>= 0.0` | Shrinkage strength. `0.0` turns it off |
 
 The defaults give exactly the results of 0.7.2. An illegal value raises `ValueError` at `__init__` or `fit()`.
@@ -855,6 +861,28 @@ print(mapping_sv[(mapping_sv["VAR"] == "income") & (mapping_sv["MIN"].isna() | (
 
 The `WOE_Master` table has no `sv_policy_applied` column. A `neutral` bin shows `WOE == 0` and `IV == 0`, and a merged bin shows
 `N == 0`.
+
+### Class-pure special-value bins (0.9.1)
+
+An SV bin that holds only bads (or only goods) has a WOE from `eps` alone, about +/-9.9 or more. Since 0.9.1
+`sv_small_policy` counts an SV bin with fewer bads than `min_bad_count` or fewer goods than `min_good_count` (both 1 by
+default) as a violation:
+
+| `sv_small_policy` | What happens to such a bin |
+|---|---|
+| `"keep"` (default) | Keeps its empirical WOE: no number changes. `fit` warns with the feature, the value, `n`, `bad`, `good` and the WOE; the SV table flags it in `sv_class_pure` and `binner._sv_pure_stats[feature]` lists it |
+| `"neutral"` | WOE and IV set to 0 (also without `sv_min_bin_size`) |
+| `"merge_missing"` | Merged into the `[Missing]` bin; without one it falls back to neutral |
+
+Smoothing does not remove the problem: `laplace` shrinks the bin's bad rate toward the overall bad rate with `alpha` as a
+pseudo-count on the whole bin, so its effect fades as the bin grows. With 10,000 bads and 90,000 goods, an all-bad SV bin
+of 20, 200 and 2,000 rows has a WOE of 7.6, 9.9 and 12.2, and 5.8, 8.1 and 10.4 with `alpha=0.5`. A large pure SV bin is
+often a genuine signal, which is why the default only reports it.
+
+Missing values form an SV bin only when NaN is listed in `special_values`; otherwise, with the default
+`missing_bin_strategy=None`, they score `missing_woe` and are not checked. `min_bad_count=None, min_good_count=None`
+switches the check off. The warning surfaces through `FeatureValidationPipeline`, `feature_screen` and
+`CreditModelPipeline` with `woe_engine="monotone"`, also when `fit` runs with `n_jobs > 1`.
 
 ### Declared but Unseen in the Fit Sample (`unseen_special_policy`, 0.8.2)
 

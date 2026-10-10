@@ -13,6 +13,7 @@ where a switch exists, and which changes are bug fixes without one. The details 
 | `MonotoneWOEBinner(sv_total_basis=...)` | (did not exist; behaved as `"ordinary"`) | `"all"` | `"all"` | `sv_total_basis="ordinary"` |
 | `CreditModelPipelineConfig(warm_start_score_scope=...)` | (did not exist; behaved as `"train"`) | `"full"` | `"full"` | `warm_start_score_scope="train"` |
 | `MonotoneWOEBinner(min_bad_count=..., min_good_count=..., small_bin_policy=...)` | `None`, `None`, `None` | `None`, `None`, `None` | `1`, `1`, `"merge"` | `small_bin_policy=None` |
+| Special-value bins below `min_bad_count` / `min_good_count` (class-pure with the defaults) | Not checked | Not checked | Reported: `UserWarning`, `sv_class_pure` column, `_sv_pure_stats`; numbers unchanged with the default `sv_small_policy="keep"`, neutralized or merged with the opt-in `"neutral"` / `"merge_missing"` | `min_bad_count=None, min_good_count=None` (also stops the merging of class-pure ordinary bins), or filter the warning |
 | `ODPS_PROJECT`, `ODPS_ENDPOINT` for `ODPSRunner` | Optional, with built-in defaults | Optional, with built-in defaults | Required (`KeyError` if unset) | Set both variables |
 
 The three `MonotoneWOEBinner` settings are also keys of `monotone_woe_params` in `CreditModelPipelineConfig` and
@@ -52,6 +53,10 @@ print(binner.small_bin_policy, binner.sv_total_basis)
   from 0.8.2 or earlier keeps `unseen_special_policy="normal_bin"`, `sv_total_basis="ordinary"` and
   `small_bin_policy=None`; a binner from 0.9.0 keeps `small_bin_policy=None`.
 - Bins loaded with `load_woe_bins` keep the WOE they were saved with.
+- With the default `min_bin_size=0.03`, `small_bin_policy="merge"` also merges an ordinary bin under 3% of the rows; in
+  the default flow such a bin only comes from tied values at the equal-frequency edges. `min_bin_size=0` restricts the
+  merging to class-pure bins.
+- The `.pyi` type stubs of 0.9.1 show the current signatures and defaults (they were stale up to 0.9.0).
 
 ## Fixes Without a Legacy Switch
 
