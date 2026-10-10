@@ -649,7 +649,7 @@ final statistics. It needs `ODPSRunner` credentials in the environment (see [ODP
 from Modeling_Tool import proc_means_odps
 
 summary = proc_means_odps(
-    input_table_name="mex_anls.feature_wide_table",
+    input_table_name="my_project.feature_wide_table",
     select_cols=features,
     group=["apply_month", "channel"],
     batch_size=50,
@@ -689,7 +689,7 @@ order **VIF, group stability, multi-label, truncation** and record their evidenc
 
 | Gate | Fields of `FeatureScreenConfig` | Effect |
 |---|---|---|
-| G02 IV upper limit | `iv_upper_threshold` | Drops variables whose IV is above the limit (suspected leakage). The check uses an IV with zero cells floored, so near-perfect separators are caught |
+| G02 IV upper limit | `iv_upper_threshold` | Drops variables whose IV is above the limit (suspected leakage). The check uses an IV with zero cells floored, so near-perfect separators are caught. For numeric variables it is computed on equal-frequency bins (weighted on weighted runs) on every path, so it does not depend on how the WOE engine merged its bins (since 0.9.1 the monotone engine merges class-pure bins by default, which can fold a leak into one ordinary bin) |
 | G06 VIF | `vif_enabled`, `vif_threshold=10.0`, `vif_min_features=2`, `vif_use_woe_bins`, `vif_tie_break_metric='iv'` | Repeatedly drops the variable with the highest VIF above the threshold, until none remains or `vif_min_features` is reached. Ties go to the lower IV |
 | G03 group stability | `monthly_iv_min`, `monthly_iv_cv_max`, `direction_consistency_min`, `min_group_n`, `insufficient_group_policy='keep_warn'` | Per-group IV floor, cap on the coefficient of variation of the group IVs, and floor on the share of groups with the same direction. Needs group evidence |
 | G04 multi-label | `target_rules`, `min_pass_count`, `per_target_iv_range`, `direction_reference_target` | A variable must pass its IV range and direction on all, any, or at least `min_pass_count` labels. Needs per-label evidence |

@@ -275,7 +275,7 @@ Both stay in `result.ri_datasets` as they are, but the pre-score, every RI model
 | `ri_summary` | `N_rejected_unlabelled` | Rejected rows without an inferred label (`hard_cutoff` with a missing score) |
 | `ri_model_perf` | `train_unlabelled_n` | Rows of the model's training pool left out because their target is missing |
 
-`ri_summary['prescore_AUC']` is computed on the approved rows with a target. Before the next release after 0.9.0, the fit turned a missing target into 0, so these rows were trained as goods (see the [changelog](../changelog/unreleased.md)).
+`ri_summary['prescore_AUC']` is computed on the approved rows with a target. Up to 0.9.0, the fit turned a missing target into 0, so these rows were trained as goods (see the [changelog](../changelog/v0.9.1.md)).
 
 ## 8. Pipeline Layer: One Score, and an OOT the Pre-score Never Saw
 

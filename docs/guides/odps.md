@@ -21,14 +21,15 @@ Install the optional dependency:
 pip install 'supermodelingfactory[odps]'
 ```
 
-`ODPSRunner()` takes no arguments. It reads its configuration from environment variables when it is created:
+`ODPSRunner()` takes no arguments. It reads its configuration from environment variables when it is created; all four are
+required and there are no built-in defaults:
 
 | Variable | Required | Default | Meaning |
 |---|---|---|---|
 | `ALIBABA_CLOUD_ACCESS_KEY_ID` | Yes | none (`KeyError` if unset) | AccessKey ID |
 | `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | Yes | none (`KeyError` if unset) | AccessKey secret |
-| `ODPS_PROJECT` | No | `mex_anls` | Project that unqualified table names refer to. The default is the library author's project, so always set it |
-| `ODPS_ENDPOINT` | No | `https://service.ap-southeast-1-vpc.maxcompute.aliyun-inc.com/api` | MaxCompute endpoint. The default is an Alibaba Cloud VPC endpoint (note `-vpc` in the host name), meant for access from inside Alibaba Cloud's network; elsewhere, set the public endpoint of your region |
+| `ODPS_PROJECT` | Yes | none (`KeyError` if unset) | Project that unqualified table names refer to |
+| `ODPS_ENDPOINT` | Yes | none (`KeyError` if unset) | MaxCompute endpoint of your project's region, from Alibaba Cloud's endpoint list (a VPC endpoint from inside Alibaba Cloud's network, the public one elsewhere) |
 
 ```bash
 export ALIBABA_CLOUD_ACCESS_KEY_ID="<your-access-key-id>"
@@ -40,6 +41,9 @@ export ODPS_ENDPOINT="https://service.<region>.maxcompute.aliyun.com/api"    # f
 Never write AccessKeys into source code, notebooks, or documentation, and keep any `.env` file out of version control.
 The [FAQ](../faq.md) shows how to load them from a shared `.env` file. `ODPSRunner` reads only an AccessKey pair; it has
 no argument for an STS token.
+
+Up to 0.9.0, `ODPS_PROJECT` and `ODPS_ENDPOINT` were optional and fell back to a project and an endpoint of the
+author's environment; since 0.9.1 a missing one raises `KeyError` like the AccessKey variables.
 
 !!! note "Which snippets need a live project"
 

@@ -308,7 +308,7 @@ The governance parameters (`min_bad_count` and the rest) are listed in [Binning 
 | `feature_cols` | required | Numeric features to bin |
 | `target_col` | required | Binary target column (1 = bad) |
 | `n_init_bins` | `20` | Number of equal-frequency bins to start from |
-| `min_bin_size` | `0.03` | Minimum share of the rows per ordinary bin. It takes effect **only when `small_bin_policy` is set**. Without a policy, `fit` ignores it |
+| `min_bin_size` | `0.03` | Minimum share of the rows per ordinary bin, enforced by `small_bin_policy` (with the default `"merge"` a smaller bin is merged into a neighbor). With `small_bin_policy=None`, `fit` ignores it |
 | `min_n_bins` | `2` | Merging stops at this many ordinary bins (special-value bins not counted); neither the greedy monotone step nor the chi-square merging goes below it (the greedy step used to end one bin below it). When the limit stops the merging, the WOE of the bins may not be monotone |
 | `eps` | `1e-6` | Added to the shares so that `log` never sees zero |
 | `missing_woe` | `0.0` | WOE for missing values that are **not** in `special_values`, for unseen categories, and for the placeholder bins of `unseen_special_policy="neutral"` |
@@ -603,14 +603,16 @@ monotone in the training sample).
 
 ## Binning Governance (0.6.7+)
 
-`MonotoneWOEBinner` has three groups of governance parameters for bin size, direction, and missing values. They are off by
-default (`None` or `"auto"`) and then behave as in earlier versions. The exception is `refine_min_n_bins_policy`, which
-defaults to `"warn"` since 0.7.1.
+`MonotoneWOEBinner` has three groups of governance parameters for bin size, direction, and missing values. The direction
+and missing-value groups are off by default (`None` or `"auto"`) and then behave as in earlier versions. The bin-size group
+is on since 0.9.1 (`min_bad_count=1`, `min_good_count=1`, `small_bin_policy="merge"`; see
+[Class-pure bins](#class-pure-bins-merged-by-default-since-091)), and `refine_min_n_bins_policy` defaults to `"warn"` since
+0.7.1.
 
 | Parameter | Default | Values | Effect |
 |---|---|---|---|
-| `min_bad_count`, `min_good_count` | `None` | int | Minimum number of bads and goods per ordinary bin |
-| `small_bin_policy` | `None` (off) | `"merge"`, `"warn"`, `"raise"` | A bin below `min_bad_count`, `min_good_count`, or `min_bin_size` is merged into the neighbor with the closer WOE, reported with a `UserWarning`, or raises `BinningPolicyViolation` |
+| `min_bad_count`, `min_good_count` | `1` (`None` up to 0.9.0) | int or `None` | Minimum number of bads and goods per ordinary bin |
+| `small_bin_policy` | `"merge"` (`None`, off, up to 0.9.0) | `"merge"`, `"warn"`, `"raise"`, `None` | A bin below `min_bad_count`, `min_good_count`, or `min_bin_size` is merged into the neighbor with the closer WOE, reported with a `UserWarning`, or raises `BinningPolicyViolation`; `None` switches the check off |
 | `monotone_direction` | `"auto"` | `"auto"`, `"increasing"`, `"decreasing"`, or `{feature: direction}` | Forces the WOE direction. `"increasing"` means the WOE rises with the feature value. A string applies to all numeric features |
 | `reference_target` | `None` | a 0/1 column | Derives each feature's direction from this label: increasing if the feature's mean among bads is higher than among goods. Features named in a `monotone_direction` dict keep their forced direction |
 | `direction_conflict_policy` | `None` (acts as `"warn"`) | `"warn"`, `"raise"`, `"keep"` | What to do when the fitted direction contradicts the expected one, or when the forced direction collapses a feature into one bin |
@@ -647,6 +649,44 @@ print(binner.get_direction_summary())       # feat, direction, direction_basis, 
 - `reference_target` and a `monotone_direction` dict can be combined: the dict wins for the features it names.
 - In `FeatureValidationPipeline`, `feature_screen`, and `CreditModelPipeline`, pass these parameters through
   `monotone_woe_params` (see [Pipeline-layer exposure](#pipeline-layer-exposure)).
+
+### Class-pure bins: merged by default since 0.9.1
+
+A bin that holds only goods (or only bads) has a bad share (or good share) of 0, so its WOE,
+`ln((bad share + eps) / (good share + eps))`, comes from `eps` alone: about `-9.9` for a bin with 2% of the goods and
+`-12.4` for one with 20% of them. Such a bin can inflate the IV of the feature (3.09 instead of 0.57 in the example below)
+and dominate a logistic regression. Standard scorecard practice requires every bin to hold both goods and bads, so since
+0.9.1 `MonotoneWOEBinner` defaults to `min_bad_count=1`, `min_good_count=1` and `small_bin_policy="merge"`: a class-pure
+bin is merged into its WOE-closest neighbor at the end of `fit` (and of `refine_dtree` / `refine_chi2`), in the pipelines
+and in `feature_screen` too, since they build the binner from `monotone_woe_params`.
+
+```python
+import numpy as np
+import pandas as pd
+from Modeling_Tool import MonotoneWOEBinner
+
+rng = np.random.default_rng(5)
+f = rng.random(5000)
+y = np.where(f < 0.2, 0, rng.binomial(1, 0.15 + 0.1 * f))   # the lowest fifth holds no bad
+frame = pd.DataFrame({"f": f, "y": y})
+
+merged = MonotoneWOEBinner(feature_cols=["f"], target_col="y").fit(frame)
+legacy = MonotoneWOEBinner(feature_cols=["f"], target_col="y", small_bin_policy=None).fit(frame)
+for name, binner in [("0.9.1 default", merged), ("small_bin_policy=None", legacy)]:
+    table = binner.get_final_bins()["f"]
+    print(name, round(float(table["iv"].sum()), 2), round(float(table["woe"].abs().max()), 1))
+```
+
+- The same policy enforces `min_bin_size` (3% of the rows by default), so a bin below that share is merged too; pass
+  `min_bin_size=0` to merge only the class-pure bins. Categorical features merge with the bad-rate clustering of
+  `refine_cate`.
+- When `min_n_bins` stops the merging while a bin still has no bad or no good (for example a feature that separates the
+  classes perfectly into two bins), the bin is kept and a `UserWarning` names it.
+- `small_bin_policy="warn"` keeps the bins and only warns, and `small_bin_policy=None` restores the behavior up to 0.9.0.
+  Pass it in `monotone_woe_params` for the pipelines.
+- A binner pickled with 0.9.0 or earlier keeps `small_bin_policy=None` when it is loaded or refitted, and bins loaded with
+  `load_woe_bins` keep their WOE.
+- Special-value bins are not governed by this policy: see `sv_woe_smoothing` below, whose default stays `"none"`.
 
 ## Which totals the WOE is measured against (`sv_total_basis`)
 

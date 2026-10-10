@@ -230,10 +230,10 @@ The recommended approach is to manage the AccessKey centrally in the **system-le
 
 !!! note "What `ODPSRunner` reads"
 
-    `ODPSRunner()` takes no arguments. It reads `ALIBABA_CLOUD_ACCESS_KEY_ID` and `ALIBABA_CLOUD_ACCESS_KEY_SECRET` (both
-    required: a missing one raises `KeyError`), plus `ODPS_PROJECT` and `ODPS_ENDPOINT`. If the last two are not set, it
-    falls back to built-in defaults (project `mex_anls` and a Singapore VPC endpoint) that belong to the author's
-    environment, so always set both. `pyodps` must be installed (`pip install 'supermodelingfactory[odps]'`).
+    `ODPSRunner()` takes no arguments. It reads `ALIBABA_CLOUD_ACCESS_KEY_ID`, `ALIBABA_CLOUD_ACCESS_KEY_SECRET`,
+    `ODPS_PROJECT` and `ODPS_ENDPOINT`, all four required: a missing one raises `KeyError` (since 0.9.1 there are no
+    built-in defaults for the project and the endpoint). `pyodps` must be installed
+    (`pip install 'supermodelingfactory[odps]'`).
 
 ---
 
@@ -263,10 +263,10 @@ Then write the credentials with an editor:
 
 ```bash
 # /opt/workspace/.env  —— one copy shared by all projects
-ALIBABA_CLOUD_ACCESS_KEY_ID=LTAI5tXXXXXXXXXXXXXXXXXX
-ALIBABA_CLOUD_ACCESS_KEY_SECRET=YYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
-ODPS_PROJECT=mex_anls
-ODPS_ENDPOINT=http://service.cn-shanghai.maxcompute.aliyun.com/api
+ALIBABA_CLOUD_ACCESS_KEY_ID=<your-access-key-id>
+ALIBABA_CLOUD_ACCESS_KEY_SECRET=<your-access-key-secret>
+ODPS_PROJECT=<your-project>
+ODPS_ENDPOINT=https://service.<region>.maxcompute.aliyun.com/api
 ```
 
 !!! warning "Security reminder"
