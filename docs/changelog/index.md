@@ -11,7 +11,7 @@ An overview of every SuperModelingFactory release. All `0.3.x` releases predate 
 ## Version Index
 
 <div class="grid cards" markdown>
-- :material-tag-outline: **[Unreleased](unreleased.md)** - `RejectInferencePipeline` no longer trains approved rows without a target, or `hard_cutoff` rejects without a score, as goods; a trained pre-score rejects `ri_score_direction='high_good'`, rescores an external reference and never sees the random OOT
+- :material-tag-outline: **[Unreleased](unreleased.md)** - `RejectInferencePipeline` no longer trains approved rows without a target, or `hard_cutoff` rejects without a score, as goods; a trained pre-score rejects `ri_score_direction='high_good'`, rescores an external reference and never sees the random OOT; `ScoreComparisonPipeline` compares all scores on the same rows, finds numeric groups, and its weighted Gains table no longer counts unlabelled rows as goods or ranks missing scores
 
 - :material-tag: **[v0.9.0](v0.9.0.md)** - Three defaults flip (`unseen_special_policy='neutral'`, `sv_total_basis='all'`, `warm_start_score_scope='full'`); every text is English and every public docstring documents its parameters; the defects of the documentation verification and of the end-to-end audit of both pipelines are fixed (batch-mode selection over all batches, pooled tables without the stand-in OOT, consistent weighted and unweighted IV, evaluation and output-directory fixes)
 

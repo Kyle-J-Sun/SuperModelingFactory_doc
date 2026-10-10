@@ -338,6 +338,11 @@ The weighted table has bins `1` to `nbins` (bin 1 holds the highest scores), eac
 weight, and extra `N_RAW`, `KS`, and `AUC` columns. See [Where weights are applied](#where-weights-are-applied) for what the
 weighted path ignores.
 
+It follows the unweighted rules for incomplete rows. A row with a missing target counts in `N` but not in `PERF_CNT`,
+`N_BAD` or `N_GOOD`, so `AVG_BAD` is `N_BAD / PERF_CNT` and the `AUC` uses the labelled rows. A row with a missing score
+never enters the bins: it is left out, or reported in a `Missing` row after the bins with `include_missing=True`. Up to
+0.9.0 the weighted table counted unlabelled rows as goods and ranked missing scores into the last bins.
+
 ### Custom columns with `add_func`
 
 `add_func` receives the rows of one bin as a DataFrame (all columns of your data, plus the bin columns `_bin_num` and
@@ -402,13 +407,13 @@ print(gains_by_score[["score_name", "_bin_num", "N", "AVG_BAD", "LIFT"]].head())
 !!! note "Positive scores only"
 
     `model_perf_compare` keeps only rows whose scores are greater than 0 when `positive_score_only=True` (the default);
-    pass `False` if your scores can legitimately be zero or negative. `get_score_correlation`, `get_cross_risk_summary`,
+    pass `False` if your scores can legitimately be zero or negative. Missing and infinite scores are never used. `get_score_correlation`, `get_cross_risk_summary`,
     and `cross_perf_eval` always drop rows with a score of 0 or below, because 0 and negative values conventionally mark
     "no score".
 
 | Method | Returns |
 |---|---|
-| `model_perf_compare(data=None, grp_name=None, dist_bins=100, pct_bins=10, min_data_size=50, sync_data_size=True, min_bin_prop=None, include_missing=None, equal_freq=None, sample_name=None)` | One performance row per score (the `PerformanceEvaluator` columns plus `score_name`); `sample_name` labels the `index` column (default `'all'`); `grp_name` adds a per-group evaluation |
+| `model_perf_compare(data=None, grp_name=None, dist_bins=100, pct_bins=10, min_data_size=50, sync_data_size=True, min_bin_prop=None, include_missing=None, equal_freq=None, sample_name=None)` | One performance row per score (the `PerformanceEvaluator` columns plus `score_name` and `N_OWN`); `sample_name` labels the `index` column (default `'all'`); `grp_name` adds a per-group evaluation. With `sync_data_size=True` every score, the base score included, is evaluated on the rows where all the scores are valid; `N_OWN` is the score's own number of valid rows. A score without valid rows is left out with a warning |
 | `get_gains_summary(data=None, grp_name=None, disp=True, grp_disp_metric=None, grp_nbins=5, withSummary=True, add_func=None, sync_range=True, spec_values=None, include_missing=None, fillna=None)` | Gains tables for every score, stacked, with `score_name`. Without `add_func`, only the columns in `gains_display_metric_list` are kept; with `add_func`, all columns plus yours |
 | `get_score_correlation(score_list=None, method='pearson')` | Long-format correlation table with `base`, `compare`, `corr` |
 | `get_base_score(scorename='_base_model_score_', disp=False)` | Returns `self` after adding the fitted `model`'s probability as the base-score column (the model needs `feature_names_in_`) |

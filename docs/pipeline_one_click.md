@@ -1303,7 +1303,8 @@ result.pairwise_cross
 | `precision` | `5` | Numeric precision. |
 | `include_missing` | `False` | Whether to include missing values in the binning. |
 | `fillna` | `-999999` | Missing-fill value. |
-| `positive_score_only` | `True` | Whether to treat scores as positively oriented. |
+| `positive_score_only` | `True` | Whether a score counts as valid in `global_perf` / `group_perf` only where it is greater than 0 (0 and negative values mean "no score"). Missing and infinite scores are never valid. |
+| `perf_common_rows` | `True` | `True` evaluates every score of `global_perf` / `group_perf`, the base score included, on the rows where all the scores are valid, so the scores are compared on one population; a score without any valid row is left out with a warning. `False` evaluates each score on its own valid rows. The column `N_OWN` gives each score's own number of valid rows. |
 | `group_missing_values` | `["", " ", "NA", "NULL", "nan"]` | String values treated as missing in grouping dimensions. |
 | `drop_missing_group_values` | `True` | Whether to set the values above to missing before group evaluation, so that empty strings are not treated as a separate population. If set to `False` with `include_missing=True`, they are kept as a `[Missing]` group. |
 | `time_dims` | `["apply_month"]` | List of time dimensions. |

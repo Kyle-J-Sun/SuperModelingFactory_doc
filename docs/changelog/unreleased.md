@@ -30,3 +30,23 @@ The same audit found three ways in which the pre-score disagreed with the rest o
     - A configuration with `ri_score_direction="high_good"` and a pre-score trained by the Pipeline now raises. Its results were inverted; use `"high_bad"`.
     - A run with an external `ri_approved_data` that carries its own `score_col`, while the Pipeline trains the pre-score, now infers the reject labels from the new pre-score.
     - With the default random OOT, the pre-score is trained on about `1 - oot_frac` of the labelled approved rows instead of all of them, so `prescore_model`, the pre-score column, the inferred labels, `ri_model_perf` and `best_method` change. Runs with `oot_data` or with OOT rows from `split_col`, and runs with `train_prescore=False` and your own scores, are not affected by this change (checked: identical results).
+
+## 3. `ScoreComparisonPipeline`: Scores Compared on the Same Rows, Groups by Value, Weighted Gains Fixed
+
+An end-to-end audit of `ScoreComparisonPipeline` ran it on synthetic scores whose true performance is known. Six defects distorted the comparison or lost data without a word. Each has a regression test in `test_score_comparison_audit.py` that fails without the fix. Items 1, 2, 5 and 6 are fixed in the shared evaluation code, so `Model_Evaluation_Tool.model_perf_compare` and the weighted Gains table behave the same way outside the pipeline.
+
+| Defect | Fix |
+|---|---|
+| `model_perf_compare` evaluated each comparison score on the rows where *every* comparison score was above 0: one comparison score that was always 0 removed every other comparison score from `global_perf` and `group_perf`, and a score covering 10% of the rows cut the others to 800 of 8,000 rows | A score without any valid row is left out of the comparison with a `UserWarning` instead of emptying the others |
+| The base score kept all its rows while the comparison scores used the shared ones, so `global_perf` compared AUCs measured on different populations. With a comparison score covering 60% of the rows both AUCs read about 0.71, while on the same rows the base score has 0.637 and the new score 0.713 | Every score, the base score included, is evaluated on the rows where all the scores are valid (`sync_data_size=True`, the default). The new column `N_OWN` gives each score's own number of valid rows. The pipeline's new `perf_common_rows=False` evaluates each score on its own rows instead |
+| `multi_group_wrapper` selected each group with the query ``col == 'value'``, so a numeric group column (the default `apply_month` holding `202401`) gave an empty `group_perf` table | Groups are selected by value; missing values form no group |
+| A group value containing a quote (`kid's app`) stopped the run with `SyntaxError` | Fixed by the same change |
+| The weighted Gains table counted rows with a missing target as goods: the top bin's bad rate read 0.374 for a true 0.417, and the `AUC` came out NaN | Rows with a missing target count in `N` only; `PERF_CNT`, `N_BAD`, `N_GOOD`, `AVG_BAD`, `LIFT` and `AUC` use the labelled rows, as in the unweighted table |
+| The weighted Gains table ranked rows with a missing score into the last bins whatever `include_missing` said (the top bin held only missing scores) | Missing scores never enter the bins: they are left out, or reported in a `Missing` row with `include_missing=True` |
+
+The group tables collect the notices about scores without valid rows into one `UserWarning` that names the affected group dimensions.
+
+!!! note "Results that change"
+    - `global_perf` and `group_perf` (and `model_perf_compare` with the default `sync_data_size=True`) evaluate the base score on the common rows: whenever a comparison score is missing, zero or negative where the base score is valid, the base score's `N`, `AUC`, `KS` and lift change. With full coverage nothing changes except the new `N_OWN` column. `sync_data_size=False` now means "each score on its own valid rows" for every score (comparison scores no longer need a valid base score).
+    - Group tables of numeric group columns are filled, and their rows come in order of appearance instead of an arbitrary order.
+    - The weighted Gains table (pipeline `gains` with `weight_col`, `GainsTableCalculator` and `get_gains_table` with `weight_col`, and the weighted `PerformanceEvaluator` summary's `LIFT` and `IV`) changes only when the data has a missing target or a missing score.
