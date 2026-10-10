@@ -295,6 +295,12 @@ The index is `(_bin_num, _bin_range)`. With the default `ascending=False`, bin 0
 | `RANK_ORDER_BUMP` | `1` where the bad rate moves against the expected direction (a rank-ordering break) |
 | `WOE`, `IV` | Weight of evidence and information value of the bin |
 
+With `include_missing=True` (the default of `GainsTableCalculator` and `get_gains_table`), rows with a missing score
+are filled with `fillna` and form a bin of their own, `(-inf, fillna]`, with `NaN` in `MIN` and `MAX`; the other bins are
+the equal-frequency bins of the real scores. A score that already holds the `fillna` value lands in the same bin. Up to
+0.9.0 the equal-frequency quantiles counted the filled rows as the lowest scores, so the missing rows shared the lowest
+bin with real values (unless they made up more than one bin's share). `cross_risk` follows the same rule.
+
 `GainsTableCalculator(data, dep, nbins=10, precision=5, min_bin_prop=0.05, include_missing=True, score=None, model=None, varlist=None, equal_freq=True, chi2_method=False, chi2_p=0.95, init_equi_bins=100, fillna=-999999, spec_values=[], tree_binning=False, random_state=42, ascending=False, weight_col=None, weighted_binning=None)`
 holds the configuration, and
 `calculate(grp_name=None, min_data_size=100, grp_colname=None, sync_range=True, retSummary=False, withSummary=False, wholeGroup=False, add_func=None, weight_col=None)`

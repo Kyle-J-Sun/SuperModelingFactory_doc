@@ -33,7 +33,7 @@ The same audit found three ways in which the pre-score disagreed with the rest o
 
 ## 3. `ScoreComparisonPipeline`: Scores Compared on the Same Rows, Groups by Value, Weighted Gains Fixed
 
-An end-to-end audit of `ScoreComparisonPipeline` ran it on synthetic scores whose true performance is known. Six defects distorted the comparison or lost data without a word. Each has a regression test in `test_score_comparison_audit.py` that fails without the fix. Items 1, 2, 5 and 6 are fixed in the shared evaluation code, so `Model_Evaluation_Tool.model_perf_compare` and the weighted Gains table behave the same way outside the pipeline.
+An end-to-end audit of `ScoreComparisonPipeline` ran it on synthetic scores whose true performance is known. Seven defects distorted the comparison or lost data without a word. Each has a regression test in `test_score_comparison_audit.py` that fails without the fix. Items 1, 2, 5, 6 and 7 are fixed in the shared evaluation code, so `Model_Evaluation_Tool.model_perf_compare` and the Gains tables behave the same way outside the pipeline.
 
 | Defect | Fix |
 |---|---|
@@ -43,10 +43,12 @@ An end-to-end audit of `ScoreComparisonPipeline` ran it on synthetic scores whos
 | A group value containing a quote (`kid's app`) stopped the run with `SyntaxError` | Fixed by the same change |
 | The weighted Gains table counted rows with a missing target as goods: the top bin's bad rate read 0.374 for a true 0.417, and the `AUC` came out NaN | Rows with a missing target count in `N` only; `PERF_CNT`, `N_BAD`, `N_GOOD`, `AVG_BAD`, `LIFT` and `AUC` use the labelled rows, as in the unweighted table |
 | The weighted Gains table ranked rows with a missing score into the last bins whatever `include_missing` said (the top bin held only missing scores) | Missing scores never enter the bins: they are left out, or reported in a `Missing` row with `include_missing=True` |
+| With `include_missing=True` and equal-frequency bins, the unweighted Gains table (`get_gains_table`, `GainsTableCalculator`, the pipeline's `gains`) and `cross_risk` filled missing scores with `fillna` and counted them in the quantiles: in the test the 800 missing rows shared the lowest bin with 800 real scores and moved every edge, unless they made up more than one bin's share. Equal-width bins already gave them a bin of their own | Missing scores (and scores already holding `fillna`) form their own bin `(-inf, fillna]`; the other bins are the equal-frequency bins of the real scores, the same as with `include_missing=False`. Grouped tables (`grp_name`) decide this once over all groups, so every group keeps the same bin numbers and labels. Complete scores keep their bins |
 
 The group tables collect the notices about scores without valid rows into one `UserWarning` that names the affected group dimensions.
 
 !!! note "Results that change"
     - `global_perf` and `group_perf` (and `model_perf_compare` with the default `sync_data_size=True`) evaluate the base score on the common rows: whenever a comparison score is missing, zero or negative where the base score is valid, the base score's `N`, `AUC`, `KS` and lift change. With full coverage nothing changes except the new `N_OWN` column. `sync_data_size=False` now means "each score on its own valid rows" for every score (comparison scores no longer need a valid base score).
     - Group tables of numeric group columns are filled, and their rows come in order of appearance instead of an arbitrary order.
+    - Unweighted Gains and cross-risk tables built with `include_missing=True` (the default of `get_gains_table`, `GainsTableCalculator` and `Model_Evaluation_Tool`) change when a score has missing values: the missing rows get bin 0 and the equal-frequency edges of the real scores move. WOE binning is not changed: `WOE_Master.fit` and `get_woe_table` with `include_missing=True` and equal-frequency bins still count filled missing values in the quantiles (declare the fill value in `spec_values` to give them a bin of their own).
     - The weighted Gains table (pipeline `gains` with `weight_col`, `GainsTableCalculator` and `get_gains_table` with `weight_col`, and the weighted `PerformanceEvaluator` summary's `LIFT` and `IV`) changes only when the data has a missing target or a missing score.

@@ -1301,7 +1301,7 @@ result.pairwise_cross
 | `equal_freq` | `True` | Whether to use equal-frequency binning. |
 | `min_data_size` | `50` | Minimum sample size for global and group evaluation. |
 | `precision` | `5` | Numeric precision. |
-| `include_missing` | `False` | Whether to include missing values in the binning. |
+| `include_missing` | `False` | Whether missing scores get a bin of their own in the Gains and cross-risk tables (unweighted: `(-inf, fillna]`; weighted: a `Missing` row). `False` leaves them out of those tables. |
 | `fillna` | `-999999` | Missing-fill value. |
 | `positive_score_only` | `True` | Whether a score counts as valid in `global_perf` / `group_perf` only where it is greater than 0 (0 and negative values mean "no score"). Missing and infinite scores are never valid. |
 | `perf_common_rows` | `True` | `True` evaluates every score of `global_perf` / `group_perf`, the base score included, on the rows where all the scores are valid, so the scores are compared on one population; a score without any valid row is left out with a warning. `False` evaluates each score on its own valid rows. The column `N_OWN` gives each score's own number of valid rows. |
