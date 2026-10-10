@@ -277,6 +277,18 @@ Both stay in `result.ri_datasets` as they are, but the pre-score, every RI model
 
 `ri_summary['prescore_AUC']` is computed on the approved rows with a target. Before the next release after 0.9.0, the fit turned a missing target into 0, so these rows were trained as goods (see the [changelog](../changelog/unreleased.md)).
 
+## 8. Pipeline Layer: One Score, and an OOT the Pre-score Never Saw
+
+Three rules keep the pre-score consistent with the rest of the pipeline:
+
+| Rule | Why |
+|---|---|
+| A pre-score trained by the Pipeline requires `ri_score_direction="high_bad"`; `"high_good"` raises `ValueError` | The trained pre-score is P(bad). Read as a high-good score, it made `hard_cutoff` and `fuzzy_augment` label the riskiest rejects good (the hard-cutoff reject bad rate fell from 0.99 to 0.23 in the audit). Use `"high_good"` only with your own score and `train_prescore=False` |
+| When the Pipeline trains the pre-score, an external `ri_approved_data` is scored with it, and an existing `score_col` there is replaced with a `UserWarning` | The rules are fitted on the reference and applied to the rejects. A reference that kept its own score put the two on different scales (reject bad rate 0.09 for a true 0.41 in the audit) |
+| The random OOT (`oot_frac`) is drawn before the pre-score is trained and is left out of its training data | The inferred reject labels come from the pre-score. When it had learned the OOT labels, the RI models inherited them and their OOT AUC beat the benchmark on pure noise (0.54 against 0.51 for `hard_cutoff`) |
+
+The random OOT keeps the same rows as before; only the pre-score loses them. With `ri_approved_scope="output_subset"` the OOT is drawn from all labelled approved rows and only the drawn rows inside the subset are used, so its share of the subset is about `oot_frac`. The OOT from `split_col` or `oot_data` never entered the pre-score, so those runs are unchanged. The pre-score still trains on the validation rows of the RI models.
+
 ## FAQ
 
 ??? question "Which reject inference method is the most accurate?"

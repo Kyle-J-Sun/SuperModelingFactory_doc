@@ -153,13 +153,13 @@ result.oot_summary        # summary of mature-sample filtering of the external O
 | `random_state` | `42` | Random seed, used for the pre-score split and OOT sampling. |
 | `write_outputs` | `True` | Whether to write intermediate artifacts such as CSVs and images. |
 | `write_excel` | `True` | Whether to output the Excel report. |
-| `train_prescore` | `True` | Whether to train a pre-score model on approved samples and score all samples. |
+| `train_prescore` | `True` | Whether to train a pre-score model on approved samples and score all samples. The rows held out as random OOT (`oot_frac`) are left out of its training data. |
 | `prescore_model_type` | `"lgb"` | Pre-score model type; supports `"lgb"`, `"xgb"`, `"cat"`, `"lr"`. GBMs use `GradientBoostingModel`, and LR uses `LRMaster`. |
 | `prescore_params` | `{}` | Pre-score model parameter overrides; the Pipeline first picks the default parameters for the model type, and never passes LightGBM parameters to XGBoost/CatBoost/LR. |
 | `prescore_test_size` | `0.3` | Share of the pre-score validation set split off inside the approved samples. |
 | `ri_methods` | `["simple_augment", "hard_cutoff", "fuzzy_augment", "parceling"]` | Reject-inference methods to try. Aliases are supported: `simple`, `hard`, `fuzzy`, `parcel`. |
 | `ri_method_params` | `{}` | Independent parameters for each RI method. |
-| `ri_score_direction` | `"high_bad"` | RI score direction. The Pipeline's default `prescore_prob` is P(bad), so by default a high score = high risk; the underlying inferrer remains compatible with the `"high_good"` credit-score semantics. |
+| `ri_score_direction` | `"high_bad"` | RI score direction. The pre-score the Pipeline trains is P(bad), so a high score = high risk. `"high_good"` is only for your own credit-style score with `train_prescore=False`; combined with a pre-score the Pipeline trains (`train_prescore=True`, or `score_col` absent) it raises `ValueError`. |
 | `train_ri_models` | `True` | Whether to train follow-up models on each RI-augmented dataset and compare OOT performance. |
 | `ri_model_type` | `"lgb"` | Model type used for post-RI modeling; supports `"lgb"`, `"xgb"`, `"cat"`, `"lr"`. The `_weight` of Fuzzy Augment is passed to all four models. |
 | `ri_model_params` | `{}` | Post-RI model parameter overrides; the default parameters are selected independently by `ri_model_type`. |
@@ -173,10 +173,10 @@ result.oot_summary        # summary of mature-sample filtering of the external O
 | `ri_dataset_output_cols` | `None` | Allowlist of output columns for the RI dataset CSVs; it does not affect the in-memory result `result.ri_datasets`. |
 | `ri_dataset_warn_mb` | `1024.0` | A warning is issued when a single RI dataset is expected to exceed this memory size. |
 | `oot_data` | `None` | Externally specified OOT data. Once passed, OOT is no longer sampled randomly from approved samples; if it contains unperformed samples whose `target_col` is empty, they are filtered automatically with a warning. |
-| `oot_frac` | `0.2` | When `oot_data` is not passed, the share of approved samples sampled randomly as OOT. |
+| `oot_frac` | `0.2` | When neither `oot_data` nor OOT rows from `split_col` exist, the share of the approved samples with a label sampled randomly as OOT. The OOT is drawn before the pre-score is trained and is left out of its training data; with `ri_approved_scope="output_subset"` only the drawn rows inside the subset are used. |
 | `perf_pct_bins` | `10` | Number of bins for `PerformanceEvaluator`. |
 | `min_bin_prop` | `0.03` | Minimum bin share for performance evaluation. |
-| `ri_approved_data` | `None` | External approved reference sample, used only to estimate the RI rules; by default the final augmented sample still outputs all approved samples of the main data. |
+| `ri_approved_data` | `None` | External approved reference sample, used only to estimate the RI rules; by default the final augmented sample still outputs all approved samples of the main data. When the Pipeline trains the pre-score, the reference is scored with it (an existing `score_col` is replaced, with a warning) so that the rules and the rejected samples use the same score. |
 | `ri_approved_query` | `None` | A pandas query that selects the RI reference from the main data's approved samples. |
 | `ri_approved_func` | `None` | A custom function that selects the RI reference from the main data's approved samples, returning a bool mask. |
 | `ri_approved_frac` | `None` | Share to randomly sample from the RI reference; cannot be used together with `ri_approved_n`. |
