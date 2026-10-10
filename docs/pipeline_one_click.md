@@ -1294,12 +1294,12 @@ result.pairwise_cross
 | `weight_col` | `None` | Sample-weight column. |
 | `split_col` | `None` | Evaluation-set identifier column, accepting any non-empty name, such as `ins/oos/oot/ft_oot`; values go through `strip().lower()`. In this Pipeline it is used only as a default grouping dimension, and does not change the global/cross full-sample evaluation. |
 | `random_state` | `42` | Random seed, reserved for later extension logic that needs sampling. |
-| `write_outputs` | `True` | Whether to output CSVs. |
+| `write_outputs` | `True` | Whether to output CSVs to `<output_dir>/report` (`step1_global_perf.csv`, `step2_by_<group>.csv`, `step3_gains_with_metrics.csv`, `step4_<score>__<cross_var>__<metric>.csv`, `step4_pairwise.csv`). Characters a file name cannot hold (such as `/`) become `_`, and a name that would repeat another one gets a `_2` suffix, so every table lands in `report` itself. |
 | `write_excel` | `True` | Whether to output the Excel report. |
 | `nbins` | `10` | Number of bins for Gains and cross risk. |
 | `min_bin_prop` | `0.02` | Minimum bin share. |
 | `equal_freq` | `True` | Whether to use equal-frequency binning. |
-| `min_data_size` | `50` | Minimum sample size for global and group evaluation. |
+| `min_data_size` | `50` | Minimum sample size for global and group evaluation. A group value with exactly this many rows is evaluated, in single-column and crossed groups alike. |
 | `precision` | `5` | Numeric precision. |
 | `include_missing` | `False` | Whether missing scores get a bin of their own in the Gains and cross-risk tables (unweighted: `(-inf, fillna]`; weighted: a `Missing` row). `False` leaves them out of those tables. |
 | `fillna` | `-999999` | Missing-fill value. |
@@ -1313,12 +1313,12 @@ result.pairwise_cross
 | `include_time_population_cross` | `True` | Whether to automatically run the population x time cross dimensions. |
 | `group_min_size` | `None` | Minimum sample size for group evaluation; when not passed, `min_data_size` is used. |
 | `group_specs` | `None` | Advanced custom grouping configuration. Supports a named dict or a `name/columns/min_size` list; once passed, it overrides the automatic generation logic of `time_dims/population_dims`. |
-| `gains_add_func` | `None` | Custom function for extra metrics on the Gains bins. |
-| `custom_metric_cols` | `["credit_limit", "age", "apr"]` | Default custom business-metric columns, whose means are computed automatically. |
+| `gains_add_func` | `None` | Custom function for extra metrics on the Gains bins, applied with and without `weight_col`. |
+| `custom_metric_cols` | `["credit_limit", "age", "apr"]` | Default custom business-metric columns, whose means are computed automatically (weighted by `weight_col` when it is set). |
 | `gains_display_metric_list` | Standard Gains metric list | Controls the Gains display columns when `add_func=None`. |
 | `cross_vars` | `[]` | List of second-dimension variables for cross risk; by default the `rating` field is not implicitly required. |
 | `cross_metrics` | `{}` | Cross-risk metric configuration, in the format `{metric_name: (column, aggregation)}`; when not passed, the bad rate and the means of the `custom_metric_cols` actually present in the input are used. |
-| `cross_binning_numeric` | `[True, False]` | Whether the two dimensions of cross risk are numerically binned. Supports a bool or a two-element list. |
+| `cross_binning_numeric` | `[True, False]` | Whether the two dimensions of cross risk are numerically binned. Supports a bool (applied to both) or a two-element list. |
 | `pairwise_cross_enabled` | `True` | Whether to compute the pairwise cross risk of compare score x base score. |
 | `pairwise_cross_agg_dict` | `None` | Aggregation configuration for pairwise cross risk, in the format `{column: aggregation or [aggregations]}`. A missing column or a wrong format gives a clear error before execution. |
 
@@ -1395,7 +1395,7 @@ cfg = ScoreComparisonPipelineConfig(
 
 | Key | Description |
 |---|---|
-| `name` | Part of the output key and of the file name written to disk. |
+| `name` | Part of the output key and of the file name written to disk (characters a file name cannot hold, such as `/`, become `_` in the file name only). |
 | `columns` | The columns to group by, in order. One column means a single dimension, and several columns mean a chained cross dimension. |
 | `min_size` | Minimum sample size under that group. |
 
@@ -1425,6 +1425,11 @@ cfg = ScoreComparisonPipelineConfig(
     gains_add_func=add_business_metrics,
 )
 ```
+
+The function receives the rows of one bin, with or without `weight_col`; on the weighted table it sees the weight column
+among the others, so a weighted statistic is up to the function (the default `custom_metric_cols` means are weighted).
+Every score's block of `gains` ends with a `Grand Summary` row, weighted or not. Up to 0.9.0 the weighted table dropped
+these columns and the summary row.
 
 ### Cross Risk Metrics
 

@@ -68,3 +68,19 @@ The equal-frequency branch of `quick_binning`, the binning behind `WOE_Master`, 
     - A WOE fit (`WOE_Master`, also the pipelines' equal-frequency `woe_engine` when it is not `"monotone"`, `get_woe_table`, `WOETransformer`) with `include_missing=True` on a feature with missing values gets a missing bin, so its bins, WOE values, IV and the transformed feature change. Engines fitted earlier keep scoring with their stored bins until they are refit. `MonotoneWOEBinner`, the default engine of the pipelines, is not affected.
     - With the default `missing_ref_value`, equal-width and tree WOE tables of complete data now number their bins from 1 and show `-1.7976931348623157e+308` as the lower end of the first range, as the tables built with `missing_ref_value=-999999` always did; the WOE values and the scores do not change.
     - `fit(chi2_config=...)` with the default `missing_ref_value` no longer raises.
+
+## 5. `ScoreComparisonPipeline`: Weighted Gains Keep Their Columns, `min_data_size` Is a Minimum, Safe File Names
+
+The remaining four defects of the audit in section 3. Each has a regression test in `test_score_comparison_audit.py` that fails without the fix.
+
+| Defect | Fix |
+|---|---|
+| With `weight_col`, the `gains` table silently lost the `gains_add_func` / `custom_metric_cols` columns and each score's `Grand Summary` row: the weighted Gains table ignored `add_func` and `withSummary` (also in `get_gains_table`, `GainsTableCalculator.calculate` and `Model_Evaluation_Tool.get_gains_summary`) | The weighted table applies `add_func` to the rows of every row of the table (bins, `special:<value>` rows and the `Missing` row) and adds the `Grand Summary` row with `withSummary=True`; its counts and rates cover every row of the table. The pipeline's default `<col>_mean` columns are weighted means when `weight_col` is set. The other columns are unchanged |
+| Single-column groups were kept only with *more* than `min_data_size` (or a spec's `min_size`) rows, crossed groups with at least that many: a group value with exactly 50 rows was missing from `group_perf['channel']` but present in the crossed table | A group value with exactly `min_data_size` rows is evaluated in both. `Model_Evaluation_Tool.multi_group_wrapper` itself keeps its documented "more than `min_subset_size`" rule |
+| `cross_binning_numeric=True` or `False`, allowed by the annotation and shown in the docs, stopped the run with `TypeError: 'bool' object is not subscriptable` | `cross_risk` takes a single bool for both columns (and None for `[True, True]`); a list, tuple or array of another length than two raises `ValueError` instead of `IndexError` |
+| A `group_specs` name containing `/` wrote `report/step2_by_chan/month.csv` into a subfolder, and a cross metric name with `/` did the same for `step4_` files | Characters that a file name cannot hold (`/`, `\`, `:`, `*`, `?`, quotes, angle brackets, the vertical bar and control characters) become `_` in the CSV file names, and a name that would repeat another one (ignoring case) gets a `_2` suffix. The keys of `group_perf` and `cross_results` are unchanged |
+
+!!! note "Results that change"
+    - Weighted `gains` (pipeline with `weight_col`, and `get_gains_table`, `GainsTableCalculator` and `get_gains_summary` with weights and `add_func` or `withSummary=True`) gain the custom columns and the `Grand Summary` row; the columns that were there do not change.
+    - `group_perf` tables of single columns gain the group values that have exactly `min_data_size` rows (or the spec's `min_size`).
+    - CSV files of names with unsafe characters, or of names that differ only in case, are written under new names.

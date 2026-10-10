@@ -118,7 +118,7 @@ Gains-table IV. The `Top10%_*` / `Btm10%_*`, `*_Shift`, and other Gains-summary 
 |---|---|---|
 | `PerformanceEvaluator.evaluate` | `weight_col` on the constructor, on `evaluate`, or per dataset on `add_dataset` | When `oot_grp_name` or `benchmark_dataset` is passed |
 | `get_perf_summary` | `weight_col`, when `oot_grp_name` is `None`. Requires `scr_name`: with `model` and `feature_cols` the weighted call raises `KeyError`, so add a score column first | When `oot_grp_name` is passed |
-| `get_gains_table`, `GainsTableCalculator` | `weight_col` | When `grp_name` is passed. On the weighted path `add_func` and `withSummary` are ignored, and the bins are always equal-weight (`weighted_binning` does not change them in 0.8.2) |
+| `get_gains_table`, `GainsTableCalculator` | `weight_col` | When `grp_name` is passed. On the weighted path the bins are always equal-weight (`weighted_binning` does not change them in 0.8.2); `add_func` and `withSummary` apply there too (they were ignored up to 0.9.0) |
 | `Model_Evaluation_Tool` | `weight_col`, in `model_perf_compare` and `get_gains_summary` | With `grp_name`; `get_cross_risk_summary`, `cross_perf_eval`, and `multi_dim_eval` are unweighted |
 | `cross_risk` | `weight_col` or `sample_weight` | |
 | `evaluate_performance` | The `'sample_weight'` key of each dataset (or the function-level `sample_weight`) | |
@@ -311,7 +311,7 @@ produces the table:
 | `grp_name` | Build one Gains table per value of this column and stack them, with the group value in a new column (`grp_colname`, default: `grp_name`). Groups with fewer than `min_data_size` rows are skipped |
 | `sync_range` | With `grp_name`, reuse the first group's bin edges for every group so the bins line up (default `True`) |
 | `wholeGroup` | With `grp_name`, `sync_range=True`, and `retSummary=True`, take the shared bin edges from all rows instead of the first group |
-| `withSummary` | Append a `Grand Summary` row (unweighted tables without `grp_name`) |
+| `withSummary` | Append a `Grand Summary` row (tables without `grp_name`, weighted or not) |
 | `retSummary` | Return a one-row summary (`N_BUMP`, `MIN_RISK_DEP`, `MAX_RISK_DEP`, `KS_IN_GAINS`, `LIFT_IN_GAINS`, `IV`, `N_BINS`) instead of the table |
 | `add_func` | Custom per-bin statistics; see [Custom columns](#custom-columns-with-add_func) |
 | `weight_col` | Overrides the calculator's `weight_col` for this call |
@@ -349,11 +349,17 @@ It follows the unweighted rules for incomplete rows. A row with a missing target
 never enters the bins: it is left out, or reported in a `Missing` row after the bins with `include_missing=True`. Up to
 0.9.0 the weighted table counted unlabelled rows as goods and ranked missing scores into the last bins.
 
+`add_func` gets the rows of every row of the weighted table (the bins, the `special:<value>` rows and the `Missing`
+row), with the weight column among the columns. With `withSummary=True` the table ends with a `Grand Summary` row whose
+counts (`N`, `N_RAW`, `PERF_CNT`, `N_BAD`, `N_GOOD`) and rates (`AVG_BAD`, `AVG_GOOD`) cover every row of the table and
+whose `KS`, `IV` and `AUC` summarize the bins.
+
 ### Custom columns with `add_func`
 
 `add_func` receives the rows of one bin as a DataFrame (all columns of your data, plus the bin columns `_bin_num` and
-`_bin_range`) and returns a `Series`. Its values become extra columns on the Gains table. It is applied on the unweighted
-path only.
+`_bin_range`) and returns a `Series`. Its values become extra columns on the Gains table. On the weighted path (without
+`grp_name`) it is applied too, to every row of the table, and it sees the weight column like any other column; up to
+0.9.0 it was ignored there.
 
 ```python
 def bin_profile(group):
