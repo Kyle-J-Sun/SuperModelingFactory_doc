@@ -8,3 +8,6 @@ mkdocs-material>=9.5.0
 mkdocstrings>=0.27.0
 mkdocstrings-python>=1.13.0
 mkdocs-autorefs>=1.4.0
+# pymdown-extensions 12.2 made pymdownx.highlight.Highlight require an `md` argument that mkdocstrings 1.0.6 does not
+# pass (TypeError on every API page); lift the cap once mkdocstrings supports it
+pymdown-extensions>=10.2,<12.2
