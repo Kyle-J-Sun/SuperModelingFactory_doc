@@ -19,6 +19,8 @@ details are in the [v0.9.0](v0.9.0.md), [v0.9.1](v0.9.1.md), [v0.9.2](v0.9.2.md)
 | `screen_iv_convention` of `FeatureScreenConfig`, `FeatureValidationPipelineConfig`, `CreditModelPipelineConfig`, `VarExtractionInsights` and `CorrelationFilter`: the screening IV on WOE bins | (did not exist; behaved as `"raw"`) | (as `"raw"`) | (as `"raw"`) | `"guarded"`: class-pure bins are left out of the IV sum, which changes the IV, `iv_threshold`, the correlation decisions and the truncation ranking of features with such bins | As in 0.9.2 | `screen_iv_convention="raw"` (bit-for-bit the 0.9.1 IV tables and selections) |
 | `iv_upper_threshold` (leakage limit) of `FeatureScreenConfig`, `screen_config_from_mapping`, `weighted_feature_screen`, the FVP `selection_params` and the CMP `feature_selection` | `None` (off) | `None` | `None` | `None` | `2.0`; on WOE bins under `"guarded"` it tests the larger of `iv_raw` and the floored IV, never the guarded `iv` | `iv_upper_threshold=None` (or your previous explicit value) |
 | Leak warning: `UserWarning` and `iv_gap_flag` when `iv_raw / iv >= 2` or `iv_raw - iv >= 0.5` | (did not exist) | (did not exist) | (did not exist) | (did not exist) | On (`iv_gap_ratio_warn=2.0`, `iv_gap_abs_warn=0.5`); warns and flags only | Filter the warning, or set both thresholds to `inf` |
+| `on_empty_stage="keep_all_warn"` (the default): a stage that would drop every feature | Keeps every feature | As in 0.8.2 | As in 0.8.2 | As in 0.8.2 | Never brings back a feature that `iv_upper_threshold` dropped; from the IV stage on keeps the `fallback_top_k` (5) features with the highest screening IV (`fallback_kept` in `dropped_detail`); raises `EmptyStageError` when only leak drops are left; the missing-rate and PSI stages still keep every feature | `on_empty_stage="keep_all"` (new value; for comparisons with old results only) |
+| Leak-gate warning: a `UserWarning` per feature that `iv_upper_threshold` drops | (did not exist) | (did not exist) | (did not exist) | (did not exist) | On whenever the limit drops a feature ("possible target leakage; check the field's time point (PIT) and source before training") | Filter the warning, or switch the limit off |
 
 The three `MonotoneWOEBinner` settings are also keys of `monotone_woe_params` in `CreditModelPipelineConfig` and
 `FeatureValidationPipelineConfig` (and of `feature_screen`). A dict passed as `monotone_woe_params` replaces the default
@@ -80,31 +82,42 @@ print(binner.small_bin_policy, binner.sv_total_basis)
 ## Upgrading from 0.9.2 to 0.9.3
 
 0.9.3 turns the leakage limit on (`iv_upper_threshold=2.0`) and adds a leak warning, so a rerun of the screening can drop
-features that 0.9.2 kept: those whose floored IV or `iv_raw` is above 2.0.
+features that 0.9.2 kept: those whose floored IV or `iv_raw` is above 2.0. A dropped leak is never brought back by an
+empty-stage fallback, and that fallback now keeps at most `fallback_top_k` (5) features from the IV stage on, so a stage
+that every feature fails can keep fewer features than in 0.9.2, or stop with `EmptyStageError` when only leak drops are
+left.
 
 !!! note "Projects that are mid-flight or already frozen"
 
     If you rerun the screening of a project whose variables are already chosen, pass
     `screen_iv_convention="raw"` and `iv_upper_threshold=None` (or the explicit value you used before) to keep the same
     selected variables. Under `"raw"` the limit tests the same value as in 0.9.2, so a previous explicit value gives the
-    previous drops. The leak warning may still appear; it changes nothing.
+    previous drops. If a stage of that screening ever dropped every feature (a `<stage>_fallback` row in its summary),
+    also pass `on_empty_stage="keep_all"`, the fallback of 0.9.2; it changes nothing otherwise, and it is meant only for
+    reproducing old results. The warnings may still appear; they change nothing.
 
 ```python
 from Modeling_Tool import CreditModelPipelineConfig, FeatureScreenConfig, FeatureValidationPipelineConfig
 
-frozen_screen = FeatureScreenConfig(iv_use_woe_bins=True, screen_iv_convention="raw", iv_upper_threshold=None)
+frozen_screen = FeatureScreenConfig(
+    iv_use_woe_bins=True, screen_iv_convention="raw", iv_upper_threshold=None, on_empty_stage="keep_all",
+)
 frozen_fvp = FeatureValidationPipelineConfig(
-    screen_iv_convention="raw", selection_params={"iv_upper_threshold": None},
+    screen_iv_convention="raw", selection_params={"iv_upper_threshold": None, "on_empty_stage": "keep_all"},
 )
 frozen_cmp = CreditModelPipelineConfig(
     screen_iv_convention="raw",
-    feature_selection=dict(CreditModelPipelineConfig().feature_selection, iv_upper_threshold=None),
+    feature_selection=dict(
+        CreditModelPipelineConfig().feature_selection, iv_upper_threshold=None, on_empty_stage="keep_all",
+    ),
 )
-print(frozen_screen.iv_upper_threshold, frozen_fvp.selection_params, frozen_cmp.feature_selection["iv_upper_threshold"])
+print(frozen_screen.on_empty_stage, frozen_fvp.selection_params, frozen_cmp.feature_selection["iv_upper_threshold"])
 ```
 
-New projects should keep the defaults and review every feature that the warning names or that `dropped_detail` lists
-with `iv_above_upper` / `iv_above_upper_sv_pure`.
+New projects should keep the defaults and review every feature that the warnings name or that `dropped_detail` lists
+with `iv_above_upper` / `iv_above_upper_sv_pure` (check its time point and source), and every feature marked
+`fallback_kept`. An `EmptyStageError` that names only leak drops means that nothing else is left to screen: fix the data
+or the feature list rather than switching the fallback back.
 
 ## New Outputs (0.9.2)
 
@@ -116,6 +129,7 @@ These add information without changing a number of 0.9.1:
 | `stage_tables["iv_sv_pure_bins"]`, `FeatureValidationPipelineResult.ivks_sv_pure_bins`, `feature_selection_summary["iv_sv_pure_bins"]`, `VarExtractionInsights.iv_sv_pure_bins` | The class-pure special-value bins, with `n < 30` marked `low_count`, as candidate rules for review |
 | `dropped_detail` of the leakage gate (`iv_upper_threshold`) | The reason `"iv_above_upper_sv_pure"` when a feature exceeds the limit only because of its class-pure special-value bins; the gate drops the same features as in 0.9.1 |
 | `iv_gap_flag` in `iv_table` and the `iv` tables of the selection summaries (0.9.3) | True when `iv_raw` is far above `iv` (the leak warning); `CreditModelPipeline` adds `dropped_detail` to `feature_selection_summary` |
+| `dropped_detail` reason `fallback_kept` and `FeatureScreenConfig.fallback_top_k` (0.9.3) | The features that an empty-stage fallback kept; `feature_selection_summary["hard_dropped"]` lists the leak drops that a failed screening of `CreditModelPipeline` keeps out, and the FVP `config_snapshot` records `fallback_top_k` |
 
 ## Fixes Without a Legacy Switch
 

@@ -11,7 +11,7 @@ An overview of every SuperModelingFactory release. All `0.3.x` releases predate 
 ## Version Index
 
 <div class="grid cards" markdown>
-- :material-tag: **[v0.9.3](v0.9.3.md)** - Closes the silent leak gap of the guarded screening IV: `iv_upper_threshold` defaults to 2.0 and gates on `iv_raw` (never the guarded `iv`), a leak warning and `iv_gap_flag` mark features whose `iv_raw` is far above `iv`, and `weighted_feature_screen` exposes `screen_iv_convention`; behavior changes shipped as an exception to the release policy ([migration note](upgrading_0.9.md#upgrading-from-092-to-093))
+- :material-tag: **[v0.9.3](v0.9.3.md)** - Closes the silent leak gap of the guarded screening IV: `iv_upper_threshold` defaults to 2.0 and gates on `iv_raw` (never the guarded `iv`), a leak warning and `iv_gap_flag` mark features whose `iv_raw` is far above `iv`, `weighted_feature_screen` exposes `screen_iv_convention`, every leak-gate drop warns, and no empty-stage fallback brings a dropped leak back (it keeps the `fallback_top_k` best soft drops, raises when only leaks are left; `on_empty_stage='keep_all'` is the old fallback); behavior changes shipped as an exception to the release policy ([migration note](upgrading_0.9.md#upgrading-from-092-to-093))
 
 - :material-tag: **[v0.9.2](v0.9.2.md)** - The screening IV on WOE bins leaves class-pure bins out of the sum (`screen_iv_convention='guarded'`, the default; `'raw'` reproduces 0.9.1), a behavior-changing fix shipped as an exception to the release policy. New columns `iv_raw`, `iv_sv_pure` and `n_sv_pure`, a list of class-pure special-value bins, the leakage-gate reason `iv_above_upper_sv_pure`; scoring unchanged ([upgrade guide](upgrading_0.9.md))
 

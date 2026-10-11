@@ -366,8 +366,10 @@ the counts otherwise, so a weighted screening with weights of 1 flags the same b
 Because the guarded IV leaves class-pure bins out, a near-perfect separator can look ordinary in `iv` (on the leak frame
 of the tests, 1.8 against an `iv_raw` of 13.8). Since 0.9.3 `feature_screen` therefore warns about, and flags in
 `iv_table["iv_gap_flag"]`, every variable with `iv_raw / iv >= 2` or `iv_raw - iv >= 0.5`, and its leakage limit
-(`iv_upper_threshold`, 2.0 by default) never tests the guarded `iv`. The `-999` feature above is neither flagged (ratio
-1.28, difference 0.38) nor dropped (1.74 < 2.0).
+(`iv_upper_threshold`, 2.0 by default) never tests the guarded `iv`. Every variable the limit drops gets its own
+`UserWarning` ("possible target leakage; check the field's time point (PIT) and source before training"), next to the gap
+warning when both apply, and stays dropped: no empty-stage fallback brings it back (see `on_empty_stage`). The `-999`
+feature above is neither flagged (ratio 1.28, difference 0.38) nor dropped (1.74 < 2.0), and gets neither warning.
 
 !!! warning "The WOE of a class-pure bin has no statistical meaning"
 
@@ -552,7 +554,8 @@ when one frame holds a split column with the values `ins`, `oos`, and `oot`. It 
 | `corr_base_metric` | `'iv'` | `'iv'` or `'ks'`: the higher value wins between two correlated variables |
 | `corr_nan_policy` | `'pairwise'` | Weighted runs only: `'pairwise'`, `'median_fill'`, or `'raise'` on NaN |
 | `corr_block_size` | `256` | Weighted runs only: columns per block of the correlation matrix. Limits memory only |
-| `on_empty_stage` | `'keep_all_warn'` | When a stage would drop every variable: keep all of them, add a `<stage>_fallback` row to `summary`, and warn; or `'raise'` a `ValueError` |
+| `on_empty_stage` | `'keep_all_warn'` | When a stage would drop every variable (each fallback adds a `<stage>_fallback` row to `summary`). `'keep_all_warn'` (the name is kept; since 0.9.3 it no longer keeps all) never brings back a variable that the IV upper limit dropped (a hard drop, reason `iv_above_upper` or `iv_above_upper_sv_pure`). From the IV stage on (the IV stage and the VIF, group-stability and multi-target gates) it keeps the `fallback_top_k` other variables with the highest screening IV (the `iv` column, never `iv_raw`), in that order, warns (`IV stage empty; fallback kept z (iv=0.0008); review the data before training`) and marks them `fallback_kept` in `dropped_detail`; the missing-rate and PSI stages run before any IV exists and keep every variable, as before. When only hard drops are left it raises `EmptyStageError` (a `ValueError`) with their names and reasons. `'keep_all'` keeps every variable, hard drops included: the behavior up to 0.9.3, which can let a leak back in, so use it only to compare with old results. `'raise'` raises `EmptyStageError` |
+| `fallback_top_k` | `5` | Number of variables the fallback of `'keep_all_warn'` keeps (0.9.3). A whole number of at least 1 |
 | `missing_rate_threshold` | `None` | Maximum missing rate. `None` skips the stage |
 | `missing_rate_ref` | `-999999` | Value treated as missing, in addition to `NaN` |
 | `woe_engine` | `'equal_freq'` | Engine fitted when a `*_use_woe_bins` flag is set and no `prefit_woe_engine` is given: `'equal_freq'` (a `WOE_Master`) or `'monotone'` |
@@ -588,12 +591,12 @@ print(config.iv_bins, config.psi_buckets)
 | Attribute | Content |
 |---|---|
 | `selected_features` | Names of the surviving variables |
-| `summary` | One row per stage: `stage`, `n_in`, `n_out`, `threshold`, `weight_col`. Some gates add audit columns such as `note` |
+| `summary` | One row per stage: `stage`, `n_in`, `n_out`, `threshold`, `weight_col`. A stage that would have dropped every variable adds a `<stage>_fallback` row (`n_out` is the number the fallback kept). Some gates add audit columns such as `note` |
 | `psi_table` | `var`, `psi_ins_oos`, `psi_ins_oot`, `psi_max` |
 | `iv_table` | `var`, `iv_weighted`, `n_bins`, `missing_rate`, `iv`, `iv_raw`, `iv_sv_pure`, `n_sv_pure`, `iv_gap_flag` (the leak warning of 0.9.3, set also for a variable that the upper limit drops). `iv_weighted` and `iv` hold the IV the stage tests (unweighted runs store the plain IV). On WOE bins `iv` follows `screen_iv_convention`, `iv_raw` counts every bin (0.9.1) and `iv_sv_pure` / `n_sv_pure` give the IV and rows of the class-pure bins; without WOE bins `iv_raw` equals `iv` and the last two are `NaN` |
 | `corr_dropped` | `var_a`, `var_b`, `corr`, `iv_a`, `iv_b`, `kept`, `dropped`. Filled on weighted runs only |
 | `missing_rate_table`, `missing_rate_dropped` | `var`, `missing_rate`, for all variables and for the dropped ones |
-| `dropped_detail` | `var`, `stage`, `metric`, `value`, `threshold`, `reason`. Records drops by the IV upper limit (`iv_above_upper`, or `iv_above_upper_sv_pure` when the feature exceeds the limit only because of its class-pure special-value bins) and by the gates |
+| `dropped_detail` | `var`, `stage`, `metric`, `value`, `threshold`, `reason`. Records drops by the IV upper limit (`iv_above_upper`, or `iv_above_upper_sv_pure` when the feature exceeds the limit only because of its class-pure special-value bins; these hard drops are never brought back) and by the gates. A variable that an empty-stage fallback kept has the reason `fallback_kept` (on its own row of the stage, whose metric, value and threshold stay, or on a new row with `metric='iv'`, its IV and the stage threshold) |
 | `stage_tables` | Evidence frames of the gates, keyed by `vif`, `group_stability`, `group_stability_violations`, `multi_target`, and `truncation`; with `iv_sv_pure_bins` the list of class-pure special-value bins of the IV stage on WOE bins, when there is one |
 | `woe_engine`, `woe_engine_meta` | The screening binner and its metadata (below) |
 
@@ -645,9 +648,10 @@ The equivalent call with explicit splits is
 The other arguments of `weighted_feature_screen` (`psi_threshold`, `iv_threshold`, `corr_threshold`, `iv_bins`,
 `min_bin_prop`, the `*_use_woe_bins` flags, `prefit_woe_engine`, `corr_nan_policy`, `on_empty_stage`, and so on) have the
 meaning and defaults of the `FeatureScreenConfig` fields of the same name; since 0.9.3 that includes
-`screen_iv_convention`, `iv_upper_threshold` (2.0) and the leak-warning thresholds `iv_gap_ratio_warn` and
-`iv_gap_abs_warn`. It does not expose `missing_rate_threshold`, `categorical_features`, or the gate fields (`vif_*`,
-`max_selected_features`, and so on): use `feature_screen` with a `FeatureScreenConfig` for those.
+`screen_iv_convention`, `iv_upper_threshold` (2.0), the leak-warning thresholds `iv_gap_ratio_warn` and
+`iv_gap_abs_warn`, `on_empty_stage='keep_all'` and `fallback_top_k` (5). It does not expose `missing_rate_threshold`,
+`categorical_features`, or the gate fields (`vif_*`, `max_selected_features`, and so on): use `feature_screen` with a
+`FeatureScreenConfig` for those.
 
 What a weighted run does:
 
@@ -752,7 +756,7 @@ order **VIF, group stability, multi-label, truncation** and record their evidenc
 
 | Gate | Fields of `FeatureScreenConfig` | Effect |
 |---|---|---|
-| G02 IV upper limit | `iv_upper_threshold` (2.0 by default since 0.9.3; `None` switches it off) | Drops variables whose IV is above the limit (suspected leakage). It never tests the guarded `iv`: on WOE bins under `screen_iv_convention='guarded'` it tests the larger of `iv_raw` and an IV with zero cells floored (`metric` in `dropped_detail` names which one), otherwise the floored IV as before. The check uses an IV with zero cells floored, so near-perfect separators are caught. For numeric variables it is computed on equal-frequency bins (weighted on weighted runs) on every path, so it does not depend on how the WOE engine merged its bins (since 0.9.1 the monotone engine merges class-pure bins by default, which can fold a leak into one ordinary bin) nor on `screen_iv_convention`: a special value that holds only bads can be a label leak. A variable that exceeds the limit only because of its class-pure special-value bins is dropped all the same, with the reason `iv_above_upper_sv_pure`, so that a human can review it |
+| G02 IV upper limit | `iv_upper_threshold` (2.0 by default since 0.9.3; `None` switches it off) | Drops variables whose IV is above the limit (suspected leakage). It never tests the guarded `iv`: on WOE bins under `screen_iv_convention='guarded'` it tests the larger of `iv_raw` and an IV with zero cells floored (`metric` in `dropped_detail` names which one), otherwise the floored IV as before. The check uses an IV with zero cells floored, so near-perfect separators are caught. For numeric variables it is computed on equal-frequency bins (weighted on weighted runs) on every path, so it does not depend on how the WOE engine merged its bins (since 0.9.1 the monotone engine merges class-pure bins by default, which can fold a leak into one ordinary bin) nor on `screen_iv_convention`: a special value that holds only bads can be a label leak. A variable that exceeds the limit only because of its class-pure special-value bins is dropped all the same, with the reason `iv_above_upper_sv_pure`, so that a human can review it. Each drop warns (possible target leakage; check the field's time point and source) and is a hard drop that no empty-stage fallback brings back |
 | G06 VIF | `vif_enabled`, `vif_threshold=10.0`, `vif_min_features=2`, `vif_use_woe_bins`, `vif_tie_break_metric='iv'` | Repeatedly drops the variable with the highest VIF above the threshold, until none remains or `vif_min_features` is reached. Ties go to the lower IV |
 | G03 group stability | `monthly_iv_min`, `monthly_iv_cv_max`, `direction_consistency_min`, `min_group_n`, `insufficient_group_policy='keep_warn'` | Per-group IV floor, cap on the coefficient of variation of the group IVs, and floor on the share of groups with the same direction. Needs group evidence |
 | G04 multi-label | `target_rules`, `min_pass_count`, `per_target_iv_range`, `direction_reference_target` | A variable must pass its IV range and direction on all, any, or at least `min_pass_count` labels. Needs per-label evidence |
@@ -922,12 +926,16 @@ encoding of the final model. The two binners can disagree about weak variables: 
     The weighted path without WOE bins works on numeric columns only. Set `iv_use_woe_bins=True` (and the other `*_use_woe_bins`
     flags you need) with a monotone binner that declares the categorical variables.
 
-??? question "A warning says a stage eliminated all variables"
+??? question "A warning says a stage eliminated all variables, or that a stage is empty"
 
-    With the default `on_empty_stage='keep_all_warn'`, a stage that would drop every variable keeps all of them instead and
-    issues a `UserWarning` such as `[feature_screen] stage 'psi' eliminated all 40 variables; keeping all of them
-    (on_empty_stage='keep_all_warn')`. The `summary` frame then has a `<stage>_fallback` row. Loosen that stage's threshold,
-    or pass `on_empty_stage='raise'` to fail with a `ValueError` instead.
+    With the default `on_empty_stage='keep_all_warn'`, the missing-rate and PSI stages keep every variable when they would
+    drop them all, and warn: `[feature_screen] stage 'psi' eliminated all 40 variables; keeping all of them
+    (on_empty_stage='keep_all_warn')`. From the IV stage on, the fallback keeps only the `fallback_top_k` (5) variables
+    with the highest screening IV, never one that the IV upper limit dropped, and warns:
+    `IV stage empty; fallback kept z (iv=0.0008); review the data before training`. When the upper limit dropped all of
+    them it raises `EmptyStageError`. The `summary` frame has a `<stage>_fallback` row, and `dropped_detail` marks the
+    kept variables `fallback_kept`. Loosen that stage's threshold, check the dropped variables for leakage, or pass
+    `on_empty_stage='raise'` to fail with a `ValueError` instead.
 
 ## Notes on Specific Versions
 

@@ -427,7 +427,9 @@ For the argument each API takes and the weighted metric semantics (`N` vs `N_RAW
 
 There are no open defects at the moment. The issues that the documentation audit and the end-to-end audit of the two pipelines found have been fixed; the [v0.9.0 notes](changelog/v0.9.0.md) list them one by one, with the results that change.
 
-A few behaviors are documented instead of changed, because changing them would move numbers that existing models rely on. They are listed in [Known Issues](changelog/v0.9.0.md#6-known-issues) with the parameter each one concerns: the different bins of the weighted and the unweighted screening when no WOE bins are used, the anchor-group coverage of `correlated_detail`, and the keep-all fallback of `on_empty_stage`.
+A few behaviors are documented instead of changed, because changing them would move numbers that existing models rely on. They are listed in [Known Issues](changelog/v0.9.0.md#6-known-issues) with the parameter each one concerns: the different bins of the weighted and the unweighted screening when no WOE bins are used, the anchor-group coverage of `correlated_detail`, and the keep-all fallback of `on_empty_stage` (narrowed in
+[0.9.3](changelog/v0.9.3.md#3-the-empty-stage-fallback-never-revives-a-leak): from the IV stage on it keeps at most
+`fallback_top_k` features and never a leak drop).
 
 ---
 
