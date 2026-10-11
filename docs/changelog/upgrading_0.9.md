@@ -1,21 +1,24 @@
-# Upgrading from 0.8.2 to 0.9.2
+# Upgrading from 0.8.2 to 0.9.3
 
-0.9.1 is the release that follows 0.8.2 on PyPI (0.9.0 was prepared but never published), and 0.9.2 follows 0.9.1. They
-change some defaults and fix defects that change numbers. This page lists, in one place, what to pass to get the 0.8.2,
-0.9.0 or 0.9.1 behavior back where a switch exists, and which changes are bug fixes without one. The details are in the
-[v0.9.0](v0.9.0.md), [v0.9.1](v0.9.1.md) and [v0.9.2](v0.9.2.md) notes.
+0.9.1 is the release that follows 0.8.2 on PyPI (0.9.0 was prepared but never published), then come 0.9.2 and 0.9.3.
+They change some defaults and fix defects that change numbers. This page lists, in one place, what to pass to get the
+0.8.2, 0.9.0, 0.9.1 or 0.9.2 behavior back where a switch exists, and which changes are bug fixes without one. The
+details are in the [v0.9.0](v0.9.0.md), [v0.9.1](v0.9.1.md), [v0.9.2](v0.9.2.md) and [v0.9.3](v0.9.3.md) notes.
+[Upgrading from 0.9.2 to 0.9.3](#upgrading-from-092-to-093) covers projects that rerun a screening.
 
 ## Changed Defaults
 
-| Setting | 0.8.2 | 0.9.0 | 0.9.1 | 0.9.2 | Keep the old behavior with |
-|---|---|---|---|---|---|
-| `MonotoneWOEBinner(unseen_special_policy=...)` | `"normal_bin"` | `"neutral"` | `"neutral"` | `"neutral"` | `unseen_special_policy="normal_bin"` |
-| `MonotoneWOEBinner(sv_total_basis=...)` | (did not exist; behaved as `"ordinary"`) | `"all"` | `"all"` | `"all"` | `sv_total_basis="ordinary"` |
-| `CreditModelPipelineConfig(warm_start_score_scope=...)` | (did not exist; behaved as `"train"`) | `"full"` | `"full"` | `"full"` | `warm_start_score_scope="train"` |
-| `MonotoneWOEBinner(min_bad_count=..., min_good_count=..., small_bin_policy=...)` | `None`, `None`, `None` | `None`, `None`, `None` | `1`, `1`, `"merge"` | `1`, `1`, `"merge"` | `small_bin_policy=None` |
-| Special-value bins below `min_bad_count` / `min_good_count` (class-pure with the defaults) | Not checked | Not checked | Reported: `UserWarning`, `sv_class_pure` column, `_sv_pure_stats`; numbers unchanged with the default `sv_small_policy="keep"`, neutralized or merged with the opt-in `"neutral"` / `"merge_missing"` | As in 0.9.1 | `min_bad_count=None, min_good_count=None` (also stops the merging of class-pure ordinary bins), or filter the warning |
-| `ODPS_PROJECT`, `ODPS_ENDPOINT` for `ODPSRunner` | Optional, with built-in defaults | Optional, with built-in defaults | Required (`KeyError` if unset) | Required | Set both variables |
-| `screen_iv_convention` of `FeatureScreenConfig`, `FeatureValidationPipelineConfig`, `CreditModelPipelineConfig`, `VarExtractionInsights` and `CorrelationFilter`: the screening IV on WOE bins | (did not exist; behaved as `"raw"`) | (as `"raw"`) | (as `"raw"`) | `"guarded"`: class-pure bins are left out of the IV sum, which changes the IV, `iv_threshold`, the correlation decisions and the truncation ranking of features with such bins | `screen_iv_convention="raw"` (bit-for-bit the 0.9.1 IV tables and selections) |
+| Setting | 0.8.2 | 0.9.0 | 0.9.1 | 0.9.2 | 0.9.3 | Keep the old behavior with |
+|---|---|---|---|---|---|---|
+| `MonotoneWOEBinner(unseen_special_policy=...)` | `"normal_bin"` | `"neutral"` | `"neutral"` | `"neutral"` | `"neutral"` | `unseen_special_policy="normal_bin"` |
+| `MonotoneWOEBinner(sv_total_basis=...)` | (did not exist; behaved as `"ordinary"`) | `"all"` | `"all"` | `"all"` | `"all"` | `sv_total_basis="ordinary"` |
+| `CreditModelPipelineConfig(warm_start_score_scope=...)` | (did not exist; behaved as `"train"`) | `"full"` | `"full"` | `"full"` | `"full"` | `warm_start_score_scope="train"` |
+| `MonotoneWOEBinner(min_bad_count=..., min_good_count=..., small_bin_policy=...)` | `None`, `None`, `None` | `None`, `None`, `None` | `1`, `1`, `"merge"` | `1`, `1`, `"merge"` | `1`, `1`, `"merge"` | `small_bin_policy=None` |
+| Special-value bins below `min_bad_count` / `min_good_count` (class-pure with the defaults) | Not checked | Not checked | Reported: `UserWarning`, `sv_class_pure` column, `_sv_pure_stats`; numbers unchanged with the default `sv_small_policy="keep"`, neutralized or merged with the opt-in `"neutral"` / `"merge_missing"` | As in 0.9.1 | As in 0.9.1 | `min_bad_count=None, min_good_count=None` (also stops the merging of class-pure ordinary bins), or filter the warning |
+| `ODPS_PROJECT`, `ODPS_ENDPOINT` for `ODPSRunner` | Optional, with built-in defaults | Optional, with built-in defaults | Required (`KeyError` if unset) | Required | Required | Set both variables |
+| `screen_iv_convention` of `FeatureScreenConfig`, `FeatureValidationPipelineConfig`, `CreditModelPipelineConfig`, `VarExtractionInsights` and `CorrelationFilter`: the screening IV on WOE bins | (did not exist; behaved as `"raw"`) | (as `"raw"`) | (as `"raw"`) | `"guarded"`: class-pure bins are left out of the IV sum, which changes the IV, `iv_threshold`, the correlation decisions and the truncation ranking of features with such bins | As in 0.9.2 | `screen_iv_convention="raw"` (bit-for-bit the 0.9.1 IV tables and selections) |
+| `iv_upper_threshold` (leakage limit) of `FeatureScreenConfig`, `screen_config_from_mapping`, `weighted_feature_screen`, the FVP `selection_params` and the CMP `feature_selection` | `None` (off) | `None` | `None` | `None` | `2.0`; on WOE bins under `"guarded"` it tests the larger of `iv_raw` and the floored IV, never the guarded `iv` | `iv_upper_threshold=None` (or your previous explicit value) |
+| Leak warning: `UserWarning` and `iv_gap_flag` when `iv_raw / iv >= 2` or `iv_raw - iv >= 0.5` | (did not exist) | (did not exist) | (did not exist) | (did not exist) | On (`iv_gap_ratio_warn=2.0`, `iv_gap_abs_warn=0.5`); warns and flags only | Filter the warning, or set both thresholds to `inf` |
 
 The three `MonotoneWOEBinner` settings are also keys of `monotone_woe_params` in `CreditModelPipelineConfig` and
 `FeatureValidationPipelineConfig` (and of `feature_screen`). A dict passed as `monotone_woe_params` replaces the default
@@ -74,6 +77,35 @@ print(binner.small_bin_policy, binner.sv_total_basis)
   `sv_class_pure`, or listed in the screening's `iv_sv_pure_bins`) before training: its WOE is set by `eps=1e-6` and has
   no statistical meaning.
 
+## Upgrading from 0.9.2 to 0.9.3
+
+0.9.3 turns the leakage limit on (`iv_upper_threshold=2.0`) and adds a leak warning, so a rerun of the screening can drop
+features that 0.9.2 kept: those whose floored IV or `iv_raw` is above 2.0.
+
+!!! note "Projects that are mid-flight or already frozen"
+
+    If you rerun the screening of a project whose variables are already chosen, pass
+    `screen_iv_convention="raw"` and `iv_upper_threshold=None` (or the explicit value you used before) to keep the same
+    selected variables. Under `"raw"` the limit tests the same value as in 0.9.2, so a previous explicit value gives the
+    previous drops. The leak warning may still appear; it changes nothing.
+
+```python
+from Modeling_Tool import CreditModelPipelineConfig, FeatureScreenConfig, FeatureValidationPipelineConfig
+
+frozen_screen = FeatureScreenConfig(iv_use_woe_bins=True, screen_iv_convention="raw", iv_upper_threshold=None)
+frozen_fvp = FeatureValidationPipelineConfig(
+    screen_iv_convention="raw", selection_params={"iv_upper_threshold": None},
+)
+frozen_cmp = CreditModelPipelineConfig(
+    screen_iv_convention="raw",
+    feature_selection=dict(CreditModelPipelineConfig().feature_selection, iv_upper_threshold=None),
+)
+print(frozen_screen.iv_upper_threshold, frozen_fvp.selection_params, frozen_cmp.feature_selection["iv_upper_threshold"])
+```
+
+New projects should keep the defaults and review every feature that the warning names or that `dropped_detail` lists
+with `iv_above_upper` / `iv_above_upper_sv_pure`.
+
 ## New Outputs (0.9.2)
 
 These add information without changing a number of 0.9.1:
@@ -83,6 +115,7 @@ These add information without changing a number of 0.9.1:
 | `iv_table`, the `iv` table of the selection summaries, `ivks_summary`, the WOE-engine report of `VarExtractionInsights` | `iv` (under `screen_iv_convention`), `iv_raw` (every bin counted, the 0.9.1 value), `iv_sv_pure` and `n_sv_pure` (the IV and rows of the class-pure bins). `iv_table` keeps `iv_weighted`, equal to `iv` |
 | `stage_tables["iv_sv_pure_bins"]`, `FeatureValidationPipelineResult.ivks_sv_pure_bins`, `feature_selection_summary["iv_sv_pure_bins"]`, `VarExtractionInsights.iv_sv_pure_bins` | The class-pure special-value bins, with `n < 30` marked `low_count`, as candidate rules for review |
 | `dropped_detail` of the leakage gate (`iv_upper_threshold`) | The reason `"iv_above_upper_sv_pure"` when a feature exceeds the limit only because of its class-pure special-value bins; the gate drops the same features as in 0.9.1 |
+| `iv_gap_flag` in `iv_table` and the `iv` tables of the selection summaries (0.9.3) | True when `iv_raw` is far above `iv` (the leak warning); `CreditModelPipeline` adds `dropped_detail` to `feature_selection_summary` |
 
 ## Fixes Without a Legacy Switch
 

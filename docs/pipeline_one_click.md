@@ -547,6 +547,7 @@ feature_selection={
     "psi_compare_splits": ["oos"],
     "iv_enabled": True,
     "iv_threshold": 0.02,
+    "iv_upper_threshold": 2.0,
     "corr_enabled": True,
     "corr_threshold": 0.75,
     "corr_max_iterations": 10,
@@ -562,6 +563,8 @@ feature_selection={
 | `psi_buckets` | `10` | Number of PSI bins. |
 | `iv_enabled` | `True` | Whether to run IV screening. |
 | `iv_threshold` | `0.02` | Variables with IV greater than or equal to this threshold are kept. |
+| `iv_upper_threshold` | `2.0` | Leakage limit, on by default since 0.9.3 (also when the key is missing; `None` switches it off): variables whose floored IV (or, on WOE bins under the guarded convention, `iv_raw`) is above it are dropped and listed in `feature_selection_summary["dropped_detail"]` (`feature_selection_dropped.csv`) with the reason `iv_above_upper` or `iv_above_upper_sv_pure`. |
+| `iv_gap_ratio_warn`, `iv_gap_abs_warn` | `2.0`, `0.5` | Leak warning on WOE bins: a `UserWarning` and `iv_gap_flag=True` in the `iv` table when `iv_raw / iv` or `iv_raw - iv` reaches the value. It never drops a variable. |
 | `iv_nbins` | `10` | Number of bins for the IV analysis. |
 | `iv_equal_freq` | `True` | Must stay `True`: the IV binning cannot switch equal-frequency bins off, so `False` raises `ValueError`. Tune the bins with `iv_nbins` and `iv_min_bin_prop`, or set `iv_use_woe_bins` to take them from the WOE engine. It no longer follows `psi_params["equal_freq"]`. |
 | `iv_min_bin_prop` | `0.05` | Minimum bin share for the IV analysis. |
@@ -1002,7 +1005,7 @@ result.high_corr_pairs
 | `corr_params` | `{"corr_cutpoint": 0.75, "method": "pearson", "max_iterations": 10, "base_metric": "iv"}` | `corr_cutpoint` (pairs with a larger absolute correlation are flagged), `method` (`'pearson'`, `'spearman'` or `'kendall'`), `max_iterations` of the removal loop and other `CorrelationFilter` arguments such as `base_metric`. |
 | `missing_rate_threshold` | `None` | Maximum missing rate of a feature on INS (NaN or the `missing_ref_value` sentinel). With `woe_fit_scope='post_missing_gate'` features above it are removed before the WOE fit and from all later stages (they are listed in `woe_artifacts['missing_gate_dropped']`). It is also the default threshold of the selection stage. `None` disables the gate. |
 | `selection_enabled` | `False` | Whether to run PSI/IV/correlation removal after validation, producing `selected_features` and a `FeatureScreeningArtifact` for CM to pick up. |
-| `selection_params` | `{}` | Screening thresholds and switches, with key names aligned to CM's `feature_selection` (such as `psi_threshold`, `iv_threshold`, `corr_threshold`, `*_use_woe_bins`); G06 can set `vif_use_woe_bins`. |
+| `selection_params` | `{}` | Screening thresholds and switches, with key names aligned to CM's `feature_selection` (such as `psi_threshold`, `iv_threshold`, `corr_threshold`, `*_use_woe_bins`); G06 can set `vif_use_woe_bins`. Since 0.9.3 the leakage limit `iv_upper_threshold` is 2.0 unless the key says otherwise (`None` switches it off), and `iv_gap_ratio_warn` / `iv_gap_abs_warn` set the leak warning. |
 | `selection_group_dims` | `None` | Columns of the group-stability gates (`monthly_iv_min`, `monthly_iv_cv_max`, `direction_consistency_min`). They are required when one of those gates is set (`ValueError`) and must exist in the INS split (`KeyError`). |
 | `weight_col` | `None` | Weight column for weighted screening; consistent with CM's `weight_col`. |
 | `synthesize_missing_oot` | `False` | When no OOT rows exist, True copies the OOS rows in as a stand-in OOT (with a `UserWarning`); False keeps OOT empty. `None` counts as False. The stand-in feeds only what is reported per split (the `oot` group of the PSI by `sample`, the OOT checks of the selection); the pooled tables (distribution, `n_rows`, the global and grouped PSI and IV/KS, the correlation) count each row once. |

@@ -3,11 +3,13 @@
 # Preview: mkdocs serve   (default: http://127.0.0.1:8000)
 # Build:   mkdocs build   (produces the static site in site/)
 
-mkdocs>=1.6.0
+# MkDocs 2.0 removes the plugin and theme systems this site relies on (Material for MkDocs warns about it on every
+# build); stay on 1.x until the site is migrated
+mkdocs>=1.6.0,<2
 mkdocs-material>=9.5.0
 mkdocstrings>=0.27.0
 mkdocstrings-python>=1.13.0
 mkdocs-autorefs>=1.4.0
 # pymdown-extensions 12.2 made pymdownx.highlight.Highlight require an `md` argument that mkdocstrings 1.0.6 does not
-# pass (TypeError on every API page); lift the cap once mkdocstrings supports it
+# pass (TypeError on every API page). Lift this cap once mkdocstrings supports pymdown-extensions 12.2.
 pymdown-extensions>=10.2,<12.2

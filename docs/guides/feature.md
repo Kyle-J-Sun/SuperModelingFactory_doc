@@ -363,6 +363,12 @@ The guarded IV is 1.36 against 1.74: the `[sv=-999.0]` bin (WOE -10.50, IV 0.38)
 keep their WOE and IV. Purity is judged on the quantities the IV uses: the weighted bad and good sums on a weighted run,
 the counts otherwise, so a weighted screening with weights of 1 flags the same bins and gives the same IV.
 
+Because the guarded IV leaves class-pure bins out, a near-perfect separator can look ordinary in `iv` (on the leak frame
+of the tests, 1.8 against an `iv_raw` of 13.8). Since 0.9.3 `feature_screen` therefore warns about, and flags in
+`iv_table["iv_gap_flag"]`, every variable with `iv_raw / iv >= 2` or `iv_raw - iv >= 0.5`, and its leakage limit
+(`iv_upper_threshold`, 2.0 by default) never tests the guarded `iv`. The `-999` feature above is neither flagged (ratio
+1.28, difference 0.38) nor dropped (1.74 < 2.0).
+
 !!! warning "The WOE of a class-pure bin has no statistical meaning"
 
     `screen_iv_convention` changes the screening only: `apply_woe` still gives the `[sv=-999.0]` rows a WOE of -10.50.
@@ -519,7 +525,7 @@ when one frame holds a split column with the values `ins`, `oos`, and `oot`. It 
 |---|---|---|
 | `missing_rate` | `missing_rate <= missing_rate_threshold` (off when `None`) | `missing_rate_threshold`, `missing_rate_ref` |
 | `psi` | `max(PSI of the compared splits) < psi_threshold` | `psi_threshold`, `psi_compare_splits`, `psi_buckets`, `psi_use_woe_bins` |
-| `iv` | `iv_threshold <= IV`, and `IV <= iv_upper_threshold` when that is set | `iv_threshold`, `iv_upper_threshold`, `iv_bins`, `iv_use_woe_bins` |
+| `iv` | `iv_threshold <= IV`, and the tested IV `<= iv_upper_threshold` (2.0 by default since 0.9.3; `None` switches it off) | `iv_threshold`, `iv_upper_threshold`, `iv_bins`, `iv_use_woe_bins` |
 | `corr` | It wins its correlated group, with `abs(corr) > corr_threshold` | `corr_threshold`, `corr_max_iterations`, `corr_use_woe_bins` |
 
 ### `FeatureScreenConfig`
@@ -533,10 +539,11 @@ when one frame holds a split column with the values `ins`, `oos`, and `oot`. It 
 | `psi_use_woe_bins` | `False` | Compute PSI on the screening binner's bins |
 | `iv_enabled` | `True` | Run the IV stage |
 | `iv_threshold` | `0.02` | Drop a variable with a lower IV |
-| `iv_upper_threshold` | `None` | Drop a variable with a higher IV: suspected leakage (gate G02) |
+| `iv_upper_threshold` | `2.0` | Drop a variable whose IV is above it: suspected leakage (gate G02). On by default since 0.9.3 (`None` before); `None` switches it off. On WOE bins under `screen_iv_convention='guarded'` it tests the larger of `iv_raw` and the zero-cell-floored IV, never the guarded `iv`. See section 7 |
 | `iv_bins`, `iv_min_bin_prop`, `iv_equal_freq` | `10`, `0.05`, `True` | Binning of the default IV. `iv_equal_freq` must stay `True`: the IV binning cannot switch equal-frequency bins off, so `False` raises `ValueError`. A weighted run without WOE bins uses weighted equal-frequency bins and reads `min_bin_prop` instead of `iv_min_bin_prop` |
 | `iv_use_woe_bins` | `False` | Compute IV on the screening binner's bins |
-| `screen_iv_convention` | `'guarded'` | IV on WOE bins (`iv_use_woe_bins`, or a weighted run with an engine): `'guarded'` leaves class-pure bins out of the sum, `'raw'` reproduces 0.9.1. The IV threshold, the correlation stage and the ranking of the gates use that IV; the leakage gate keeps its own floored IV |
+| `screen_iv_convention` | `'guarded'` | IV on WOE bins (`iv_use_woe_bins`, or a weighted run with an engine): `'guarded'` leaves class-pure bins out of the sum, `'raw'` reproduces 0.9.1. The IV threshold, the correlation stage and the ranking of the gates use that IV; the leakage gate does not (see `iv_upper_threshold`) |
+| `iv_gap_ratio_warn`, `iv_gap_abs_warn` | `2.0`, `0.5` | Leak warning (0.9.3): a variable with `iv > 0` and `iv_raw / iv >= iv_gap_ratio_warn`, or with `iv_raw - iv >= iv_gap_abs_warn`, gets `iv_gap_flag=True` in `iv_table` and a `UserWarning` ("possible leakage or unresolved class-pure bins; review before training"). It never drops a variable. An `iv` at or below `1e-12` counts as zero (difference rule only). `inf` switches a rule off |
 | `corr_enabled` | `True` | Run the correlation stage |
 | `corr_threshold` | `0.75` | Absolute correlation above which two variables are redundant |
 | `corr_max_iterations` | `10` | Maximum filtering rounds |
@@ -561,7 +568,8 @@ are `{'n_init_bins': 20, 'min_bin_size': 0.03, 'min_n_bins': 2}`.
 
 `screen_config_from_mapping(mapping, *, woe_engine=None, woe_fit_query=None, woe_params=None, monotone_woe_params=None, plot_path=None, plot_outputs=False, screen_iv_convention=None)`
 builds a config from a plain dictionary with the same field names (`iv_nbins` is accepted as an alias of `iv_bins`, and
-`psi_buckets` defaults to it). Pipelines use it for their `feature_selection` settings.
+`psi_buckets` defaults to it; a missing `iv_upper_threshold` key takes the default 2.0, a key set to `None` switches the
+limit off). Pipelines use it for their `feature_selection` settings.
 
 ```python
 from Modeling_Tool import screen_config_from_mapping
@@ -582,7 +590,7 @@ print(config.iv_bins, config.psi_buckets)
 | `selected_features` | Names of the surviving variables |
 | `summary` | One row per stage: `stage`, `n_in`, `n_out`, `threshold`, `weight_col`. Some gates add audit columns such as `note` |
 | `psi_table` | `var`, `psi_ins_oos`, `psi_ins_oot`, `psi_max` |
-| `iv_table` | `var`, `iv_weighted`, `n_bins`, `missing_rate`, `iv`, `iv_raw`, `iv_sv_pure`, `n_sv_pure`. `iv_weighted` and `iv` hold the IV the stage tests (unweighted runs store the plain IV). On WOE bins `iv` follows `screen_iv_convention`, `iv_raw` counts every bin (0.9.1) and `iv_sv_pure` / `n_sv_pure` give the IV and rows of the class-pure bins; without WOE bins `iv_raw` equals `iv` and the last two are `NaN` |
+| `iv_table` | `var`, `iv_weighted`, `n_bins`, `missing_rate`, `iv`, `iv_raw`, `iv_sv_pure`, `n_sv_pure`, `iv_gap_flag` (the leak warning of 0.9.3, set also for a variable that the upper limit drops). `iv_weighted` and `iv` hold the IV the stage tests (unweighted runs store the plain IV). On WOE bins `iv` follows `screen_iv_convention`, `iv_raw` counts every bin (0.9.1) and `iv_sv_pure` / `n_sv_pure` give the IV and rows of the class-pure bins; without WOE bins `iv_raw` equals `iv` and the last two are `NaN` |
 | `corr_dropped` | `var_a`, `var_b`, `corr`, `iv_a`, `iv_b`, `kept`, `dropped`. Filled on weighted runs only |
 | `missing_rate_table`, `missing_rate_dropped` | `var`, `missing_rate`, for all variables and for the dropped ones |
 | `dropped_detail` | `var`, `stage`, `metric`, `value`, `threshold`, `reason`. Records drops by the IV upper limit (`iv_above_upper`, or `iv_above_upper_sv_pure` when the feature exceeds the limit only because of its class-pure special-value bins) and by the gates |
@@ -636,9 +644,10 @@ The equivalent call with explicit splits is
 `feature_screen(splits, features, "bad_flag", weight_col="sample_wgt", config=FeatureScreenConfig(psi_compare_splits=["oos", "oot"]))`.
 The other arguments of `weighted_feature_screen` (`psi_threshold`, `iv_threshold`, `corr_threshold`, `iv_bins`,
 `min_bin_prop`, the `*_use_woe_bins` flags, `prefit_woe_engine`, `corr_nan_policy`, `on_empty_stage`, and so on) have the
-meaning and defaults of the `FeatureScreenConfig` fields of the same name. It does not expose `missing_rate_threshold`,
-`iv_upper_threshold`, `categorical_features`, or the gate fields (`vif_*`, `max_selected_features`, and so on): use
-`feature_screen` with a `FeatureScreenConfig` for those.
+meaning and defaults of the `FeatureScreenConfig` fields of the same name; since 0.9.3 that includes
+`screen_iv_convention`, `iv_upper_threshold` (2.0) and the leak-warning thresholds `iv_gap_ratio_warn` and
+`iv_gap_abs_warn`. It does not expose `missing_rate_threshold`, `categorical_features`, or the gate fields (`vif_*`,
+`max_selected_features`, and so on): use `feature_screen` with a `FeatureScreenConfig` for those.
 
 What a weighted run does:
 
@@ -743,7 +752,7 @@ order **VIF, group stability, multi-label, truncation** and record their evidenc
 
 | Gate | Fields of `FeatureScreenConfig` | Effect |
 |---|---|---|
-| G02 IV upper limit | `iv_upper_threshold` | Drops variables whose IV is above the limit (suspected leakage). The check uses an IV with zero cells floored, so near-perfect separators are caught. For numeric variables it is computed on equal-frequency bins (weighted on weighted runs) on every path, so it does not depend on how the WOE engine merged its bins (since 0.9.1 the monotone engine merges class-pure bins by default, which can fold a leak into one ordinary bin) nor on `screen_iv_convention`: a special value that holds only bads can be a label leak. A variable that exceeds the limit only because of its class-pure special-value bins is dropped all the same, with the reason `iv_above_upper_sv_pure`, so that a human can review it |
+| G02 IV upper limit | `iv_upper_threshold` (2.0 by default since 0.9.3; `None` switches it off) | Drops variables whose IV is above the limit (suspected leakage). It never tests the guarded `iv`: on WOE bins under `screen_iv_convention='guarded'` it tests the larger of `iv_raw` and an IV with zero cells floored (`metric` in `dropped_detail` names which one), otherwise the floored IV as before. The check uses an IV with zero cells floored, so near-perfect separators are caught. For numeric variables it is computed on equal-frequency bins (weighted on weighted runs) on every path, so it does not depend on how the WOE engine merged its bins (since 0.9.1 the monotone engine merges class-pure bins by default, which can fold a leak into one ordinary bin) nor on `screen_iv_convention`: a special value that holds only bads can be a label leak. A variable that exceeds the limit only because of its class-pure special-value bins is dropped all the same, with the reason `iv_above_upper_sv_pure`, so that a human can review it |
 | G06 VIF | `vif_enabled`, `vif_threshold=10.0`, `vif_min_features=2`, `vif_use_woe_bins`, `vif_tie_break_metric='iv'` | Repeatedly drops the variable with the highest VIF above the threshold, until none remains or `vif_min_features` is reached. Ties go to the lower IV |
 | G03 group stability | `monthly_iv_min`, `monthly_iv_cv_max`, `direction_consistency_min`, `min_group_n`, `insufficient_group_policy='keep_warn'` | Per-group IV floor, cap on the coefficient of variation of the group IVs, and floor on the share of groups with the same direction. Needs group evidence |
 | G04 multi-label | `target_rules`, `min_pass_count`, `per_target_iv_range`, `direction_reference_target` | A variable must pass its IV range and direction on all, any, or at least `min_pass_count` labels. Needs per-label evidence |
