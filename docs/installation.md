@@ -118,10 +118,12 @@ mkdocs serve    # open http://127.0.0.1:8000 in your browser
     A compiled dependency (usually matplotlib) was built for NumPy 1.x, but NumPy 2.x is installed. Upgrade the package
     named in the traceback, or pin NumPy below 2. See the [FAQ](faq.md#why-does-import-modeling_tool-fail-with-_array_api-not-found).
 
-??? question "`ModuleNotFoundError: No module named 'odps'`"
+??? question "`ImportError: ... needs the optional pyodps package` (or `No module named 'odps'`)"
 
-    The ODPS extra is not installed. `ODPSRunner` needs it, and so do the star imports `from Modeling_Tool.Core import *`
-    and `from Modeling_Tool import *`:
+    The `odps` extra is not installed. It installs `pyodps`, which SMF does not require otherwise. `ODPSRunner` and
+    `ParallelODPSManager` need it, and so do the star imports `from Modeling_Tool.Core import *` and
+    `from Modeling_Tool import *`. Since 0.9.2 the error names the extra; versions up to 0.9.1 raised
+    `ModuleNotFoundError: No module named 'odps'`.
 
     ```bash
     pip install 'supermodelingfactory[odps]'

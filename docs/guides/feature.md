@@ -251,7 +251,8 @@ variable, pass a `MonotoneWOEBinner` fitted with `cate_feats=[...]` as `woe_binn
 | `n_all`, `n` | Number of rows, and the number with a non-missing value |
 | `ks_in_gains` | KS of the variable's bin table |
 | `lift_in_gains` | Largest bin lift (bin bad rate divided by the overall bad rate) |
-| `iv` | Information value, rounded to four decimals |
+| `iv` | Information value, rounded to four decimals. With a `woe_binner` it follows `screen_iv_convention` (below) |
+| `iv_raw`, `iv_sv_pure`, `n_sv_pure` | With a `woe_binner` only (0.9.2): the IV with every bin counted, and the IV and rows of the class-pure bins |
 | `n_bump` | Rank-order breaks between bins. With a `woe_binner` the column holds the bin count instead |
 | `missing_rate` | Share of missing values |
 | `min`, `mean`, `max` | Summary statistics of numeric variables. `NaN` for categorical variables |
@@ -282,6 +283,7 @@ variable is binned normally, but its `n_all`, `n`, `missing_rate`, `min`, `mean`
 | `woe_engine` | `'master'` | `'monotone'` makes the object fit its own `MonotoneWOEBinner` on first use and keep it in `insights.woe_binner`. Any other value behaves like `'master'` |
 | `woe_binner` | `None` | A fitted `WOE_Master` or `MonotoneWOEBinner`. Bins and IV then come from it, and `nbins`, `equal_freq`, `min_bin_prop`, `precision`, `chi2_method`, `chi2_p`, `init_equi_bins`, `tree_binning`, `include_missing`, `seed`, and `spec_values` are ignored |
 | `woe_engine_params` | `None` | Constructor arguments for the self-fitted `MonotoneWOEBinner`. The key `fit_params` is passed on to its `fit`. `chi2_method`, `chi2_p`, `init_equi_bins`, and `spec_values` also feed that fit |
+| `screen_iv_convention` | `'guarded'` | With a WOE engine: `'guarded'` leaves class-pure bins out of the IV sum, `'raw'` counts every bin (the IV up to 0.9.1). See [Class-pure bins in the screening IV](#class-pure-bins-in-the-screening-iv-092) |
 
 !!! warning "Tree binning overstates the IV of weak variables"
 
@@ -317,6 +319,56 @@ from Modeling_Tool import as_woe_engine
 woe_table_iv = as_woe_engine(woe).get_woe_table().groupby("VAR")["IV"].sum()
 print((iv_compare["woe_binner=woe"] - woe_table_iv).abs().max())      # rounding error only
 ```
+
+### Class-pure bins in the screening IV (0.9.2)
+
+With a WOE engine the screening scores each bin with `woe = ln((bad share + 1e-6) / (good share + 1e-6))` and sums
+`(bad share - good share) * woe`. A **class-pure** bin (no bad or no good row, usually a special-value bin) gets a WOE
+that the `1e-6` alone sets, and up to 0.9.1 it inflated the IV. Since 0.9.2 `screen_iv_convention='guarded'` (the
+default of `VarExtractionInsights`, `CorrelationFilter`, `FeatureScreenConfig` and both pipelines) leaves such bins out
+of the IV **sum**. Their rows stay in the bad and good totals, so every other bin keeps its WOE and IV. A special-value
+bin that the binner smoothed (`sv_woe_smoothing='laplace'`) is not left out; it counts with its finite WOE.
+`screen_iv_convention='raw'` gives the 0.9.1 numbers back.
+
+The report then carries four IV columns:
+
+| Column | Meaning |
+|---|---|
+| `iv` | The IV under `screen_iv_convention`: the value that `iv_cut`, the IV threshold, the correlation stage and the ranking use |
+| `iv_raw` | The IV with every bin counted (0.9.1) |
+| `iv_sv_pure` | The IV contribution of the class-pure bins that the convention leaves out (special-value or ordinary) |
+| `n_sv_pure` | The rows in those bins |
+
+`insights.iv_sv_pure_bins` lists the class-pure **special-value** bins of the last report (bins that the binner flags as
+special, or whose rows are all missing): `var`, `special_value`, `bin_label`, `n`, `bad`, `good`, `bad_rate`, `woe` (the
+WOE that the binning gives the bin), `iv` (its contribution to `iv_raw`) and `low_count` (`n < 30`). Hand it to the
+strategy team as candidate rules; nothing in SMF acts on it.
+
+```python
+rng_sv = np.random.default_rng(0)
+x = rng_sv.normal(size=5000)
+y = (rng_sv.random(5000) < 1 / (1 + np.exp(-(-2 + 1.2 * x)))).astype(int)
+x[:150], y[:150] = -999.0, 0                    # a special value whose 150 rows are all good
+sv_demo = pd.DataFrame({"x": x, "y": y})
+
+sv_binner = MonotoneWOEBinner(feature_cols=["x"], target_col="y", special_values=[-999.0]).fit(sv_demo)
+for convention in ("guarded", "raw"):
+    sv_insights = VarExtractionInsights(sv_demo, "y", None, woe_binner=sv_binner, screen_iv_convention=convention)
+    sv_report = sv_insights.get_var_analysis_report(sv_demo, ["x"], iv_cut=0)
+    print(convention, sv_report[["var", "iv", "iv_raw", "iv_sv_pure", "n_sv_pure"]].to_dict("records"))
+print(sv_insights.iv_sv_pure_bins)              # [sv=-999.0]: n=150, bad=0, good=150, WOE -10.50, IV 0.38
+```
+
+The guarded IV is 1.36 against 1.74: the `[sv=-999.0]` bin (WOE -10.50, IV 0.38) is left out, and the 15 ordinary bins
+keep their WOE and IV. Purity is judged on the quantities the IV uses: the weighted bad and good sums on a weighted run,
+the counts otherwise, so a weighted screening with weights of 1 flags the same bins and gives the same IV.
+
+!!! warning "The WOE of a class-pure bin has no statistical meaning"
+
+    `screen_iv_convention` changes the screening only: `apply_woe` still gives the `[sv=-999.0]` rows a WOE of -10.50.
+    That WOE is set by `eps=1e-6` (it grows with the size of the bin, not with its risk). When you build a new model,
+    resolve every bin flagged `sv_class_pure` (see the [WOE guide](woe.md)) before training: a separate rule for the
+    special value, `sv_small_policy='neutral'` (WOE 0) or `sv_small_policy='merge_missing'` (the WOE of `[Missing]`).
 
 ### Plot WOE charts
 
@@ -376,6 +428,7 @@ print(var_corr_filter(train_df, features, corr_cutpoint=0.7))     # columns: VAR
 | `woe_engine_params` | `None` | Constructor arguments for that self-fitted binner (`fit_params` is passed to `fit`) |
 | `tree_binning`, `chi2_method`, `chi2_p`, `init_equi_bins`, `seed`, `missing_rate_ref` | `False`, `False`, `0.999`, `1000`, `42`, `-9999999` | Binning controls of the default IV and KS computation. Ignored when a `woe_binner` is given |
 | `spec_values` | `[]` | Special values (for example `-1` or `999` for "no record") that get rows or bins of their own in the IV and KS calculation, instead of being mixed into the numeric bins. It works with the default computation and with an engine alike, and it can change which variable of a correlated group is kept. The correlation itself is still computed on the raw values |
+| `screen_iv_convention` | `'guarded'` | With an engine, the IV that decides the winner leaves class-pure bins out of the sum; `'raw'` counts every bin (0.9.1). See [Class-pure bins in the screening IV](#class-pure-bins-in-the-screening-iv-092) |
 
 !!! note "Raw values decide the correlation, the binner decides the winner"
 
@@ -483,6 +536,7 @@ when one frame holds a split column with the values `ins`, `oos`, and `oot`. It 
 | `iv_upper_threshold` | `None` | Drop a variable with a higher IV: suspected leakage (gate G02) |
 | `iv_bins`, `iv_min_bin_prop`, `iv_equal_freq` | `10`, `0.05`, `True` | Binning of the default IV. `iv_equal_freq` must stay `True`: the IV binning cannot switch equal-frequency bins off, so `False` raises `ValueError`. A weighted run without WOE bins uses weighted equal-frequency bins and reads `min_bin_prop` instead of `iv_min_bin_prop` |
 | `iv_use_woe_bins` | `False` | Compute IV on the screening binner's bins |
+| `screen_iv_convention` | `'guarded'` | IV on WOE bins (`iv_use_woe_bins`, or a weighted run with an engine): `'guarded'` leaves class-pure bins out of the sum, `'raw'` reproduces 0.9.1. The IV threshold, the correlation stage and the ranking of the gates use that IV; the leakage gate keeps its own floored IV |
 | `corr_enabled` | `True` | Run the correlation stage |
 | `corr_threshold` | `0.75` | Absolute correlation above which two variables are redundant |
 | `corr_max_iterations` | `10` | Maximum filtering rounds |
@@ -505,7 +559,7 @@ when one frame holds a split column with the values `ins`, `oos`, and `oot`. It 
 The defaults of `woe_params` are `{'nbins': 10, 'equal_freq': True, 'min_bin_prop': 0.05}`, and those of `monotone_woe_params`
 are `{'n_init_bins': 20, 'min_bin_size': 0.03, 'min_n_bins': 2}`.
 
-`screen_config_from_mapping(mapping, *, woe_engine=None, woe_fit_query=None, woe_params=None, monotone_woe_params=None, plot_path=None, plot_outputs=False)`
+`screen_config_from_mapping(mapping, *, woe_engine=None, woe_fit_query=None, woe_params=None, monotone_woe_params=None, plot_path=None, plot_outputs=False, screen_iv_convention=None)`
 builds a config from a plain dictionary with the same field names (`iv_nbins` is accepted as an alias of `iv_bins`, and
 `psi_buckets` defaults to it). Pipelines use it for their `feature_selection` settings.
 
@@ -528,11 +582,11 @@ print(config.iv_bins, config.psi_buckets)
 | `selected_features` | Names of the surviving variables |
 | `summary` | One row per stage: `stage`, `n_in`, `n_out`, `threshold`, `weight_col`. Some gates add audit columns such as `note` |
 | `psi_table` | `var`, `psi_ins_oos`, `psi_ins_oot`, `psi_max` |
-| `iv_table` | `var`, `iv_weighted`, `n_bins`, `missing_rate`. Unweighted runs store the plain IV in `iv_weighted` |
+| `iv_table` | `var`, `iv_weighted`, `n_bins`, `missing_rate`, `iv`, `iv_raw`, `iv_sv_pure`, `n_sv_pure`. `iv_weighted` and `iv` hold the IV the stage tests (unweighted runs store the plain IV). On WOE bins `iv` follows `screen_iv_convention`, `iv_raw` counts every bin (0.9.1) and `iv_sv_pure` / `n_sv_pure` give the IV and rows of the class-pure bins; without WOE bins `iv_raw` equals `iv` and the last two are `NaN` |
 | `corr_dropped` | `var_a`, `var_b`, `corr`, `iv_a`, `iv_b`, `kept`, `dropped`. Filled on weighted runs only |
 | `missing_rate_table`, `missing_rate_dropped` | `var`, `missing_rate`, for all variables and for the dropped ones |
-| `dropped_detail` | `var`, `stage`, `metric`, `value`, `threshold`, `reason`. Records drops by the IV upper limit and by the gates |
-| `stage_tables` | Evidence frames of the gates, keyed by `vif`, `group_stability`, `group_stability_violations`, `multi_target`, and `truncation` |
+| `dropped_detail` | `var`, `stage`, `metric`, `value`, `threshold`, `reason`. Records drops by the IV upper limit (`iv_above_upper`, or `iv_above_upper_sv_pure` when the feature exceeds the limit only because of its class-pure special-value bins) and by the gates |
+| `stage_tables` | Evidence frames of the gates, keyed by `vif`, `group_stability`, `group_stability_violations`, `multi_target`, and `truncation`; with `iv_sv_pure_bins` the list of class-pure special-value bins of the IV stage on WOE bins, when there is one |
 | `woe_engine`, `woe_engine_meta` | The screening binner and its metadata (below) |
 
 !!! note "Where to find what the correlation stage dropped"
@@ -574,7 +628,7 @@ weighted = weighted_feature_screen(
     psi_compare_splits=["oos", "oot"], # the function's default; FeatureScreenConfig defaults to ['oos']
 )
 print(weighted.selected_features)
-print(weighted.iv_table)               # var, iv_weighted, n_bins, missing_rate
+print(weighted.iv_table)               # var, iv_weighted, n_bins, missing_rate, iv, iv_raw, iv_sv_pure, n_sv_pure
 print(weighted.psi_table)              # var, psi_ins_oos, psi_ins_oot, psi_max
 ```
 
@@ -689,7 +743,7 @@ order **VIF, group stability, multi-label, truncation** and record their evidenc
 
 | Gate | Fields of `FeatureScreenConfig` | Effect |
 |---|---|---|
-| G02 IV upper limit | `iv_upper_threshold` | Drops variables whose IV is above the limit (suspected leakage). The check uses an IV with zero cells floored, so near-perfect separators are caught. For numeric variables it is computed on equal-frequency bins (weighted on weighted runs) on every path, so it does not depend on how the WOE engine merged its bins (since 0.9.1 the monotone engine merges class-pure bins by default, which can fold a leak into one ordinary bin) |
+| G02 IV upper limit | `iv_upper_threshold` | Drops variables whose IV is above the limit (suspected leakage). The check uses an IV with zero cells floored, so near-perfect separators are caught. For numeric variables it is computed on equal-frequency bins (weighted on weighted runs) on every path, so it does not depend on how the WOE engine merged its bins (since 0.9.1 the monotone engine merges class-pure bins by default, which can fold a leak into one ordinary bin) nor on `screen_iv_convention`: a special value that holds only bads can be a label leak. A variable that exceeds the limit only because of its class-pure special-value bins is dropped all the same, with the reason `iv_above_upper_sv_pure`, so that a human can review it |
 | G06 VIF | `vif_enabled`, `vif_threshold=10.0`, `vif_min_features=2`, `vif_use_woe_bins`, `vif_tie_break_metric='iv'` | Repeatedly drops the variable with the highest VIF above the threshold, until none remains or `vif_min_features` is reached. Ties go to the lower IV |
 | G03 group stability | `monthly_iv_min`, `monthly_iv_cv_max`, `direction_consistency_min`, `min_group_n`, `insufficient_group_policy='keep_warn'` | Per-group IV floor, cap on the coefficient of variation of the group IVs, and floor on the share of groups with the same direction. Needs group evidence |
 | G04 multi-label | `target_rules`, `min_pass_count`, `per_target_iv_range`, `direction_reference_target` | A variable must pass its IV range and direction on all, any, or at least `min_pass_count` labels. Needs per-label evidence |

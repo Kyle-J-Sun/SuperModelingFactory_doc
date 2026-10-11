@@ -884,6 +884,15 @@ Missing values form an SV bin only when NaN is listed in `special_values`; other
 switches the check off. The warning surfaces through `FeatureValidationPipeline`, `feature_screen` and
 `CreditModelPipeline` with `woe_engine="monotone"`, also when `fit` runs with `n_jobs > 1`.
 
+!!! warning "Resolve class-pure bins before training a new model"
+
+    The WOE of a class-pure bin is set by `eps=1e-6`: about `ln(1e-6 / share)`, so it grows with the size of the bin,
+    not with its risk, and it has no statistical meaning. Since 0.9.2 the screening IV leaves such bins out of the sum
+    (`screen_iv_convention="guarded"`, see [Class-pure bins in the screening IV](feature.md#class-pure-bins-in-the-screening-iv-092))
+    and lists the special-value ones (`iv_sv_pure_bins`), but the binning keeps their WOE, so existing models score as
+    before. When you build a new model, resolve every bin flagged `sv_class_pure` before training: a separate rule for
+    the special value, `sv_small_policy="neutral"` or `sv_small_policy="merge_missing"`. A WOE cap is not available.
+
 ### Declared but Unseen in the Fit Sample (`unseen_special_policy`, 0.8.2)
 
 `special_values` is a **declaration**. If a feature has no `-1` row at all in the fit sample, the fitted table has no `[sv=-1]`
